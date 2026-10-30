@@ -2,12 +2,14 @@
 # Targets: linux/arm/v7 (SONOFF iHost 32-bit), linux/arm64, linux/amd64
 
 # ================= Stage 1: Build =================
-FROM rust:1.82-alpine AS builder
+FROM rust:1.82-slim-bookworm AS builder
 
 WORKDIR /usr/src/app
 
-# Install build dependencies for static linking
-RUN apk add --no-cache musl-dev pkgconfig openssl-dev openssl-libs-static gcc g++ make perl
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev make gcc g++ perl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Pre-cache dependencies
 COPY Cargo.toml ./
@@ -22,10 +24,12 @@ COPY data_defaults ./data_defaults
 RUN touch src/main.rs && cargo build --release
 
 # ================= Stage 2: Minimal Runtime =================
-FROM alpine:3.20 AS runner
+FROM debian:bookworm-slim AS runner
 
 # Install timezone data and root certificates
-RUN apk add --no-cache tzdata ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates tzdata \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
