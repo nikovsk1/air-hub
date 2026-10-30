@@ -24,8 +24,10 @@ COPY src ./src
 COPY static ./static
 COPY data_defaults ./data_defaults
 
-# Build optimized release binary
-ENV CARGO_BUILD_JOBS=1
+# Build optimized release binary with strict memory limit under QEMU
+ENV CARGO_BUILD_JOBS=1 \
+    RUST_BACKTRACE=1
+
 RUN cargo build --release
 
 # ================= Stage 2: Minimal Runtime =================
