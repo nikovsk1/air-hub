@@ -2,7 +2,7 @@
 # Targets: linux/arm/v7 (SONOFF iHost 32-bit), linux/arm64, linux/amd64
 
 # ================= Stage 1: Build =================
-FROM rust:1.82-slim-bookworm AS builder
+FROM rust:1-slim-bookworm AS builder
 
 WORKDIR /usr/src/app
 
