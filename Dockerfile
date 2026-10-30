@@ -2,15 +2,13 @@
 # Targets: linux/arm/v7 (SONOFF iHost 32-bit), linux/arm64, linux/amd64
 
 # ================= Stage 1: Build =================
-FROM rust:1-slim-bookworm AS builder
+FROM rust:1.82-slim-bookworm AS builder
 
 WORKDIR /usr/src/app
 
 # Install all necessary build tools and libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    clang \
-    llvm \
     cmake \
     pkg-config \
     libssl-dev \
@@ -19,15 +17,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy project files directly
-COPY Cargo.toml Cargo.lock* ./
+COPY Cargo.toml ./
 COPY src ./src
 COPY static ./static
 COPY data_defaults ./data_defaults
 
-# Build optimized release binary with strict memory limit under QEMU
-ENV CARGO_BUILD_JOBS=1 \
+# Environment flags for robust multi-arch compilation under QEMU
+ENV CARGO_BUILD_JOBS=2 \
     RUST_BACKTRACE=1
 
+# Build optimized release binary
 RUN cargo build --release
 
 # ================= Stage 2: Minimal Runtime =================

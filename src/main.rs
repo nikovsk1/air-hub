@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+﻿use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // 4. Ініціалізація сховища конфігурації та користувачів
-    let storage = Arc::new(StorageManager::new(&config.data_dir, &config.initial_users, &detector));
+    let storage = Arc::new(StorageManager::new(&config.data_dir, &config.initial_users, &detector, config.danger_radius_km));
 
     // 5. Ініціалізація менеджерів історії та логу обміну
     let history_mgr = Arc::new(HistoryManager::new(&config.data_dir));

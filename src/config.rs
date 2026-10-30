@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tracing::{info, warn};
 
 #[derive(Clone, Debug)]
@@ -23,9 +23,10 @@ impl Config {
             .unwrap_or(8088);
 
         let admin_secret_key = env::var("ADMIN_SECRET_KEY")
+            .ok()
             .map(|k| k.trim().to_string())
             .filter(|k| !k.is_empty())
-            .unwrap_or_else(|_| "admin_super_secret_master_key_123".to_string());
+            .unwrap_or_else(|| "admin_super_secret_master_key_123".to_string());
 
         let data_dir = PathBuf::from(
             env::var("DATA_DIR").unwrap_or_else(|_| "./data".to_string())
@@ -45,6 +46,7 @@ impl Config {
             .unwrap_or(35.0);
 
         let upstream_proxy = env::var("UPSTREAM_PROXY")
+            .ok()
             .map(|p| p.trim().to_string())
             .filter(|p| !p.is_empty());
 

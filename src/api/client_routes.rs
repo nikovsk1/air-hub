@@ -1,24 +1,22 @@
+﻿use std::collections::HashMap;
 use std::fs;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, Path as AxumPath, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Redirect, Response};
-use axum::routing::{delete, get, post, put};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use futures_util::{SinkExt, StreamExt};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::sleep;
 
 use crate::api::admin_routes::AppState;
 use crate::api::middleware::{extract_client_api_key, is_admin, is_external_request};
 use crate::canonical_registry::*;
-use crate::geo_math::{approach_angle, bearing_to_compass, calculate_bearing, calculate_haversine_distance, format_eta_ua};
+use crate::geo_math::{approach_angle, bearing_to_compass, calculate_bearing, calculate_haversine_distance, format_eta_ua, project_radar_point};
 use crate::storage::User;
-use crate::tracker::now_sec;
 
 #[derive(Deserialize)]
 pub struct ClientQuery {
@@ -67,9 +65,10 @@ async fn authenticate_user(
     state: &AppState,
     addr: Option<SocketAddr>,
 ) -> Option<User> {
+    let header_key = extract_client_api_key(headers, None);
     let key_opt = query.token.as_deref()
         .or_else(|| query.api_key.as_deref())
-        .or_else(|| extract_client_api_key(headers, None).as_deref());
+        .or_else(|| header_key.as_deref());
 
     if let Some(key) = key_opt {
         if let Some(user) = state.storage.get_user_by_key(key) {
@@ -630,7 +629,7 @@ async fn handle_get_radar(
 
     let (center_lat, center_lon, eff_danger_km, loc_name) = match selected_slot {
         Some(s) => (s.lat, s.lon, s.danger_zone, s.name.clone()),
-        None => (50.4501, 30.5234, user.default_danger_zone, "Radar".to_string()),
+        None => (query.lat.unwrap_or(50.4501), query.lon.unwrap_or(30.5234), user.default_danger_zone, "Radar".to_string()),
     };
 
     let radius_km = query.radius.or(query.radius_km).unwrap_or(100.0);
@@ -765,7 +764,7 @@ async fn handle_ws_client(
     loop {
         let current_user = state.storage.get_user_by_key(&user.api_key).unwrap_or_else(|| user.clone());
 
-        let (current_seq, update_json) = {
+        let (_current_seq, update_json) = {
             let st = state.threat_state.read().await;
             let seq = st.update_seq;
             if seq != last_seq {

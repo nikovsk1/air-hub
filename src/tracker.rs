@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 
-use crate::canonical_registry::{classify_target, ThreatMeta};
+use crate::canonical_registry::classify_target;
 use crate::crypto_decoder::RawExtractedTarget;
 use crate::geo_math::{
-    approach_angle, bearing_to_compass, calculate_bearing, calculate_haversine_distance, format_eta_ua, project_radar_point
+    calculate_bearing, calculate_haversine_distance
 };
 use crate::oblast_detector::OblastDetector;
 
@@ -348,7 +347,7 @@ impl ThreatState {
     /// Суворий перерахунок тривог: колір визначається виключно сиренами
     pub fn recompute_oblast_alerts(&mut self, detector: &OblastDetector) {
         let mut ob_targets: HashMap<String, usize> = HashMap::new();
-        let mut ra_targets: HashMap<String, usize> = HashMap::new();
+        let ra_targets: HashMap<String, usize> = HashMap::new();
 
         for trk in self.tracker.tracks.values() {
             *ob_targets.entry(trk.oblast_id.clone()).or_insert(0) += 1;

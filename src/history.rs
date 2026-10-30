@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+﻿use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -7,12 +7,13 @@ use parking_lot::RwLock;
 use chrono::{Datelike, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use crate::storage::now_ts;
 use crate::tracker::TargetTrack;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct HistoryTargetItem {
     pub id: String,
     pub type_ua: String,
@@ -429,7 +430,7 @@ impl HistoryManager {
             .map_err(|e| format!("HTTP request to Google Apps Script failed: {}", e))?;
 
         let val: Value = resp.json().await.map_err(|e| format!("Invalid JSON from GDrive: {}", e))?;
-        if let Some(targets) = val.get("targets").and_then(|t| t.as_object()) {
+        if let Some(_targets) = val.get("targets").and_then(|t| t.as_object()) {
             // Зберігаємо завантажений файл локально
             let file_path = self.history_dir.join(format!("flight_history_{}.json", month));
             if let Ok(json_str) = serde_json::to_string(&val) {

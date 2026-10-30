@@ -1,11 +1,10 @@
-use std::collections::{HashMap, VecDeque};
+﻿use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use chrono::Utc;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreatMeta {
@@ -312,6 +311,7 @@ impl ExchangeLogManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn record_unmapped(&self, log_type: &str, raw_id: &str, raw_code: Option<i64>, mapped_as: &str, source: &str) {
         let now = Utc::now().timestamp();
         let entry = ExchangeLogEntry {

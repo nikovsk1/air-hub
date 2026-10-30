@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -6,7 +6,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use parking_lot::RwLock;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
 
 use crate::geo_math::calculate_haversine_distance;
 use crate::oblast_detector::OblastDetector;
@@ -112,11 +111,12 @@ impl Default for HubConfigData {
 
 pub struct StorageManager {
     file_path: PathBuf,
+    default_danger_km: f64,
     data: RwLock<HubConfigData>,
 }
 
 impl StorageManager {
-    pub fn new(data_dir: &Path, initial_users: &[(String, String)], detector: &OblastDetector) -> Self {
+    pub fn new(data_dir: &Path, initial_users: &[(String, String)], detector: &OblastDetector, default_danger_km: f64) -> Self {
         let file_path = data_dir.join("hub_config.json");
         let mut loaded = HubConfigData::default();
 
@@ -139,7 +139,7 @@ impl StorageManager {
                     lat: 50.4501,
                     lon: 30.5234,
                     active: true,
-                    danger_zone: 35.0,
+                    danger_zone: default_danger_km,
                     alert_threat: true,
                     react_threats: default_react_threats(),
                     alert_siren: true,
@@ -157,7 +157,7 @@ impl StorageManager {
                     owner: owner.clone(),
                     api_key: key.clone(),
                     enabled: true,
-                    default_danger_zone: 35.0,
+                    default_danger_zone: default_danger_km,
                     target_alert_threat: true,
                     target_react_threats: default_react_threats(),
                     alert_siren: true,
@@ -172,6 +172,7 @@ impl StorageManager {
 
         let mgr = Self {
             file_path,
+            default_danger_km,
             data: RwLock::new(loaded),
         };
         let _ = mgr.save_atomic();
@@ -356,7 +357,7 @@ impl StorageManager {
             owner: owner.to_string(),
             api_key: api_key.clone(),
             enabled: true,
-            default_danger_zone: 35.0,
+            default_danger_zone: self.default_danger_km,
             target_alert_threat: true,
             target_react_threats: default_react_threats(),
             alert_siren: true,
@@ -370,7 +371,7 @@ impl StorageManager {
                     lat: 50.4501,
                     lon: 30.5234,
                     active: true,
-                    danger_zone: 35.0,
+                    danger_zone: self.default_danger_km,
                     alert_threat: true,
                     react_threats: default_react_threats(),
                     alert_siren: true,
@@ -381,6 +382,7 @@ impl StorageManager {
                     oblast_id: None,
                     raion: None,
                     raion_id: None,
+                    accuracy_m: None,
                 });
                 def_slots
             },

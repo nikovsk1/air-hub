@@ -4,7 +4,7 @@ use reqwest::header::{ORIGIN, REFERER, USER_AGENT};
 use serde_json::Value;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
-use tracing::{debug, info, warn};
+use tracing::debug;
 
 use crate::oblast_detector::OblastDetector;
 use crate::tracker::{now_sec, OfficialAlert, ThreatState};

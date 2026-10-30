@@ -1,5 +1,5 @@
 use std::net::IpAddr;
-use axum::http::{HeaderMap, Request};
+use axum::http::HeaderMap;
 use subtle::ConstantTimeEq;
 
 pub fn is_private_ip(ip: IpAddr) -> bool {

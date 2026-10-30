@@ -1,8 +1,6 @@
-use std::collections::HashMap;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use serde_json::{json, Value};
-use tracing::warn;
 
 #[derive(Debug, Clone)]
 pub struct Prng {
@@ -427,7 +425,7 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
                 lat,
                 lon,
                 raw_name,
-                raw_type_code,
+                raw_type_code: raw_code,
                 heading_deg: heading,
             });
         }

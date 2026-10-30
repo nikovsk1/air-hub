@@ -3,7 +3,7 @@ use std::time::Duration;
 use serde_json::Value;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
-use tracing::{debug, info, warn};
+use tracing::warn;
 
 use crate::crypto_decoder::RawExtractedTarget;
 use crate::geo_math::calculate_bearing;

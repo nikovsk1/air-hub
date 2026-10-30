@@ -2,19 +2,19 @@ use std::sync::Arc;
 use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use regex::Regex;
-use reqwest::header::{HeaderMap, HeaderValue, ORIGIN, REFERER, USER_AGENT};
+use reqwest::header::{HeaderValue, ORIGIN, REFERER, USER_AGENT};
 use serde_json::{json, Value};
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use crate::crypto_decoder::{decode_payload_native, extract_targets};
 use crate::history::HistoryManager;
 use crate::oblast_detector::OblastDetector;
-use crate::tracker::{now_sec, TargetTrack, ThreatState};
+use crate::tracker::{now_sec, ThreatState};
 
 const PAGE_URL: &str = "https://map.ukrainealarm.com/onlyMap";
 const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36";

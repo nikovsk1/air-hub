@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tracing::{info, warn};
+use tracing::info;
 
 /// Канонічна відповідність 122 районів до 26 областей (державні ID)
 pub fn get_canonical_raion_to_oblast() -> HashMap<&'static str, &'static str> {
@@ -330,6 +330,7 @@ impl OblastDetector {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_oblast_id_by_region(&self, region_id: &str) -> String {
         self.region_to_oblast.get(region_id).cloned().unwrap_or_else(|| "0".to_string())
     }
