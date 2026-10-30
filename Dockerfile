@@ -6,29 +6,33 @@ FROM rust:1.82-slim-bookworm AS builder
 
 WORKDIR /usr/src/app
 
-# Install build dependencies
+# Install all necessary build tools and libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config libssl-dev make gcc g++ perl \
+    build-essential \
+    cmake \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    perl \
     && rm -rf /var/lib/apt/lists/*
 
-# Pre-cache dependencies
+# Copy project files directly
 COPY Cargo.toml ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && rm -rf src
-
-# Copy source code and assets
 COPY src ./src
 COPY static ./static
 COPY data_defaults ./data_defaults
 
-# Build final optimized binary
-RUN touch src/main.rs && cargo build --release
+# Build optimized release binary
+RUN cargo build --release
 
 # ================= Stage 2: Minimal Runtime =================
 FROM debian:bookworm-slim AS runner
 
-# Install timezone data and root certificates
+# Install timezone data, root certificates and SSL runtime libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates tzdata \
+    ca-certificates \
+    tzdata \
+    libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
