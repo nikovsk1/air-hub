@@ -1,0 +1,1742 @@
+<!DOCTYPE html>
+<html lang="uk" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+  <title>Air Alert Radar Hub — Центр керування</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Satoshi', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              500: '#ea580c',
+              600: '#c2410c',
+              700: '#9a3412',
+              accent: '#f97316',
+              violet: '#8b5cf6',
+              blue: '#3b82f6'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0b0f17; }
+    ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #374151; }
+    .slider-thumb::-webkit-slider-thumb {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #10b981;
+      cursor: pointer;
+    }
+  
+    /* Liquid Glass & Satoshi Styling */
+    body {
+      font-family: 'Satoshi', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #08090c !important;
+    }
+    .liquid-glass {
+      background: rgba(14, 18, 28, 0.6) !important;
+      backdrop-filter: blur(14px) !important;
+      -webkit-backdrop-filter: blur(14px) !important;
+      border: 1px solid rgba(255, 255, 255, 0.12) !important;
+      box-shadow: 0 10px 32px 0 rgba(0, 0, 0, 0.55), inset 0 1px 1px 0 rgba(255, 255, 255, 0.16) !important;
+    }
+    .liquid-glass-card {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(12, 16, 26, 0.68) !important;
+      backdrop-filter: blur(14px) !important;
+      -webkit-backdrop-filter: blur(14px) !important;
+      border: 1px solid rgba(255, 255, 255, 0.12) !important;
+      box-shadow: 0 10px 32px 0 rgba(0, 0, 0, 0.55), inset 0 1px 1px 0 rgba(255, 255, 255, 0.16) !important;
+    }
+
+  </style>
+</head>
+<body class="bg-[#08090c] text-gray-100 min-h-screen font-sans antialiased selection:bg-orange-500/30 selection:text-orange-300">
+
+  <!-- ==================== ЕКРАН АВТОРИЗАЦІЇ (LOGIN) ==================== -->
+  <div id="loginScreen" class="min-h-screen flex items-center justify-center p-4">
+    <div class="liquid-glass-card rounded-2xl p-6 md:p-8 max-w-md w-full shadow-2xl">
+      <div class="text-center mb-6">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-orange-950/60 border border-orange-800 text-3xl mb-3 shadow-inner">
+          🛡️
+        </div>
+        <h1 class="text-xl font-bold text-white tracking-wide">Air Alert Radar Hub</h1>
+        <p class="text-xs text-gray-400 mt-1">Вхід до адміністративної панелі керування хабом</p>
+      </div>
+
+      <form onsubmit="handleLoginSubmit(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-300 mb-1.5">Майстер-ключ адміністратора (ADMIN_SECRET_KEY):</label>
+          <div class="relative">
+            <input type="password" id="loginKeyInput" autocomplete="current-password" placeholder="Введіть майстер-ключ..." class="w-full bg-gray-950 border border-gray-700 px-3.5 py-2.5 rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500 font-mono transition pr-10">
+            <button type="button" onclick="togglePasswordVisibility('loginKeyInput', 'toggleEyeIcon')" class="absolute right-3 top-2.5 text-gray-400 hover:text-gray-200 text-sm">
+              <span id="toggleEyeIcon">👁️</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-xs">
+          <label class="flex items-center gap-2 cursor-pointer text-gray-400 hover:text-gray-300 select-none">
+            <input type="checkbox" id="rememberKeyCheck" class="rounded accent-orange-500 w-4 h-4 cursor-pointer" checked>
+            <span>Запам'ятати ключ у цьому браузері</span>
+          </label>
+        </div>
+
+        <div id="loginError" class="hidden p-3 rounded-lg bg-red-950/80 border border-red-800 text-red-400 text-xs font-medium"></div>
+
+        <button type="submit" id="loginBtn" class="w-full bg-orange-600 hover:bg-orange-500 text-white font-semibold py-2.5 rounded-lg text-sm transition shadow-lg shadow-orange-900/30 flex items-center justify-center gap-2">
+          <span>🔓 Увійти до панелі керування</span>
+        </button>
+      </form>
+
+      <div class="mt-6 pt-4 border-t border-gray-800 text-center">
+        <span class="text-[11px] text-gray-400">Air Alert Radar Hub • Безпечний локальний доступ</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== ГОЛОВНА ПАНЕЛЬ АДМІНІСТРАТОРА ==================== -->
+  <div id="adminApp" class="hidden max-w-6xl mx-auto p-4 md:p-6 space-y-6">
+
+    <!-- ВЕРХНЯ НАВІГАЦІЙНА ПАНЕЛЬ (HEADER) -->
+    <header class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-800">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-950 to-orange-700 border border-orange-600 flex items-center justify-center text-xl shadow-lg">
+          🛡️
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+            <span>Air Alert Radar Hub</span>
+            <span class="text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-orange-950 text-orange-400 border border-orange-800">v2.4</span>
+          </h1>
+          <p class="text-xs text-gray-400">Центр керування API-ключами, офіційними тривогами та тактичним радаром</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div class="h-9 px-3 flex items-center gap-2 bg-orange-950/60 border border-orange-800/80 rounded-lg text-xs font-medium text-orange-400 shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
+          <span>Адмін-сесія активна</span>
+        </div>
+        <button onclick="handleLogout()" class="h-9 px-3.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+          <span>🚪</span>
+          <span>Вийти</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- НАВІГАЦІЙНА ПАНЕЛЬ (ШВИДКИЙ ПЕРЕХІД) -->
+    <nav class="flex flex-wrap items-center justify-between gap-2 p-2 bg-gray-900/90 border border-gray-800 rounded-xl shadow-md">
+      <div class="flex flex-wrap items-center gap-2">
+        <a href="/admin" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-orange-600 text-white shadow flex items-center gap-1.5 transition">
+          <span>⚙️</span>
+          <span>Адмін-панель</span>
+        </a>
+        <a href="/map" target="_blank" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-300 hover:text-white hover:bg-gray-800 border border-gray-700/60 flex items-center gap-1.5 transition">
+          <span>🎯</span>
+          <span>Онлайн-радар</span>
+          <span class="text-[10px] text-orange-400 bg-orange-950/60 px-1.5 py-0.5 rounded border border-orange-800">Live</span>
+        </a>
+        <a href="/replay" target="_blank" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-300 hover:text-white hover:bg-gray-800 border border-gray-700/60 flex items-center gap-1.5 transition">
+          <span>⏱️</span>
+          <span>Плеєр історії</span>
+        </a>
+        <a href="/api/v1/directory" target="_blank" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-300 hover:text-white hover:bg-gray-800 border border-gray-700/60 flex items-center gap-1.5 transition">
+          <span>📖</span>
+          <span>Довідник API</span>
+        </a>
+      </div>
+      <div class="hidden sm:flex items-center gap-2 text-[11px] text-gray-400">
+        <span>Швидко:</span>
+        <a href="#usersSection" class="hover:text-orange-400 transition">Користувачі</a> •
+        <a href="#historySection" class="hover:text-orange-400 transition">Архів історії</a> •
+        <a href="#exchangeLogSection" class="hover:text-orange-400 transition">Лог обміну</a>
+      </div>
+    </nav>
+
+    <!-- СТАТУС ПІДКЛЮЧЕННЯ ТА ДЖЕРЕЛО (2 КОЛОНКИ) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl flex items-center justify-between shadow">
+        <div class="flex items-center gap-3">
+          <div id="upstreamDot" class="w-3.5 h-3.5 rounded-full bg-orange-500 animate-pulse shrink-0"></div>
+          <div>
+            <div class="text-xs text-gray-400">Джерело даних (Апстрім)</div>
+            <div id="upstreamName" class="text-sm font-semibold text-white">Основний потік (WebSocket map.ukrainealarm.com)</div>
+          </div>
+        </div>
+        <span id="upstreamBadge" class="bg-orange-950 text-orange-400 border border-orange-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0">ОСНОВНИЙ</span>
+      </div>
+
+      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl flex items-center justify-between shadow">
+        <div class="flex items-center gap-3">
+          <div id="proxyDot" class="w-3.5 h-3.5 rounded-full bg-blue-500 shrink-0"></div>
+          <div>
+            <div class="text-xs text-gray-400">Режим підключення</div>
+            <div id="proxyName" class="text-sm font-semibold text-white">Пряме підключення (Без проксі)</div>
+          </div>
+        </div>
+        <span id="proxyBadge" class="bg-blue-950 text-blue-400 border border-blue-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0">DIRECT</span>
+      </div>
+    </div>
+
+    <!-- БАНЕР НЕВІДОМИХ ЦІЛЕЙ (ЯКЩО ВИЯВЛЕНО) -->
+    <div id="unknownTypesBanner" class="hidden p-4 bg-amber-950/80 border border-amber-600 rounded-xl text-amber-200 text-xs shadow-lg">
+      <div class="flex items-center gap-2.5">
+        <span class="text-lg">⚠️</span>
+        <div id="unknownTypesText"></div>
+      </div>
+    </div>
+
+    <!-- ТЕЛЕМЕТРІЯ ТА МЕТРИКИ (4 КОЛОНКИ) -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow">
+        <div class="text-xs text-gray-400">🎯 Фізичних цілей у повітрі</div>
+        <div id="statThreats" class="text-2xl font-bold text-red-400 mt-1">--</div>
+      </div>
+      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow">
+        <div class="text-xs text-gray-400">📢 Офіційних сирен</div>
+        <div id="statSirens" class="text-2xl font-bold text-yellow-400 mt-1">--</div>
+      </div>
+      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow">
+        <div class="text-xs text-gray-400">✈️ Загроза зльоту МіГ-31К</div>
+        <div id="statMig" class="text-2xl font-bold text-cyan-400 mt-1">--</div>
+      </div>
+      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow">
+        <div class="text-xs text-gray-400">🔑 Всього API-ключів</div>
+        <div id="statKeysCount" class="text-2xl font-bold text-blue-400 mt-1">--</div>
+      </div>
+    </div>
+
+    <!-- ==================== ФРЕЙМ 1: КОРИСТУВАЧІ ТА API-КЛЮЧІ ==================== -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-xl" id="usersFrame">
+      <div class="p-4 border-b border-gray-800 flex flex-wrap justify-between items-center gap-3">
+        <div>
+          <h2 class="font-semibold text-white flex items-center gap-2">
+            <span>🔑 Список користувачів та API-ключів</span>
+          </h2>
+          <p class="text-xs text-gray-400 mt-0.5">Керування доступом клієнтів, точками спостереження (до 5 слотів) та зонами небезпеки</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="downloadBackup()" class="h-8 px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition" title="Зберегти всіх користувачів та слоти в JSON на свій ПК">
+            <span>📥</span><span>Скачати бекап</span>
+          </button>
+          <button onclick="document.getElementById('restoreFileInput').click()" class="h-8 px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition" title="Відновити ключі із збереженого JSON-файлу">
+            <span>📤</span><span>Відновити бекап</span>
+          </button>
+          <input type="file" id="restoreFileInput" accept=".json" class="hidden" onchange="uploadBackup(event)">
+          <button onclick="toggleCreateKeyDrawer()" class="h-8 px-3.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow">
+            <span>➕</span><span>Створити ключ</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ВБУДОВАНИЙ (INLINE) ФРЕЙМ СТВОРЕННЯ КЛЮЧА (РОЗШИРЮЄТЬСЯ САМ) -->
+      <div id="createKeyDrawer" class="hidden p-4 bg-gray-950 border-b border-gray-800">
+        <div class="max-w-2xl">
+          <div class="text-xs font-bold text-orange-400 mb-2 flex items-center gap-1.5">
+            <span>➕ Створення нового API-ключа</span>
+            <span class="text-gray-400 font-normal">(для Home Assistant, ESP32 або мобільного клієнта)</span>
+          </div>
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <input type="text" id="newKeyOwnerInput" placeholder="Введіть ім'я власника (наприклад: 'Дім', 'Офіс', 'Дружина', 'ESP32 Вітальня')..." class="h-9 flex-1 bg-gray-900 border border-gray-700 px-3 rounded-lg text-xs text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500">
+            <button onclick="submitCreateKey()" class="h-9 px-4 bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded-lg text-xs flex items-center justify-center gap-1.5 transition shadow shrink-0">
+              <span>💾 Створити ключ</span>
+            </button>
+            <button onclick="toggleCreateKeyDrawer(false)" class="h-9 px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-medium transition shrink-0">
+              Скасувати
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ТАБЛИЦЯ КОРИСТУВАЧІВ -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-gray-950 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
+            <tr>
+              <th class="p-3 w-40">Власник</th>
+              <th class="p-3 w-52">API Ключ</th>
+              <th class="p-3 w-28">Статус</th>
+              <th class="p-3 min-w-[240px]">Опасна зона / Точки</th>
+              <th class="p-3 w-32">Був у мережі</th>
+              <th class="p-3 text-right w-52">Дії</th>
+            </tr>
+          </thead>
+          <tbody id="keysTableBody" class="divide-y divide-gray-800">
+            <tr><td colspan="6" class="p-8 text-center text-gray-500">Завантаження даних...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ==================== ФРЕЙМ 2: АРХІВ ІСТОРІЇ ПОЛЬОТІВ ==================== -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-xl" id="historyFrame">
+      <div class="p-4 border-b border-gray-800 flex flex-wrap justify-between items-center gap-3">
+        <div>
+          <h2 class="font-semibold text-white flex items-center gap-2">
+            <span>📁 Архів історії польотів (Flight History)</span>
+            <span id="histTotalBadge" class="text-xs bg-sky-950 text-sky-400 border border-sky-800 px-2 py-0.5 rounded-full font-mono font-medium">0 МБ</span>
+          </h2>
+          <p class="text-xs text-gray-400 mt-0.5">Помісячне збереження траєкторій цілей, оптимізація під SD-карту та хмарне сховище Google Drive</p>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <!-- Перемикач запису історії -->
+          <label class="h-8 flex items-center gap-2 cursor-pointer bg-gray-950 border border-gray-800 px-3 rounded-lg text-xs font-semibold select-none hover:border-gray-700 transition">
+            <input type="checkbox" id="histEnabledToggle" onchange="toggleHistoryRecording(this.checked)" class="accent-orange-500 w-4 h-4 cursor-pointer">
+            <span id="histEnabledLabel" class="text-orange-400">🟢 Запис історії активний</span>
+          </label>
+          <button onclick="document.getElementById('histAdminFileInput').click()" class="h-8 px-3 bg-sky-700 hover:bg-sky-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition" title="Завантажити JSON історії польотів">
+            <span>📤</span><span>Додати JSON файл</span>
+          </button>
+          <input type="file" id="histAdminFileInput" accept=".json" class="hidden" onchange="uploadAdminHistory(event)">
+          <button onclick="loadAdminHistory()" class="h-8 px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition" title="Оновити список файлів">
+            <span>🔄</span><span>Оновити</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ВИРІВНЯНИЙ СИМЕТРИЧНИЙ БЛОК GOOGLE DRIVE & СИНХРОНІЗАЦІЇ -->
+      <div class="p-4 bg-gray-950/70 border-b border-gray-800">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-end">
+          <!-- Колонка 1: Папка Google Диск -->
+          <div>
+            <label class="block text-xs font-semibold text-gray-300 mb-1.5">📁 Папка на Google Диску:</label>
+            <div class="flex items-center gap-2 h-9">
+              <input type="text" id="histGdriveUrl" placeholder="https://drive.google.com/drive/folders/..." class="h-9 flex-1 bg-gray-900 border border-gray-700 px-3 rounded-lg text-xs text-white font-mono focus:border-sky-500 focus:outline-none">
+              <button onclick="saveHistoryGdriveUrl()" class="h-9 px-3 bg-sky-700 hover:bg-sky-600 text-white rounded-lg text-xs font-semibold transition shrink-0">Зберегти</button>
+              <button onclick="openGoogleDriveFolder()" class="h-9 px-3 bg-gray-800 hover:bg-gray-700 text-sky-400 border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition shrink-0" title="Відкрити папку на Google Drive">📂</button>
+            </div>
+          </div>
+
+          <!-- Колонка 2: Webhook Google Apps Script -->
+          <div>
+            <label class="block text-xs font-semibold text-gray-300 mb-1.5">☁️ Webhook (Apps Script URL):</label>
+            <div class="flex items-center gap-2 h-9">
+              <input type="text" id="histGdriveWebhook" placeholder="https://script.google.com/macros/s/.../exec" class="h-9 flex-1 bg-gray-900 border border-gray-700 px-3 rounded-lg text-xs text-white font-mono focus:border-orange-500 focus:outline-none">
+              <button onclick="saveHistoryWebhook()" class="h-9 px-3.5 bg-orange-700 hover:bg-orange-600 text-white rounded-lg text-xs font-semibold transition shrink-0">Зберегти</button>
+            </div>
+          </div>
+
+          <!-- Колонка 3: Період автовивантаження -->
+          <div>
+            <label class="block text-xs font-semibold text-gray-300 mb-1.5">⏱️ Автовивантаження (період):</label>
+            <div class="flex items-center gap-2 h-9">
+              <input type="number" id="histSyncHours" min="0" max="720" step="1" placeholder="0" class="h-9 w-20 bg-gray-900 border border-gray-700 px-2 rounded-lg text-xs text-white font-mono text-center focus:border-amber-500 focus:outline-none shrink-0">
+              <span class="text-xs text-gray-400 truncate">год. (0 = тільки вручну)</span>
+              <button onclick="saveHistorySyncHours()" class="h-9 px-3.5 bg-amber-700 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition shrink-0">Зберегти</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Нижній статус синхронізації (на всю ширину) -->
+        <div class="mt-3 pt-2.5 border-t border-gray-800/60 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400">
+          <div class="flex items-center gap-1.5">
+            <span class="text-sky-400">ℹ️</span>
+            <span>Автоматичне фонове збереження щомісячних архівів польотів у вказану папку Google Drive.</span>
+          </div>
+          <div id="histLastSyncInfo" class="font-mono text-gray-300 bg-gray-900/90 px-2.5 py-1 rounded border border-gray-800">
+            Остання автосинхронізація: ніколи
+          </div>
+        </div>
+      </div>
+
+      <!-- ТАБЛИЦЯ ФАЙЛІВ ІСТОРІЇ -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-gray-400">
+          <thead class="bg-gray-950 text-gray-400 uppercase text-xs tracking-wider border-b border-gray-800">
+            <tr>
+              <th class="p-3 w-44">Місяць / Файл</th>
+              <th class="p-3 w-36">Дні у файлі</th>
+              <th class="p-3 w-32">Всього цілей</th>
+              <th class="p-3 w-36">Розмір на диску</th>
+              <th class="p-3 min-w-[160px]">Останнє оновлення</th>
+              <th class="p-3 text-right w-64">Дії</th>
+            </tr>
+          </thead>
+          <tbody id="histTableBody" class="divide-y divide-gray-800">
+            <tr><td colspan="6" class="p-8 text-center text-gray-500">Завантаження архівів...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ==================== ФРЕЙМ 3: ДОВІДНИК ТА ЛОГ ОБМІНУ ==================== -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-xl" id="directoryFrame">
+      <div class="p-4 border-b border-gray-800 flex flex-wrap justify-between items-center gap-3">
+        <div>
+          <h2 class="font-semibold text-white flex items-center gap-2">
+            <span>📋 Довідник системи та Лог обміну</span>
+            <span id="unmappedCountBadge" class="text-xs bg-amber-950 text-amber-400 border border-amber-800 px-2 py-0.5 rounded-full font-mono font-medium">0 нерозпізнаних</span>
+          </h2>
+          <p class="text-xs text-gray-400 mt-0.5">Канонічні класифікатори загроз, областей, районів та фіксація нерозпізнаних даних від першоджерел</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <a href="/api/v1/directory" target="_blank" class="h-8 px-3 bg-gray-800 hover:bg-gray-700 text-sky-400 border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition" title="Переглянути повний довідник у форматі JSON">
+            <span>📖</span><span>Відкрити JSON</span>
+          </a>
+          <button onclick="downloadExchangeLog()" class="h-8 px-3 bg-sky-700 hover:bg-sky-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition" title="Завантажити текстовий файл журналу на ПК">
+            <span>📥</span><span>Скачати лог</span>
+          </button>
+          <button onclick="loadExchangeLog()" class="h-8 px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition" title="Оновити таблицю логів">
+            <span>🔄</span><span>Оновити</span>
+          </button>
+          <button onclick="clearExchangeLog()" class="h-8 px-3 bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition" title="Очистити журнал">
+            <span>🗑️</span><span>Очистити</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Метрики довідника -->
+      <div class="p-3 bg-gray-950/70 border-b border-gray-800 grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        <div class="bg-gray-900/80 p-2.5 rounded-lg border border-gray-800">
+          <span class="text-gray-400">Типів загроз у довіднику:</span>
+          <div class="text-white font-bold text-sm mt-0.5">12 канонічних категорій</div>
+        </div>
+        <div class="bg-gray-900/80 p-2.5 rounded-lg border border-gray-800">
+          <span class="text-gray-400">Регіонів у довіднику:</span>
+          <div class="text-white font-bold text-sm mt-0.5">26 областей / 136 районів</div>
+        </div>
+        <div class="bg-gray-900/80 p-2.5 rounded-lg border border-gray-800">
+          <span class="text-gray-400">Невідомих типів цілей:</span>
+          <div id="statUnmappedThreats" class="text-amber-400 font-bold text-sm mt-0.5">0</div>
+        </div>
+        <div class="bg-gray-900/80 p-2.5 rounded-lg border border-gray-800">
+          <span class="text-gray-400">Невідомих регіонів / статусів:</span>
+          <div id="statUnmappedRegions" class="text-amber-400 font-bold text-sm mt-0.5">0</div>
+        </div>
+      </div>
+
+      <!-- Таблиця останніх нерозпізнаних записів -->
+      <div class="overflow-x-auto max-h-72 overflow-y-auto">
+        <table class="w-full text-left text-xs text-gray-400">
+          <thead class="bg-gray-950 text-gray-400 uppercase tracking-wider sticky top-0 border-b border-gray-800">
+            <tr>
+              <th class="p-2.5 w-32">Час</th>
+              <th class="p-2.5 w-28">Джерело</th>
+              <th class="p-2.5 w-32">Категорія</th>
+              <th class="p-2.5 w-48">Сире значення від першоджерела</th>
+              <th class="p-2.5">Деталі / Причина</th>
+            </tr>
+          </thead>
+          <tbody id="exchangeLogTableBody" class="divide-y divide-gray-800 font-mono">
+            <tr><td colspan="5" class="p-4 text-center text-gray-500 font-sans">Журнал нерозпізнаних даних порожній (усі дані інтерпретуються згідно з довідником)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div> <!-- Кінець adminApp -->
+
+  <!-- ==================== КЛІЄНТСЬКА ЛОГІКА ТА СКРИПТИ ==================== -->
+  <script>
+    let currentAdminKey = "";
+    let cachedUsers = {};
+    let currentOpenDrawerKey = "";
+    let telemetryInterval = null;
+
+    function togglePasswordVisibility(inputId, iconId) {
+      const input = document.getElementById(inputId);
+      const icon = document.getElementById(iconId);
+      if (!input) return;
+      if (input.type === "password") {
+        input.type = "text";
+        if (icon) icon.innerText = "🙈";
+      } else {
+        input.type = "password";
+        if (icon) icon.innerText = "👁️";
+      }
+    }
+
+    function copyToClipboard(text) {
+      if (!navigator.clipboard) {
+        prompt("Скопіюйте API-ключ вручну:", text);
+        return;
+      }
+      navigator.clipboard.writeText(text).then(() => {
+        alert("✅ API-ключ успішно скопійовано в буфер обміну!");
+      }).catch(() => {
+        prompt("Скопіюйте API-ключ вручну:", text);
+      });
+    }
+
+    async function verifyKeyOnServer(key) {
+      if (!key) return false;
+      try {
+        const res = await fetch("/api/v1/admin/verify?admin_key=" + encodeURIComponent(key));
+        return res.ok;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    async function handleLoginSubmit(event) {
+      if (event) event.preventDefault();
+      const input = document.getElementById("loginKeyInput");
+      const errBox = document.getElementById("loginError");
+      const btn = document.getElementById("loginBtn");
+      const key = input.value.trim();
+
+      if (!key) {
+        errBox.innerText = "❌ Будь ласка, введіть майстер-ключ адміністратора";
+        errBox.classList.remove("hidden");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = `<span class="animate-spin inline-block mr-2">⏳</span> Перевірка ключа...`;
+      errBox.classList.add("hidden");
+
+      const ok = await verifyKeyOnServer(key);
+      btn.disabled = false;
+      btn.innerHTML = `<span>🔓 Увійти до панелі керування</span>`;
+
+      if (ok) {
+        currentAdminKey = key;
+        const remember = document.getElementById("rememberKeyCheck").checked;
+        if (remember) {
+          localStorage.setItem("hub_admin_key", key);
+        } else {
+          sessionStorage.setItem("hub_admin_key", key);
+          localStorage.removeItem("hub_admin_key");
+        }
+        showAdminApp();
+      } else {
+        errBox.innerText = "❌ Невірний майстер-ключ адміністратора! Перевірте значення ADMIN_SECRET_KEY у конфігурації.";
+        errBox.classList.remove("hidden");
+        input.focus();
+        input.select();
+      }
+    }
+
+    function showAdminApp() {
+      document.getElementById("loginScreen").classList.add("hidden");
+      document.getElementById("adminApp").classList.remove("hidden");
+      updateTelemetry();
+      loadKeys();
+      loadHistoryConfig();
+      loadAdminHistory();
+      if (!telemetryInterval) {
+        telemetryInterval = setInterval(updateTelemetry, 4000);
+      }
+    }
+
+    function showLoginScreen() {
+      if (telemetryInterval) {
+        clearInterval(telemetryInterval);
+        telemetryInterval = null;
+      }
+      document.getElementById("adminApp").classList.add("hidden");
+      document.getElementById("loginScreen").classList.remove("hidden");
+      document.getElementById("loginKeyInput").value = "";
+      document.getElementById("loginError").classList.add("hidden");
+      setTimeout(() => {
+        const inp = document.getElementById("loginKeyInput");
+        if (inp) inp.focus();
+      }, 100);
+    }
+
+    function handleLogout() {
+      localStorage.removeItem("hub_admin_key");
+      sessionStorage.removeItem("hub_admin_key");
+      currentAdminKey = "";
+      cachedUsers = {};
+      showLoginScreen();
+    }
+
+    async function initAuth() {
+      const savedKey = localStorage.getItem("hub_admin_key") || sessionStorage.getItem("hub_admin_key") || "";
+      if (savedKey) {
+        const ok = await verifyKeyOnServer(savedKey);
+        if (ok) {
+          currentAdminKey = savedKey;
+          showAdminApp();
+          return;
+        } else {
+          localStorage.removeItem("hub_admin_key");
+          sessionStorage.removeItem("hub_admin_key");
+        }
+      }
+      showLoginScreen();
+    }
+
+    async function updateTelemetry() {
+      try {
+        const hRes = await fetch("/api/v1/health");
+        if (!hRes.ok) return;
+        const hData = await hRes.json();
+
+        document.getElementById("statThreats").innerText = hData.active_threats_count ?? "--";
+        const oblCount = hData.active_oblasts_count ?? 0;
+        const raionCount = hData.active_raions_count ?? Math.max(0, (hData.official_sirens_count || 0) - oblCount);
+        if (oblCount > 0 && raionCount > 0) {
+          document.getElementById("statSirens").innerText = `${oblCount} обл. ${raionCount} районів`;
+        } else if (oblCount > 0) {
+          document.getElementById("statSirens").innerText = `${oblCount} обл.`;
+        } else if (raionCount > 0) {
+          document.getElementById("statSirens").innerText = `${raionCount} районів`;
+        } else {
+          document.getElementById("statSirens").innerText = "Спокійно";
+        }
+        document.getElementById("statMig").innerText = hData.mig31k_active ? "АКТИВНА" : "НЕМАТЄ";
+        document.getElementById("statMig").className = "text-2xl font-bold mt-1 " + (hData.mig31k_active ? "text-red-400 animate-pulse" : "text-cyan-400");
+
+        // Upstream provider
+        const upName = document.getElementById("upstreamName");
+        const upDot = document.getElementById("upstreamDot");
+        const upBadge = document.getElementById("upstreamBadge");
+        if (hData.upstream_provider === "ukrainealarm") {
+          upName.innerText = "Основний потік (WebSocket map.ukrainealarm.com)";
+          upDot.className = "w-3.5 h-3.5 rounded-full bg-orange-500 animate-pulse shrink-0";
+          upBadge.innerText = "ОСНОВНИЙ";
+          upBadge.className = "bg-orange-950 text-orange-400 border border-orange-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+        } else if (hData.upstream_provider === "neptun_failover") {
+          upName.innerText = "Резервний потік (REST neptun.in.ua)";
+          upDot.className = "w-3.5 h-3.5 rounded-full bg-amber-500 animate-pulse shrink-0";
+          upBadge.innerText = "FAILOVER";
+          upBadge.className = "bg-amber-950 text-amber-400 border border-amber-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+        } else {
+          upName.innerText = "Очікування підключення...";
+          upDot.className = "w-3.5 h-3.5 rounded-full bg-gray-500 shrink-0";
+          upBadge.innerText = "CONNECTING";
+          upBadge.className = "bg-gray-800 text-gray-400 border border-gray-700 text-xs px-2.5 py-1 rounded font-mono shrink-0";
+        }
+
+        // Proxy
+        const pName = document.getElementById("proxyName");
+        const pDot = document.getElementById("proxyDot");
+        const pBadge = document.getElementById("proxyBadge");
+        if (hData.proxy_enabled) {
+          pName.innerText = "Проксі активний (" + hData.proxy_info + ")";
+          pDot.className = "w-3.5 h-3.5 rounded-full bg-orange-500 shrink-0";
+          pBadge.innerText = "PROXY";
+          pBadge.className = "bg-orange-950 text-orange-400 border border-orange-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+        } else {
+          pName.innerText = "Пряме підключення (Без проксі)";
+          pDot.className = "w-3.5 h-3.5 rounded-full bg-blue-500 shrink-0";
+          pBadge.innerText = "DIRECT";
+          pBadge.className = "bg-blue-950 text-blue-400 border border-blue-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+        }
+
+        // Unknown target types banner
+        const unkBanner = document.getElementById("unknownTypesBanner");
+        const unkText = document.getElementById("unknownTypesText");
+        if (unkBanner && unkText) {
+          if (hData.unknown_target_types_count > 0) {
+            const listStr = hData.unknown_target_types.map(x => `${x.type_identifier} (код: ${x.raw_code}, повторень: ${x.count})`).join(", ");
+            unkText.innerHTML = `<b>Увага: виявлено новий невідомий тип цілі в ефірі:</b> ${listStr}. Ціль автоматично супроводжується як <i>"Ціль не визначена"</i> із збереженням усіх алерів та координат.`;
+            unkBanner.classList.remove("hidden");
+          } else {
+            unkBanner.classList.add("hidden");
+          }
+        }
+      } catch(e) {}
+    }
+
+    async function loadKeys() {
+      if (!currentAdminKey) return showLoginScreen();
+      updateTelemetry();
+
+      try {
+        const res = await fetch("/api/v1/admin/keys?admin_key=" + encodeURIComponent(currentAdminKey));
+        if (res.status === 403) {
+          alert("Сесія адміністратора завершена або невірний майстер-ключ!");
+          return handleLogout();
+        }
+        const data = await res.json();
+        document.getElementById("statKeysCount").innerText = (data.users || []).length;
+        renderKeysTable(data.users || []);
+        loadExchangeLog();
+      } catch(e) {
+        alert("Помилка завантаження списку ключів: " + e);
+      }
+    }
+
+    function toggleCreateKeyDrawer(show) {
+      const drawer = document.getElementById("createKeyDrawer");
+      if (!drawer) return;
+      if (show === undefined) {
+        drawer.classList.toggle("hidden");
+      } else if (show) {
+        drawer.classList.remove("hidden");
+      } else {
+        drawer.classList.add("hidden");
+      }
+      if (!drawer.classList.contains("hidden")) {
+        const inp = document.getElementById("newKeyOwnerInput");
+        if (inp) {
+          inp.value = "";
+          inp.focus();
+        }
+      }
+    }
+
+    async function submitCreateKey() {
+      if (!currentAdminKey) return showLoginScreen();
+      const inp = document.getElementById("newKeyOwnerInput");
+      const owner = inp ? inp.value.trim() : "";
+      if (!owner) {
+        alert("❌ Будь ласка, введіть ім'я або опис власника ключа!");
+        if (inp) inp.focus();
+        return;
+      }
+      try {
+        const res = await fetch("/api/v1/admin/keys?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ owner: owner })
+        });
+        if (res.ok) {
+          const resp = await res.json();
+          alert(`✅ API-ключ для «${owner}» успішно створено:
+
+${resp.api_key}
+
+Ключ додано в систему та збережено на диск!`);
+          toggleCreateKeyDrawer(false);
+          loadKeys();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          alert("❌ Помилка створення ключа: " + (err.error || "Не авторизовано"));
+        }
+      } catch (e) {
+        alert("Помилка мережі: " + e);
+      }
+    }
+
+    function renderKeysTable(users) {
+      cachedUsers = {};
+      const tbody = document.getElementById("keysTableBody");
+      tbody.innerHTML = "";
+
+      if (!users || users.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="p-8 text-center text-gray-400">
+              <div class="text-3xl mb-2">📭</div>
+              <div class="font-semibold text-white text-base">Немає створених API-ключів</div>
+              <p class="text-xs text-gray-500 mt-1 max-w-md mx-auto">
+                База даних порожня. Натисніть кнопку <span class="text-orange-400 font-semibold">«+ Створити ключ»</span> вище, щоб додати перший API-ключ для Home Assistant або ESP32.
+              </p>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      users.forEach(u => {
+        cachedUsers[u.api_key] = u;
+        const lastSeen = u.last_used_at ? new Date(u.last_used_at * 1000).toLocaleTimeString() : "Ніколи";
+        const s = u.settings || { danger_radius_km: 35, alert_threat: true, alert_siren: true, alert_mig: false, alert_artillery: false };
+
+        const slotsObj = u.slots || {};
+        const slotsCount = Object.keys(slotsObj).length;
+        const slotsBadges = Object.keys(slotsObj).sort().map(sid => {
+          const sl = slotsObj[sid];
+          const rad = sl.danger_radius_km ?? s.danger_radius_km ?? 35;
+          const isDyn = sl.type === "dynamic";
+          return `<span class="inline-flex items-center gap-1 bg-gray-950 border border-gray-800 px-2 py-0.5 rounded text-[11px] text-gray-300" title="Точка #${sid}: ${sl.name || 'Слот'} (${sl.lat}, ${sl.lon})">
+            <span class="text-gray-400 font-medium">#${sid}${isDyn ? ' 📡' : ''} ${sl.name || 'Точка'}:</span>
+            <span class="text-orange-400 font-mono font-bold">${rad} км</span>
+          </span>`;
+        }).join(" ");
+
+        // 1. Основний рядок користувача
+        const tr = document.createElement("tr");
+        tr.id = "row_" + u.api_key;
+        tr.className = "hover:bg-gray-800/40 transition border-b border-gray-800";
+        tr.innerHTML = `
+          <td class="p-3 font-semibold text-white">${u.owner}</td>
+          <td class="p-3 font-mono text-xs">
+            <span onclick="copyToClipboard('${u.api_key}')" class="bg-gray-950 hover:bg-gray-900 border border-gray-800 hover:border-gray-700 px-2.5 py-1 rounded select-all text-sky-400 cursor-pointer inline-flex items-center gap-1 transition" title="Клікніть, щоб скопіювати ключ">
+              <span>${u.api_key}</span>
+              <span class="text-gray-500 text-[10px]">📋</span>
+            </span>
+          </td>
+          <td class="p-3">
+            <span class="px-2.5 py-1 text-xs rounded-full font-semibold ${u.enabled ? 'bg-orange-950 text-orange-400 border border-orange-800' : 'bg-red-950 text-red-400 border border-red-800'}">
+              ${u.enabled ? 'Активний' : 'Вимкнено'}
+            </span>
+          </td>
+          <td class="p-3">
+            <div class="flex flex-wrap gap-1 mb-1.5">
+              ${slotsCount > 0 ? slotsBadges : '<span class="text-xs text-gray-500 italic">Точки не додані (0/5)</span>'}
+            </div>
+            <div class="text-[11px] text-gray-400 flex flex-wrap gap-1">
+              ${s.alert_threat ? '<span class="bg-red-950/80 text-red-400 border border-red-900/60 px-1.5 py-0.5 rounded">🎯 Цілі</span>' : '<span class="bg-gray-900 text-gray-600 line-through px-1.5 py-0.5 rounded">🎯 Цілі</span>'}
+              ${s.alert_siren ? '<span class="bg-yellow-950/80 text-yellow-400 border border-yellow-900/60 px-1.5 py-0.5 rounded">📢 Сирена</span>' : '<span class="bg-gray-900 text-gray-600 line-through px-1.5 py-0.5 rounded">📢 Сирена</span>'}
+              ${s.alert_mig ? '<span class="bg-cyan-950/80 text-cyan-400 border border-cyan-900/60 px-1.5 py-0.5 rounded">✈️ МіГ</span>' : ''}
+              ${s.alert_artillery ? '<span class="bg-amber-950/80 text-amber-400 border border-amber-900/60 px-1.5 py-0.5 rounded">💥 Арта</span>' : ''}
+            </div>
+          </td>
+          <td class="p-3 text-xs text-gray-400 whitespace-nowrap">${lastSeen}</td>
+          <td class="p-3 text-right">
+            <div class="flex items-center justify-end gap-1.5 whitespace-nowrap">
+              <button onclick="toggleUserDrawer('${u.api_key}')" class="h-8 px-3 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow" title="Розгорнути налаштування точок та алерів">
+                <span>⚙️ Налаштувати</span>
+                <span id="chevron_${u.api_key}">▾</span>
+              </button>
+              <button onclick="toggleKey('${u.api_key}', ${!u.enabled})" class="h-8 px-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded-lg text-xs font-medium transition">
+                ${u.enabled ? 'Вимк' : 'Увімк'}
+              </button>
+              <button onclick="deleteKey('${u.api_key}')" class="h-8 px-2 bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 rounded-lg text-xs font-medium transition" title="Видалити ключ">
+                🗑️
+              </button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+
+        // 2. ВБУДОВАНИЙ РОЗШИРЮВАНИЙ СУБ-РЯДОК (DRAWER) ДЛЯ ЦЬОГО КОРИСТУВАЧА
+        const drawerTr = document.createElement("tr");
+        drawerTr.id = "drawer_" + u.api_key;
+        drawerTr.className = "hidden bg-gray-950/95 border-b-2 border-emerald-900/60 transition-all";
+        drawerTr.innerHTML = `
+          <td colspan="6" class="p-4 md:p-6">
+            <div class="space-y-6">
+
+              <!-- Заголовок розгорнутого суб-фрейму -->
+              <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-800">
+                <div class="flex items-center gap-2.5">
+                  <span class="text-xl">⚙️</span>
+                  <div>
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                      <span>Параметри об'єкта:</span>
+                      <span class="text-orange-400 font-mono">${u.owner}</span>
+                    </h3>
+                    <p class="text-xs text-gray-400">Налаштування локацій (слоти 1..5), персональних радіусів ураження та звукових фільтрів сирени</p>
+                  </div>
+                </div>
+                <button onclick="toggleUserDrawer('${u.api_key}', false)" class="h-7 px-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded text-xs flex items-center gap-1 transition">
+                  ✕ Згорнути
+                </button>
+              </div>
+
+              <!-- Дві секції: 1) Точки спостереження, 2) Зона небезпеки та сповіщення -->
+              <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                <!-- ЛІВА КОЛОНКА (7/12): СЛОТИ ТОЧОК СПОСТЕРЕЖЕННЯ -->
+                <div class="lg:col-span-7 space-y-4">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                      <h4 class="text-sm font-bold text-white flex items-center gap-1.5">
+                        <span>📍 Точки спостереження</span>
+                      </h4>
+                      <span id="slotCountPill_${u.api_key}" class="text-xs px-2 py-0.5 rounded-full font-mono font-bold ${slotsCount >= 5 ? 'bg-amber-950 text-amber-400 border border-amber-800' : 'bg-blue-950 text-blue-400 border border-blue-800'}">
+                        ${slotsCount} / 5 слотів
+                      </span>
+                    </div>
+
+                    ${slotsCount < 5 ? `
+                      <button onclick="toggleAddSlotDrawer('${u.api_key}')" class="h-7 px-3 bg-orange-600 hover:bg-orange-500 text-white rounded text-xs font-semibold flex items-center gap-1 transition shadow">
+                        <span>➕ Додати точку</span>
+                      </button>
+                    ` : `
+                      <span class="text-[11px] text-amber-400 font-medium">⚠️ Ліміт 5 слотів вичерпано</span>
+                    `}
+                  </div>
+
+                  <!-- Інлайн-форма додавання нової точки -->
+                  <div id="addSlotBox_${u.api_key}" class="hidden p-4 bg-gray-900 border border-orange-800/80 rounded-xl space-y-3 shadow-lg">
+                    <div class="flex items-center justify-between pb-2 border-b border-gray-800">
+                      <span class="text-xs font-bold text-orange-400">➕ Нова точка спостереження (Слот)</span>
+                      <button onclick="toggleAddSlotDrawer('${u.api_key}', false)" class="text-gray-400 hover:text-white text-xs">✕</button>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label class="block text-[11px] font-semibold text-gray-400 mb-1">Назва точки:</label>
+                        <input id="newSlotName_${u.api_key}" type="text" placeholder="Дім, Офіс, Дача..." class="h-8 w-full bg-gray-950 border border-gray-700 px-2.5 rounded text-xs text-white focus:border-orange-500 focus:outline-none">
+                      </div>
+                      <div>
+                        <label class="block text-[11px] font-semibold text-gray-400 mb-1">Широта (Lat):</label>
+                        <input id="newSlotLat_${u.api_key}" type="number" step="0.0001" placeholder="50.4501" class="h-8 w-full bg-gray-950 border border-gray-700 px-2.5 rounded text-xs text-white font-mono focus:border-orange-500 focus:outline-none">
+                      </div>
+                      <div>
+                        <label class="block text-[11px] font-semibold text-gray-400 mb-1">Довгота (Lon):</label>
+                        <input id="newSlotLon_${u.api_key}" type="number" step="0.0001" placeholder="30.5234" class="h-8 w-full bg-gray-950 border border-gray-700 px-2.5 rounded text-xs text-white font-mono focus:border-orange-500 focus:outline-none">
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-800">
+                      <div>
+                        <div class="flex justify-between items-center text-[11px] text-gray-300 mb-1">
+                          <span class="font-semibold">🚨 Радіус небезпеки (Danger Zone):</span>
+                          <span class="font-mono text-orange-400 font-bold" id="newSlotDangerVal_${u.api_key}">35 км</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <input type="range" min="5" max="150" step="5" value="35" id="newSlotDangerRange_${u.api_key}" class="w-full accent-orange-500 cursor-pointer" oninput="syncNewSlotDanger('${u.api_key}', this.value)">
+                          <input type="number" min="1" max="500" value="35" id="newSlotDangerNum_${u.api_key}" class="w-16 h-7 bg-gray-950 border border-gray-700 px-1 rounded text-xs text-white font-mono text-center" oninput="syncNewSlotDanger('${u.api_key}', this.value)">
+                          <span class="text-[10px] text-gray-400">км</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label class="block text-[11px] font-semibold text-gray-400 mb-1">Тип локації:</label>
+                        <select id="newSlotType_${u.api_key}" class="h-8 w-full bg-gray-950 border border-gray-700 px-2 rounded text-xs text-white focus:border-orange-500 focus:outline-none">
+                          <option value="static">Статична (постійні координати)</option>
+                          <option value="dynamic">Динамічна (GPS зі смартфона / HA)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <!-- Фільтри загроз для нової точки -->
+                    <div class="space-y-1.5 pt-1 border-t border-gray-800">
+                      <div class="flex items-center justify-between text-[11px] font-semibold text-gray-300">
+                        <span>🎯 Реагувати на фізичні загрози в радіусі точки:</span>
+                        <span class="text-[10px] text-gray-500 font-normal">довідник цілей</span>
+                      </div>
+                      <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
+                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
+                          <input type="checkbox" id="newSlotThreat_missile_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
+                          <span class="text-gray-300">🚀 Ракета</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
+                          <input type="checkbox" id="newSlotThreat_ballistic_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
+                          <span class="text-gray-300">☄️ Балістика</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
+                          <input type="checkbox" id="newSlotThreat_shahed_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
+                          <span class="text-gray-300">🛸 Шахед</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
+                          <input type="checkbox" id="newSlotThreat_shahed_jet_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
+                          <span class="text-gray-300">⚡ Реактивний</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
+                          <input type="checkbox" id="newSlotThreat_kab_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
+                          <span class="text-gray-300">💣 КАБ</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
+                          <input type="checkbox" id="newSlotThreat_lancet_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
+                          <span class="text-gray-300">🎯 Ланцет</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
+                          <input type="checkbox" id="newSlotThreat_unknown_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
+                          <span class="text-gray-300">❓ Невідома</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
+                          <input type="checkbox" id="newSlotThreat_recon_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5">
+                          <span class="text-gray-300">👁️ Розвідник</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <!-- Фільтри сповіщень для нової точки -->
+                    <div class="space-y-1.5 pt-1">
+                      <div class="flex items-center justify-between text-[11px] font-semibold text-gray-300">
+                        <span>🔔 Сповіщення для цієї точки:</span>
+                        <span class="text-[10px] text-gray-500 font-normal">довідник тривог</span>
+                      </div>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
+                        <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px]">
+                          <input type="checkbox" id="newSlotAlertThreat_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
+                          <span class="text-white">🎯 Ціль у зоні точки</span>
+                        </label>
+                        <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px]">
+                          <input type="checkbox" id="newSlotAlertSiren_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
+                          <span class="text-white">📢 Офіційна сирена (район/обл)</span>
+                        </label>
+                        <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px]">
+                          <input type="checkbox" id="newSlotAlertYellow_${u.api_key}" class="rounded accent-yellow-500 w-3.5 h-3.5">
+                          <span class="text-yellow-400">⚠️ Жовта тривога</span>
+                        </label>
+                        <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px]">
+                          <input type="checkbox" id="newSlotAlertArtillery_${u.api_key}" class="rounded accent-amber-500 w-3.5 h-3.5">
+                          <span class="text-amber-400">💥 Артобстріл / РСЗВ</span>
+                        </label>
+                        <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px] sm:col-span-2">
+                          <input type="checkbox" id="newSlotAlertMig_${u.api_key}" class="rounded accent-cyan-500 w-3.5 h-3.5">
+                          <span class="text-cyan-400">✈️ Зліт МіГ-31К (загальна балістика)</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="flex justify-end items-center gap-2 pt-2">
+                      <button onclick="toggleAddSlotDrawer('${u.api_key}', false)" class="h-7 px-3 text-xs text-gray-400 hover:text-white">Скасувати</button>
+                      <button onclick="submitNewSlot('${u.api_key}')" class="h-7 px-4 bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded text-xs flex items-center gap-1 transition shadow">
+                        💾 Додати точку
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Список карток існуючих точок -->
+                  <div class="space-y-3" id="slotsList_${u.api_key}">
+                    ${renderSlotCardsHtml(u.api_key, slotsObj)}
+                  </div>
+                </div>
+
+                <!-- ПРАВА КОЛОНКА (5/12): ЗОНА ЗА ЗАМОВЧУВАННЯМ ТА ФІЛЬТРИ АЛЕРТІВ -->
+                <div class="lg:col-span-5 bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-5 space-y-5 flex flex-col justify-between">
+                  <div class="space-y-4">
+                    <div>
+                      <h4 class="text-sm font-bold text-white flex items-center gap-1.5 mb-1">
+                        <span>🚨 Загальний радіус небезпеки</span>
+                      </h4>
+                      <p class="text-xs text-gray-400">Базовий радіус перехоплення цілей навколо об'єкта</p>
+                    </div>
+
+                    <!-- Слайдер радіусу -->
+                    <div class="bg-gray-950 border border-gray-800 p-3 rounded-lg space-y-2">
+                      <div class="flex justify-between items-center text-xs">
+                        <span class="text-gray-300 font-medium">Радіус поразки (за замовчуванням):</span>
+                        <span class="font-mono text-orange-400 font-bold text-sm" id="dangerRadiusVal_${u.api_key}">${s.danger_radius_km || 35} км</span>
+                      </div>
+                      <div class="flex items-center gap-3">
+                        <input type="range" min="5" max="150" step="5" value="${s.danger_radius_km || 35}" id="dangerRadiusRange_${u.api_key}" class="w-full accent-orange-500 cursor-pointer" oninput="syncDangerRadius('${u.api_key}', this.value)">
+                        <input type="number" min="1" max="500" value="${s.danger_radius_km || 35}" id="dangerRadiusNum_${u.api_key}" class="w-16 h-8 bg-gray-900 border border-gray-700 px-1 rounded text-xs text-white font-mono text-center focus:border-orange-500" oninput="syncDangerRadius('${u.api_key}', this.value)">
+                        <span class="text-xs text-gray-400">км</span>
+                      </div>
+                      <label class="flex items-center gap-2 cursor-pointer pt-1 text-xs text-gray-400 hover:text-gray-300 select-none">
+                        <input type="checkbox" id="applyAllSlotsCheck_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5 cursor-pointer">
+                        <span>Призначити цей радіус одразу до всіх ${slotsCount} слотів</span>
+                      </label>
+                    </div>
+
+                    <!-- Чекбокси типів сповіщень -->
+                    <div class="space-y-2">
+                      <label class="block text-xs font-semibold text-gray-300">Фільтри звукових сигналів (ESP32 / Home Assistant):</label>
+
+                      <div class="space-y-2 bg-gray-950 border border-gray-800 p-3 rounded-lg text-xs">
+                        <label class="flex items-start gap-2.5 cursor-pointer select-none">
+                          <input type="checkbox" id="alertThreatCheck_${u.api_key}" class="mt-0.5 rounded accent-orange-500 w-4 h-4 cursor-pointer" ${s.alert_threat !== false ? 'checked' : ''}>
+                          <div>
+                            <span class="font-semibold text-white">🎯 Фізична ціль у зоні небезпеки</span>
+                            <p class="text-[11px] text-gray-400">Сирена при наближенні реального Шахеда/ракети в радіус обраної точки</p>
+                          </div>
+                        </label>
+
+                        <label class="flex items-start gap-2.5 cursor-pointer select-none pt-2 border-t border-gray-900">
+                          <input type="checkbox" id="alertSirenCheck_${u.api_key}" class="mt-0.5 rounded accent-orange-500 w-4 h-4 cursor-pointer" ${s.alert_siren !== false ? 'checked' : ''}>
+                          <div>
+                            <span class="font-semibold text-white">📢 Офіційна тривога в області слота</span>
+                            <p class="text-[11px] text-gray-400">Звук при увімкненні офіційної сирени, навіть якщо цілей на радарі ще немає</p>
+                          </div>
+                        </label>
+
+                        <label class="flex items-start gap-2.5 cursor-pointer select-none pt-2 border-t border-gray-900">
+                          <input type="checkbox" id="alertMigCheck_${u.api_key}" class="mt-0.5 rounded accent-orange-500 w-4 h-4 cursor-pointer" ${s.alert_mig ? 'checked' : ''}>
+                          <div>
+                            <span class="font-semibold text-white">✈️ Зліт МіГ-31К / Балістична загроза</span>
+                            <p class="text-[11px] text-gray-400">Загальноукраїнська тривога по гіперзвуковим ракетам «Кинджал»</p>
+                          </div>
+                        </label>
+
+                        <label class="flex items-start gap-2.5 cursor-pointer select-none pt-2 border-t border-gray-900">
+                          <input type="checkbox" id="alertArtilleryCheck_${u.api_key}" class="mt-0.5 rounded accent-orange-500 w-4 h-4 cursor-pointer" ${s.alert_artillery ? 'checked' : ''}>
+                          <div>
+                            <span class="font-semibold text-white">💥 Загроза артобстрілу / РСЗВ</span>
+                            <p class="text-[11px] text-gray-400">Тривоги артилерійського обстрілу в прифронтових районах</p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Кнопка збереження суб-фрейму -->
+                  <div class="pt-3 border-t border-gray-800 flex justify-end items-center gap-2">
+                    <button onclick="toggleUserDrawer('${u.api_key}', false)" class="h-9 px-3 text-xs text-gray-400 hover:text-white transition">Згорнути</button>
+                    <button onclick="saveUserSettings('${u.api_key}')" class="h-9 px-5 bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 transition shadow-lg">
+                      <span>💾</span><span>Зберегти налаштування та алерти</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          </td>
+        `;
+        tbody.appendChild(drawerTr);
+      });
+
+      // Якщо був відкритий конкретний суб-фрейм до оновлення, зберігаємо його стан
+      if (currentOpenDrawerKey && document.getElementById("drawer_" + currentOpenDrawerKey)) {
+        document.getElementById("drawer_" + currentOpenDrawerKey).classList.remove("hidden");
+        const ch = document.getElementById("chevron_" + currentOpenDrawerKey);
+        if (ch) ch.innerText = "▴";
+      }
+    }
+
+    function renderSlotCardsHtml(apiKey, slotsObj) {
+      if (!slotsObj || typeof slotsObj !== "object") return "";
+      const keys = Object.keys(slotsObj).sort();
+      if (keys.length === 0) {
+        return `
+          <div class="liquid-glass p-6 rounded-xl text-center">
+            <div class="text-2xl mb-1">📍</div>
+            <div class="text-white font-semibold text-xs">Точки ще не додані (0 / 5)</div>
+            <p class="text-[11px] text-gray-500 mt-1 max-w-sm mx-auto">
+              Натисніть «+ Додати точку» вище, або налаштуйте точки безпосередньо у меню «Опції» тактичної мапи.
+            </p>
+          </div>
+        `;
+      }
+
+      return keys.map(slotId => {
+        const s = slotsObj[slotId];
+        const isDyn = s.type === "dynamic" || s.is_dynamic;
+        const dangerRad = s.danger_radius_km ?? s.danger_zone ?? 35;
+        const safeName = (s.name || ('Точка #' + slotId)).replace(/'/g, "\'");
+        const oblast = s.cached_oblast || s.oblast || 'Локація визначається';
+
+        return `
+          <div class="liquid-glass p-3.5 rounded-xl flex flex-wrap items-center justify-between gap-3 shadow">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <span class="w-6 h-6 rounded-full bg-orange-950 text-orange-400 border border-orange-800 flex items-center justify-center text-xs font-bold font-mono">#${slotId}</span>
+              <span class="text-sm font-bold text-white">${s.name || ('Точка #' + slotId)}</span>
+              <span class="text-[10px] px-2 py-0.5 rounded font-mono font-medium ${isDyn ? 'bg-purple-950 text-purple-300 border border-purple-800' : 'bg-blue-950 text-blue-300 border border-blue-800'}">
+                ${isDyn ? 'GPS ДИНАМІЧНИЙ' : 'СТАТИЧНИЙ'}
+              </span>
+              <span class="text-[11px] px-2 py-0.5 rounded bg-gray-900 text-gray-300 border border-gray-800 font-medium inline-flex items-center gap-1">
+                📍 ${oblast} • Радіус: ${dangerRad} км
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <a href="/map?token=${encodeURIComponent(apiKey)}" target="_blank" class="h-7 px-3 bg-orange-600/80 hover:bg-orange-500 text-white rounded text-xs font-semibold inline-flex items-center gap-1 shadow transition">
+                <span>⚙️ Налаштувати на мапі</span>
+              </a>
+              <button onclick="deleteSlot('${apiKey}', '${slotId}', '${safeName}')" class="h-7 w-7 text-red-400 hover:text-red-200 hover:bg-red-950/80 rounded transition text-xs font-bold flex items-center justify-center" title="Видалити цю точку">
+                🗑️
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleUserDrawer(apiKey, forceState) {
+      const drawer = document.getElementById("drawer_" + apiKey);
+      const chevron = document.getElementById("chevron_" + apiKey);
+      if (!drawer) return;
+
+      const shouldOpen = forceState !== undefined ? forceState : drawer.classList.contains("hidden");
+
+      if (shouldOpen) {
+        // Закриваємо попередньо відкритий суб-фрейм іншого користувача для охайності
+        if (currentOpenDrawerKey && currentOpenDrawerKey !== apiKey) {
+          const prevDrawer = document.getElementById("drawer_" + currentOpenDrawerKey);
+          const prevChev = document.getElementById("chevron_" + currentOpenDrawerKey);
+          if (prevDrawer) prevDrawer.classList.add("hidden");
+          if (prevChev) prevChev.innerText = "▾";
+        }
+        drawer.classList.remove("hidden");
+        if (chevron) chevron.innerText = "▴";
+        currentOpenDrawerKey = apiKey;
+      } else {
+        drawer.classList.add("hidden");
+        if (chevron) chevron.innerText = "▾";
+        if (currentOpenDrawerKey === apiKey) currentOpenDrawerKey = "";
+      }
+    }
+
+    function toggleAddSlotDrawer(apiKey, show) {
+      const box = document.getElementById("addSlotBox_" + apiKey);
+      if (!box) return;
+      if (show === undefined) {
+        box.classList.toggle("hidden");
+      } else if (show) {
+        box.classList.remove("hidden");
+      } else {
+        box.classList.add("hidden");
+      }
+      if (!box.classList.contains("hidden")) {
+        const inp = document.getElementById("newSlotName_" + apiKey);
+        if (inp) inp.focus();
+      }
+    }
+
+    function syncNewSlotDanger(apiKey, val) {
+      const r = document.getElementById("newSlotDangerRange_" + apiKey);
+      const n = document.getElementById("newSlotDangerNum_" + apiKey);
+      const l = document.getElementById("newSlotDangerVal_" + apiKey);
+      if (r) r.value = val;
+      if (n) n.value = val;
+      if (l) l.innerText = val + " км";
+    }
+
+    function syncSlotDanger(apiKey, slotId, val) {
+      const r = document.getElementById("slotDangerRange_" + apiKey + "_" + slotId);
+      const n = document.getElementById("slotDangerNum_" + apiKey + "_" + slotId);
+      if (r) r.value = val;
+      if (n) n.value = val;
+    }
+
+    function syncDangerRadius(apiKey, val) {
+      const r = document.getElementById("dangerRadiusRange_" + apiKey);
+      const n = document.getElementById("dangerRadiusNum_" + apiKey);
+      const l = document.getElementById("dangerRadiusVal_" + apiKey);
+      if (r) r.value = val;
+      if (n) n.value = val;
+      if (l) l.innerText = val + " км";
+    }
+
+    async function saveUserSettings(apiKey) {
+      if (!apiKey || !currentAdminKey) return;
+      const radius = parseFloat(document.getElementById("dangerRadiusNum_" + apiKey).value) || 35;
+      const applyAll = document.getElementById("applyAllSlotsCheck_" + apiKey) ? document.getElementById("applyAllSlotsCheck_" + apiKey).checked : false;
+      const payload = {
+        danger_radius_km: radius,
+        apply_to_all_slots: applyAll,
+        alert_threat: document.getElementById("alertThreatCheck_" + apiKey).checked,
+        alert_siren: document.getElementById("alertSirenCheck_" + apiKey).checked,
+        alert_mig: document.getElementById("alertMigCheck_" + apiKey).checked,
+        alert_artillery: document.getElementById("alertArtilleryCheck_" + apiKey).checked
+      };
+
+      try {
+        const res = await fetch("/api/v1/admin/keys/" + encodeURIComponent(apiKey) + "/settings?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          alert("✅ Налаштування та фільтри сповіщень успішно збережено в базі!");
+          loadKeys();
+        } else {
+          const err = await res.json();
+          alert("❌ Помилка збереження налаштувань: " + (err.error || "Невідома помилка"));
+        }
+      } catch (e) {
+        alert("Помилка мережі: " + e);
+      }
+    }
+
+    async function saveSlot(apiKey, slotId) {
+      if (!currentAdminKey) return showLoginScreen();
+      const name = document.getElementById("slotName_" + apiKey + "_" + slotId).value;
+      const lat = parseFloat(document.getElementById("slotLat_" + apiKey + "_" + slotId).value);
+      const lon = parseFloat(document.getElementById("slotLon_" + apiKey + "_" + slotId).value);
+      const danger_radius_km = parseFloat(document.getElementById("slotDangerNum_" + apiKey + "_" + slotId).value) || 35.0;
+
+      // Збір типів цілей, на які реагує точка
+      const react_threat_types = [];
+      ['missile', 'ballistic', 'shahed', 'shahed_jet', 'kab', 'lancet', 'recon', 'unknown'].forEach(t => {
+        const el = document.getElementById("slotThreat_" + t + "_" + apiKey + "_" + slotId);
+        if (el && el.checked) react_threat_types.push(t);
+      });
+
+      // Збір тривог, на які реагує точка
+      const alert_threat = document.getElementById("slotAlertThreat_" + apiKey + "_" + slotId)?.checked ?? true;
+      const alert_siren = document.getElementById("slotAlertSiren_" + apiKey + "_" + slotId)?.checked ?? true;
+      const alert_yellow = document.getElementById("slotAlertYellow_" + apiKey + "_" + slotId)?.checked ?? false;
+      const alert_artillery = document.getElementById("slotAlertArtillery_" + apiKey + "_" + slotId)?.checked ?? false;
+      const alert_mig = document.getElementById("slotAlertMig_" + apiKey + "_" + slotId)?.checked ?? false;
+
+      try {
+        const res = await fetch("/api/v1/slots/" + slotId + "?token=" + encodeURIComponent(apiKey) + "&admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            lat,
+            lon,
+            danger_radius_km,
+            react_threat_types,
+            alert_threat,
+            alert_siren,
+            alert_yellow,
+            alert_artillery,
+            alert_mig
+          })
+        });
+        if (res.ok) {
+          alert("✅ Точка #" + slotId + " («" + name + "») успішно налаштована та збережена!");
+          loadKeys();
+        } else {
+          const err = await res.json();
+          alert("Помилка збереження точки: " + (err.error || "Невідома помилка"));
+        }
+      } catch (e) {
+        alert("Помилка мережі: " + e);
+      }
+    }
+
+    async function submitNewSlot(apiKey) {
+      if (!apiKey || !currentAdminKey) return;
+      const name = document.getElementById("newSlotName_" + apiKey).value.trim();
+      const latStr = document.getElementById("newSlotLat_" + apiKey).value.trim();
+      const lonStr = document.getElementById("newSlotLon_" + apiKey).value.trim();
+      const dangerRadius = parseFloat(document.getElementById("newSlotDangerNum_" + apiKey).value) || 35;
+      const slotType = document.getElementById("newSlotType_" + apiKey).value || "static";
+
+      if (!latStr || !lonStr) {
+        alert("❌ Будь ласка, введіть широту (Lat) та довготу (Lon) точки!");
+        return;
+      }
+      const lat = parseFloat(latStr);
+      const lon = parseFloat(lonStr);
+      if (isNaN(lat) || isNaN(lon)) {
+        alert("❌ Координати повинні бути валідними числами (наприклад: 50.4501, 30.5234)!");
+        return;
+      }
+
+      const react_threat_types = [];
+      ['missile', 'ballistic', 'shahed', 'shahed_jet', 'kab', 'lancet', 'recon', 'unknown'].forEach(t => {
+        const el = document.getElementById("newSlotThreat_" + t + "_" + apiKey);
+        if (el && el.checked) react_threat_types.push(t);
+      });
+      const alert_threat = document.getElementById("newSlotAlertThreat_" + apiKey)?.checked ?? true;
+      const alert_siren = document.getElementById("newSlotAlertSiren_" + apiKey)?.checked ?? true;
+      const alert_yellow = document.getElementById("newSlotAlertYellow_" + apiKey)?.checked ?? false;
+      const alert_artillery = document.getElementById("newSlotAlertArtillery_" + apiKey)?.checked ?? false;
+      const alert_mig = document.getElementById("newSlotAlertMig_" + apiKey)?.checked ?? false;
+
+      try {
+        const res = await fetch("/api/v1/slots?token=" + encodeURIComponent(apiKey) + "&admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name || undefined,
+            lat: lat,
+            lon: lon,
+            danger_radius_km: dangerRadius,
+            type: slotType,
+            react_threat_types: react_threat_types,
+            alert_threat: alert_threat,
+            alert_siren: alert_siren,
+            alert_yellow: alert_yellow,
+            alert_artillery: alert_artillery,
+            alert_mig: alert_mig
+          })
+        });
+        const resp = await res.json();
+        if (res.ok && resp.status === "success") {
+          alert("✅ Точку «" + (resp.slot.name || ("#" + resp.slot.id)) + "» успішно додано!");
+          loadKeys();
+        } else {
+          alert("❌ Помилка додавання точки: " + (resp.message || resp.error || "Невідома помилка"));
+        }
+      } catch (e) {
+        alert("❌ Помилка мережі: " + e);
+      }
+    }
+
+    async function deleteSlot(apiKey, slotId, slotName) {
+      if (!currentAdminKey) return showLoginScreen();
+      if (!confirm("Ви дійсно бажаєте видалити точку #" + slotId + " («" + slotName + "»)?")) return;
+
+      try {
+        const res = await fetch("/api/v1/slots/" + encodeURIComponent(slotId) + "?token=" + encodeURIComponent(apiKey) + "&admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "DELETE"
+        });
+        const resp = await res.json();
+        if (res.ok && resp.status === "deleted") {
+          alert("✅ Точка #" + slotId + " успішно видалена!");
+          loadKeys();
+        } else {
+          alert("❌ Помилка видалення точки: " + (resp.error || "Невідома помилка"));
+        }
+      } catch (e) {
+        alert("❌ Помилка мережі: " + e);
+      }
+    }
+
+    async function toggleKey(key, enabled) {
+      if (!currentAdminKey) return showLoginScreen();
+      await fetch("/api/v1/admin/keys/" + encodeURIComponent(key) + "?admin_key=" + encodeURIComponent(currentAdminKey), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled })
+      });
+      loadKeys();
+    }
+
+    async function deleteKey(key) {
+      if (!currentAdminKey) return showLoginScreen();
+      if (!confirm("Ви дійсно бажаєте відкликати та видалити цей API-ключ?")) return;
+      await fetch("/api/v1/admin/keys/" + encodeURIComponent(key) + "?admin_key=" + encodeURIComponent(currentAdminKey), {
+        method: "DELETE"
+      });
+      if (currentOpenDrawerKey === key) currentOpenDrawerKey = "";
+      loadKeys();
+    }
+
+    // ==================== АРХІВ ІСТОРІЇ ПОЛЬОТІВ ====================
+    async function loadHistoryConfig() {
+      try {
+        const res = await fetch("/api/v1/admin/history/config?admin_key=" + encodeURIComponent(currentAdminKey));
+        if (!res.ok) return;
+        const data = await res.json();
+        const cfg = data.config || {};
+
+        const toggle = document.getElementById("histEnabledToggle");
+        const lbl = document.getElementById("histEnabledLabel");
+        if (toggle && lbl) {
+          toggle.checked = cfg.enabled !== false;
+          lbl.innerText = toggle.checked ? "🟢 Запис історії активний" : "⚪ Запис історії вимкнено";
+          lbl.className = toggle.checked ? "text-orange-400" : "text-gray-500";
+        }
+
+        const gUrl = document.getElementById("histGdriveUrl");
+        if (gUrl) gUrl.value = cfg.gdrive_url || "";
+
+        const gWb = document.getElementById("histGdriveWebhook");
+        if (gWb) gWb.value = cfg.gdrive_webhook || "";
+
+        const hHours = document.getElementById("histSyncHours");
+        if (hHours) hHours.value = cfg.gdrive_sync_hours !== undefined ? cfg.gdrive_sync_hours : 0;
+
+        const lastSyncEl = document.getElementById("histLastSyncInfo");
+        if (lastSyncEl) {
+          lastSyncEl.innerText = cfg.last_gdrive_sync_ts ? `Остання автосинхронізація: ${new Date(cfg.last_gdrive_sync_ts * 1000).toLocaleString()}` : "Остання автосинхронізація: ще не проводилась";
+        }
+      } catch (e) {
+        console.error("Error loading history config:", e);
+      }
+    }
+
+    async function toggleHistoryRecording(enabled) {
+      if (!currentAdminKey) return showLoginScreen();
+      try {
+        const res = await fetch("/api/v1/admin/history/config?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: enabled })
+        });
+        const resp = await res.json();
+        if (res.ok) {
+          const lbl = document.getElementById("histEnabledLabel");
+          if (lbl) {
+            lbl.innerText = enabled ? "🟢 Запис історії активний" : "⚪ Запис історії вимкнено";
+            lbl.className = enabled ? "text-orange-400" : "text-gray-500";
+          }
+        } else {
+          alert("Помилка перемикання запису: " + (resp.error || "Невідома помилка"));
+        }
+      } catch (e) {
+        alert("Помилка мережі: " + e);
+      }
+    }
+
+    async function saveHistoryGdriveUrl() {
+      if (!currentAdminKey) return showLoginScreen();
+      const val = document.getElementById("histGdriveUrl").value.trim();
+      try {
+        const res = await fetch("/api/v1/admin/history/config?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gdrive_url: val })
+        });
+        if (res.ok) {
+          alert("✅ Посилання на папку Google Drive успішно збережено!");
+        } else {
+          alert("Помилка збереження посилання!");
+        }
+      } catch (e) {
+        alert("Помилка мережі: " + e);
+      }
+    }
+
+    function openGoogleDriveFolder() {
+      const url = document.getElementById("histGdriveUrl").value.trim();
+      if (!url) {
+        alert("Будь ласка, спочатку збережіть посилання на папку Google Drive!");
+        return;
+      }
+      window.open(url, "_blank");
+    }
+
+    async function saveHistoryWebhook() {
+      if (!currentAdminKey) return showLoginScreen();
+      const val = document.getElementById("histGdriveWebhook").value.trim();
+      try {
+        const res = await fetch("/api/v1/admin/history/config?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gdrive_webhook: val })
+        });
+        if (res.ok) {
+          alert("✅ Webhook Google Apps Script успішно збережено!");
+        } else {
+          alert("Помилка збереження Webhook!");
+        }
+      } catch (e) {
+        alert("Помилка мережі: " + e);
+      }
+    }
+
+    async function saveHistorySyncHours() {
+      if (!currentAdminKey) return showLoginScreen();
+      const val = parseInt(document.getElementById("histSyncHours").value) || 0;
+      try {
+        const res = await fetch("/api/v1/admin/history/config?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gdrive_sync_hours: val })
+        });
+        if (res.ok) {
+          alert("✅ Інтервал автосинхронізації збережено (" + val + " год.)!");
+        } else {
+          alert("Помилка збереження інтервалу!");
+        }
+      } catch (e) {
+        alert("Помилка мережі: " + e);
+      }
+    }
+
+    async function uploadToGoogleDrive(month, targetBtn) {
+      if (!currentAdminKey) return showLoginScreen();
+      const webhook = document.getElementById("histGdriveWebhook").value.trim();
+      if (!webhook) {
+        alert("⚠️ Для вивантаження на Google Drive спочатку вкажіть Webhook (Apps Script URL) у полі вище!");
+        return;
+      }
+
+      const origHtml = targetBtn ? targetBtn.innerHTML : "";
+      if (targetBtn) {
+        targetBtn.disabled = true;
+        targetBtn.innerHTML = `⏳ Передача...`;
+      }
+
+      try {
+        const res = await fetch("/api/v1/admin/history/upload_gdrive/" + encodeURIComponent(month) + "?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST"
+        });
+        const resp = await res.json();
+        if (res.ok && resp.status === "uploaded") {
+          alert(`✅ Файл за ${month} успішно відправлено на Google Drive!
+Розмір: ${resp.size_kb} КБ, Цілей: ${resp.targets_count}`);
+          loadAdminHistory();
+          loadHistoryConfig();
+        } else {
+          alert("❌ Помилка завантаження на Google Drive: " + (resp.error || "Невідома помилка"));
+        }
+      } catch (e) {
+        alert("Помилка мережі: " + e);
+      } finally {
+        if (targetBtn) {
+          targetBtn.disabled = false;
+          targetBtn.innerHTML = origHtml;
+        }
+      }
+    }
+
+    async function loadAdminHistory() {
+      try {
+        const res = await fetch("/api/v1/admin/history?admin_key=" + encodeURIComponent(currentAdminKey));
+        if (!res.ok) return;
+        const data = await res.json();
+        const tbody = document.getElementById("histTableBody");
+        const badge = document.getElementById("histTotalBadge");
+
+        if (badge) {
+          badge.innerText = `${data.total_size_mb || 0} МБ (${data.total_targets || 0} цілей)`;
+        }
+
+        if (!data.files || data.files.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="6" class="p-8 text-center text-gray-500 font-sans">
+                Архіви історії ще не сформовані. Запис траєкторій відбувається щомісяця автоматично під час польотів цілей.
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        let html = "";
+        data.files.forEach(f => {
+          const daysStr = f.days_count > 0 ? `${f.days_min || ''} — ${f.days_max || ''}` : "Немає";
+          const updatedStr = f.last_modified_ts ? new Date(f.last_modified_ts * 1000).toLocaleString() : "--";
+
+          const actionButtons = `
+            <div class="flex items-center justify-end gap-1.5 whitespace-nowrap">
+              <button onclick="uploadToGoogleDrive('${f.month}', this)" class="h-7 px-2.5 bg-sky-700 hover:bg-sky-600 text-white rounded text-xs font-medium flex items-center gap-1 transition" title="Відправити цей архів на Google Drive">
+                <span>☁️</span><span>На Drive</span>
+              </button>
+              <a href="/replay?month=${f.month}" target="_blank" class="h-7 px-2.5 bg-emerald-800 hover:bg-orange-700 text-emerald-100 rounded text-xs font-medium flex items-center gap-1 transition text-decoration-none" title="Відкрити мапу відтворення історії у новій вкладці">
+                <span>▶</span><span>Відтворити</span>
+              </a>
+              <button onclick="downloadHistoryFile('${f.month}')" class="h-7 px-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded text-xs font-medium flex items-center gap-1 transition" title="Завантажити JSON файл на свій ПК">
+                <span>📥</span><span>Скачати</span>
+              </button>
+              <button onclick="deleteHistoryFile('${f.month}')" class="h-7 px-2 bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 rounded text-xs font-medium transition" title="Видалити архів">
+                🗑️
+              </button>
+            </div>
+          `;
+
+          html += `
+            <tr class="hover:bg-gray-800/40 transition border-b border-gray-800">
+              <td class="p-3 font-semibold text-white">
+                <div class="flex items-center gap-2">
+                  <span>📅</span>
+                  <span class="font-mono text-sm">${f.month}</span>
+                  ${f.is_synced ? '<span class="text-[10px] bg-orange-950 text-orange-400 border border-orange-800 px-1.5 py-0.5 rounded font-mono">Drive OK</span>' : '<span class="text-[10px] bg-gray-900 text-gray-400 border border-gray-800 px-1.5 py-0.5 rounded font-mono">Тільки локально</span>'}
+                </div>
+                <div class="text-[11px] text-gray-500 font-mono mt-0.5">${f.filename}</div>
+              </td>
+              <td class="p-3 text-xs text-gray-300 font-mono">${daysStr}</td>
+              <td class="p-3 text-xs font-bold text-amber-400 font-mono">${f.targets_count}</td>
+              <td class="p-3 font-mono text-xs font-bold text-orange-400">${f.size_kb !== "--" ? f.size_kb + " КБ" : "--"}</td>
+              <td class="p-3 text-xs text-gray-400 whitespace-nowrap">${updatedStr}</td>
+              <td class="p-3 text-right">
+                ${actionButtons}
+              </td>
+            </tr>
+          `;
+        });
+        tbody.innerHTML = html;
+      } catch (e) {
+        console.error("Error loading admin history:", e);
+      }
+    }
+
+    function downloadHistoryFile(month) {
+      window.location.href = "/api/v1/admin/history/download/" + encodeURIComponent(month) + "?admin_key=" + encodeURIComponent(currentAdminKey);
+    }
+
+    async function deleteHistoryFile(month) {
+      if (!confirm(`Ви дійсно бажаєте видалити файл історії за ${month}? Цю дію неможливо скасувати.`)) return;
+      try {
+        const res = await fetch("/api/v1/admin/history/" + encodeURIComponent(month) + "?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "DELETE"
+        });
+        if (res.ok) {
+          loadAdminHistory();
+          loadHistoryConfig();
+        } else {
+          alert("Помилка при видаленні файлу!");
+        }
+      } catch (e) {
+        alert("Помилка мережі: " + e);
+      }
+    }
+
+    async function uploadAdminHistory(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+        const res = await fetch("/api/v1/admin/history/upload?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(json)
+        });
+        const resp = await res.json();
+        if (res.ok) {
+          alert(`Успішно імпортовано ${resp.imported_targets} цілей в архів!`);
+          loadAdminHistory();
+        } else {
+          alert("Помилка імпорту: " + (resp.error || "Невідома помилка"));
+        }
+      } catch (e) {
+        alert("Помилка читання JSON: " + e);
+      }
+      event.target.value = "";
+    }
+
+    // ==================== БЕКАП ТА ВІДНОВЛЕННЯ ====================
+    function downloadBackup() {
+      if (!currentAdminKey) return showLoginScreen();
+      window.location.href = "/api/v1/admin/backup?admin_key=" + encodeURIComponent(currentAdminKey);
+    }
+
+    async function uploadBackup(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      if (!currentAdminKey) return showLoginScreen();
+      try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+        const res = await fetch("/api/v1/admin/restore?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(json)
+        });
+        const resp = await res.json();
+        if (resp.status === "success") {
+          alert("✅ Бекап успішно відновлено! Завантажено ключів: " + resp.users_count);
+          loadKeys();
+        } else {
+          alert("❌ Помилка відновлення: " + (resp.error || "Невідома помилка"));
+        }
+      } catch (e) {
+        alert("Помилка читання файлу: " + e);
+      }
+      event.target.value = "";
+    }
+
+    // ==================== ЛОГ ОБМІНУ ТА ДОВІДНИК ====================
+    async function loadExchangeLog() {
+      if (!currentAdminKey) return;
+      try {
+        const res = await fetch("/api/v1/admin/exchange_log?admin_key=" + encodeURIComponent(currentAdminKey));
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const badge = document.getElementById("unmappedCountBadge");
+        if (badge) {
+          badge.innerText = `${data.unmapped_total || 0} нерозпізнаних`;
+        }
+
+        const sThr = document.getElementById("statUnmappedThreats");
+        if (sThr) sThr.innerText = data.unmapped_threats_count || 0;
+        const sReg = document.getElementById("statUnmappedRegions");
+        if (sReg) sReg.innerText = data.unmapped_regions_count || 0;
+
+        const tbody = document.getElementById("exchangeLogTableBody");
+        if (!data.recent_entries || data.recent_entries.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="5" class="p-4 text-center text-gray-500 font-sans">
+                Журнал нерозпізнаних даних порожній (усі дані інтерпретуються згідно з канонічним довідником).
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        tbody.innerHTML = data.recent_entries.map(e => `
+          <tr class="hover:bg-gray-800/40 transition border-b border-gray-800">
+            <td class="p-2.5 text-gray-400 whitespace-nowrap">${e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString() : '--'}</td>
+            <td class="p-2.5 text-gray-300 font-semibold">${e.source || 'upstream'}</td>
+            <td class="p-2.5 text-amber-400 font-semibold">${e.category || '--'}</td>
+            <td class="p-2.5 text-white bg-gray-950/80 rounded px-2 py-1 select-all font-mono">${(e.raw_value || '').replace(/</g, '&lt;')}</td>
+            <td class="p-2.5 text-gray-400 font-sans">${(e.details || '').replace(/</g, '&lt;')}</td>
+          </tr>
+        `).join("");
+      } catch (e) {
+        console.error("Error loading exchange log:", e);
+      }
+    }
+
+    function downloadExchangeLog() {
+      if (!currentAdminKey) return showLoginScreen();
+      window.location.href = "/api/v1/admin/exchange_log/download?admin_key=" + encodeURIComponent(currentAdminKey);
+    }
+
+    async function clearExchangeLog() {
+      if (!currentAdminKey) return showLoginScreen();
+      if (!confirm("Ви дійсно бажаєте очистити журнал нерозпізнаних записів?")) return;
+      try {
+        const res = await fetch("/api/v1/admin/exchange_log/clear?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST"
+        });
+        if (res.ok) {
+          loadExchangeLog();
+        }
+      } catch (e) {
+        alert("Помилка очищення: " + e);
+      }
+    }
+
+    // Ініціалізація авторизації при завантаженні сторінки
+    initAuth();
+  </script>
+</body>
+</html>
