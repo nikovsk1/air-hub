@@ -2293,13 +2293,7 @@
             }
             it.marker.setLatLng([curLat, curLon]);
 
-            // Синхронізація кінця сліду coreTrail з рухомим маркером (тротлінг 20 FPS)
-            if (it.coreTrail && it.baseTrailPts && it.baseTrailPts.length > 0) {
-              if (now - (it.lastTrailUpdateTs || 0) >= 50) {
-                it.lastTrailUpdateTs = now;
-                it.coreTrail.setLatLngs(it.baseTrailPts.concat([[curLat, curLon]]));
-              }
-            }
+
 
             const deltaH = ((sim.targetHeading - sim.currentHeading + 540) % 360) - 180;
             if (Math.abs(deltaH) > 0.2) {
@@ -2465,7 +2459,17 @@
         const icon = createTargetMarkerIcon(cat, trk.heading_deg || trk.heading, trk.type || meta.name, trk.speed_kmh);
 
         const rawTrajPts = (trk.trajectory || []).map(p => [p.lat, p.lon]);
-        if (rawTrajPts.length === 0) rawTrajPts.push([trk.lat, trk.lon]);
+        // Завжди з'єднуємо траєкторію з поточною реальною позицією цілі (усуває відставання лінії на 1-1.5 км)
+        if (rawTrajPts.length === 0) {
+          rawTrajPts.push([trk.lat, trk.lon]);
+        } else {
+          const lastP = rawTrajPts[rawTrajPts.length - 1];
+          const dLat = Math.abs(lastP[0] - trk.lat);
+          const dLon = Math.abs(lastP[1] - trk.lon);
+          if (dLat > 0.0005 || dLon > 0.0005) {
+            rawTrajPts.push([trk.lat, trk.lon]);
+          }
+        }
         const trajPts = smoothTrajectory(rawTrajPts); // Corner smoothing (Task 7)
 
         const corridor = trk.extrapolated || trk.extrapolated_path || [];
@@ -2538,7 +2542,18 @@
             item.sim.lastPacketTs = performance.now();
           }
 
-          item.marker.setIcon(icon);
+          // Зберігаємо існуючий DOM-елемент іконки для неперервного апаратного повороту (Shortest-Arc Slerp)
+          if (item.cat !== cat) {
+            item.cat = cat;
+            item.marker.setIcon(icon);
+            item.rotatorEl = null;
+          } else {
+            const tagEl = item.marker.getElement()?.querySelector('.target-label-tag');
+            if (tagEl) {
+              const speedStr = trk.speed_kmh && trk.speed_kmh > 0 ? ` • ${Math.round(trk.speed_kmh)} км/г` : '';
+              tagEl.innerText = `${trk.type || meta.name}${speedStr}`;
+            }
+          }
           item.marker.setPopupContent(popupHtml);
 
           if (visualConfig.showTrails && trajPts.length > 1) {
@@ -2568,8 +2583,8 @@
               const clockStr = new Date((nowSec + mins * 60) * 1000).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
               const icon = createEtaWaypointIcon(mins, clockStr, meta.vectorColor);
               if (i < item.etaMarkers.length) {
+                // Оновлюємо лише позицію без руйнування DOM-іконки
                 item.etaMarkers[i].setLatLng([pt.lat, pt.lon]);
-                item.etaMarkers[i].setIcon(icon);
               } else {
                 const m = L.marker([pt.lat, pt.lon], { icon }).addTo(map);
                 item.etaMarkers.push(m);
@@ -2638,6 +2653,9 @@
           </label>
         `;
       }).join('');
+      if (container.innerHTML !== newBreakdownHtml) {
+        container.innerHTML = newBreakdownHtml;
+      }
     }
 
     // =====================================================================
@@ -2964,6 +2982,9 @@
             </div>
           `;
         }).join('');
+        if (statusList.innerHTML !== newStatusHtml) {
+          statusList.innerHTML = newStatusHtml;
+        }
       }
 
       updateSlotDropdownLabel();
@@ -2979,7 +3000,7 @@
 
       const statusList = document.getElementById('radarSlotsStatusList');
       if (statusList) {
-        statusList.innerHTML = entries.map(([id, s]) => {
+        const newStatusHtml = entries.map(([id, s]) => {
           const isDanger = s.danger_zone_active;
           const isActive = s.active;
           const statusColor = isDanger ? '#ef4444' : (isActive ? '#10b981' : '#64748b');
@@ -3149,7 +3170,7 @@
       const slots = slotsObj || currentSlots;
       const entries = Object.entries(slots).sort((a,b) => a[0].localeCompare(b[0]));
 
-      container.innerHTML = entries.map(([id, s]) => {
+      const newBreakdownHtml = entries.map(([id, s]) => {
         const isMonitored = selectedSlotIds.has(id);
         const name = s.name || ('Точка ' + id);
         const hasThreat = s.closest_type && s.closest_distance_km !== null && s.closest_distance_km !== undefined;

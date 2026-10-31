@@ -147,10 +147,8 @@ impl TargetTrack {
         if let Some(last_pt) = self.trajectory.last() {
             let dist_from_last = calculate_haversine_distance(last_pt.lat, last_pt.lon, lat, lon);
 
-            // Захист від фізично неможливих стрибків (телепортація > 60 км за один пакет):
-            // скидаємо попередні точки, щоб не малювати павутиння ліній через усю країну
             // Захист від фізично неможливих стрибків (телепортація > 350 км за один пакет):
-            // скидаємо попередні точки тільки при аномальному перескоку координат
+            // скидаємо попередні точки тільки при аномальному перескоку координат (захист надзвукових ракет)
             if dist_from_last > 350.0 {
                 self.trajectory.clear();
                 self.trajectory.push(TrajectoryPoint {
