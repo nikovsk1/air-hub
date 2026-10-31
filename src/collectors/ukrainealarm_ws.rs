@@ -1,4 +1,4 @@
-﻿use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use regex::Regex;
@@ -9,20 +9,175 @@ use tokio::time::sleep;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
-use crate::crypto_decoder::{decode_payload_native, extract_targets};
+use crate::canonical_registry::ExchangeLogManager;
+use crate::crypto_decoder::{decode_payload_native, decode_surface_v2_payload, extract_snapshot_meta, extract_targets, extract_taxonomy, RawExtractedTarget};
 use crate::history::HistoryManager;
 use crate::oblast_detector::OblastDetector;
 use crate::tracker::{now_sec, ThreatState};
 
 const PAGE_URL: &str = "https://map.ukrainealarm.com/onlyMap";
+const FALLBACK_URL: &str = "https://map.ukrainealarm.com/api/centrifuge/map/fallback";
 const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36";
+
+/// Уніфікована обробка корисного навантаження (як з Centrifugo WebSocket, так і з REST Fallback)
+pub async fn process_ukrainealarm_payload(
+    payload: &str,
+    source_label: &str,
+    threat_state: &Arc<RwLock<ThreatState>>,
+    detector: &Arc<OblastDetector>,
+    history_mgr: &Arc<HistoryManager>,
+    exchange_mgr: &Arc<ExchangeLogManager>,
+) -> bool {
+    let colon_pos = payload.find(':');
+    let prefix = match colon_pos {
+        Some(pos) => &payload[..pos + 1],
+        None => "",
+    };
+
+    // Стратегія адаптивного розпізнавання потоків:
+    // 1) Префікс "~s" (~s2:, ~s3:, ~s4: ...) -> Surface SVG-компресований потік
+    // 2) Префікс "~" (~5:, ~6:, ~7: ...) -> AST ChaCha20 потік
+    // 3) Взаємний fallback: якщо визначений декодер дав збій, тестується альтернативний
+    let mut extracted_targets: Option<(Vec<RawExtractedTarget>, &'static str)> = None;
+
+    if prefix.starts_with("~s") {
+        match decode_surface_v2_payload(payload) {
+            Ok(targets) => {
+                extracted_targets = Some((targets, "Surface"));
+            }
+            Err(e) => {
+                debug!("Surface decode failed for {}: {}. Trying AST fallback...", prefix, e);
+                if let Ok(decoded) = decode_payload_native(payload) {
+                    let targets = extract_targets(&decoded);
+                    extracted_targets = Some((targets, "AST (fallback)"));
+                } else {
+                    warn!("Surface payload decode error for {}: {}", prefix, e);
+                }
+            }
+        }
+    } else if prefix.starts_with('~') {
+        match decode_payload_native(payload) {
+            Ok(decoded) => {
+                let targets = extract_targets(&decoded);
+                extracted_targets = Some((targets, "AST"));
+                let tax = extract_taxonomy(&decoded);
+                static REGISTERED_TAX: OnceLock<std::sync::RwLock<std::collections::HashSet<i64>>> = OnceLock::new();
+                let tax_set = REGISTERED_TAX.get_or_init(|| std::sync::RwLock::new(std::collections::HashSet::new()));
+                for item in tax {
+                    let is_new_code = {
+                        let r = tax_set.read().unwrap();
+                        !r.contains(&item.code)
+                    };
+                    if is_new_code {
+                        let mut w = tax_set.write().unwrap();
+                        if w.insert(item.code) {
+                            exchange_mgr.record_unmapped(
+                                "taxonomy",
+                                &item.name_ua,
+                                Some(item.code),
+                                &item.name_en,
+                                "UkraineAlarm Taxonomy",
+                                Some(&format!("Dynamic taxonomy: code={}, icon={}", item.code, item.icon)),
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                debug!("AST decode failed for {}: {}. Trying Surface fallback...", prefix, e);
+                match decode_surface_v2_payload(payload) {
+                    Ok(targets) => {
+                        extracted_targets = Some((targets, "Surface (fallback)"));
+                    }
+                    Err(_) => {
+                        warn!("AST payload decode error for {}: {}", prefix, e);
+                    }
+                }
+            }
+        }
+    } else {
+        // Невідомий/новий префікс: евристичний автотест обох декодерів
+        if let Ok(targets) = decode_surface_v2_payload(payload) {
+            extracted_targets = Some((targets, "Surface (Auto)"));
+        } else if let Ok(decoded) = decode_payload_native(payload) {
+            let targets = extract_targets(&decoded);
+            extracted_targets = Some((targets, "AST (Auto)"));
+        }
+    }
+
+    if let Some((extracted, stream_type)) = extracted_targets {
+        let mut state = threat_state.write().await;
+        let provider_name = format!("{} ({})", source_label, stream_type);
+        let lost_tracks = state.tracker.update_batch(&extracted, detector, Some(exchange_mgr), &provider_name);
+        state.recompute_oblast_alerts(detector);
+        let now = now_sec();
+        state.last_update_ts = now;
+        state.last_targets_update_ts = now;
+        state.last_primary_targets_ts = now;
+        state.update_seq += 1;
+        state.upstream_provider = format!("{} ({})", source_label, stream_type);
+
+        // Синхронізація активних траєкторій в історію з дроселюванням (раз на 15 с для стабільних цілей)
+        for trk in state.tracker.tracks.values_mut() {
+            let is_new = trk.trajectory.len() <= 1;
+            let time_since_hist = now - trk.last_history_sync_ts;
+            if is_new || time_since_hist >= 15.0 {
+                history_mgr.record_track(trk, "active");
+                trk.last_history_sync_ts = now;
+            }
+        }
+        // Фіксація завершення польоту зі збереженням повної траєкторії!
+        for trk in &lost_tracks {
+            history_mgr.record_track(trk, "lost");
+        }
+        true
+    } else {
+        // Жоден декодер не зміг розпарсити пакет
+        let prefix_display = if prefix.is_empty() {
+            &payload[..payload.len().min(8)]
+        } else {
+            prefix
+        };
+
+        warn!(
+            "{}: unhandled payload format detected! Prefix: '{}', length: {}, preview: '{}'",
+            source_label,
+            prefix_display,
+            payload.len(),
+            &payload[..payload.len().min(50)]
+        );
+
+        exchange_mgr.record_unmapped(
+            "protocol",
+            prefix_display,
+            None,
+            "unsupported_payload_format",
+            source_label,
+            Some(&format!(
+                "Отримано непідтримуваний формат корисного навантаження: '{}' (розмір: {} байт).",
+                prefix_display,
+                payload.len()
+            )),
+        );
+
+        // Збереження першого сирого зразка для аналізу та написання тестів
+        let sample_path = "sample_unmapped_payload.txt";
+        if !std::path::Path::new(sample_path).exists() {
+            if let Ok(_) = std::fs::write(sample_path, payload) {
+                info!("Saved first live sample of unmapped payload to {}", sample_path);
+            }
+        }
+        false
+    }
+}
 
 pub async fn run_ukrainealarm_collector(
     threat_state: Arc<RwLock<ThreatState>>,
     detector: Arc<OblastDetector>,
     history_mgr: Arc<HistoryManager>,
+    exchange_mgr: Arc<ExchangeLogManager>,
     http_client: reqwest::Client,
 ) {
     let re_token = Regex::new(r#"id=["']centrifugo-token["'][^>]*value=["']([^"']+)["']"#).unwrap();
@@ -219,50 +374,176 @@ pub async fn run_ukrainealarm_collector(
                     continue;
                 }
 
-                // Витяг корисного навантаження (~5:...)
-                let mut payload = "";
-                if let Some(push) = val.get("push").and_then(|p| p.get("pub")).and_then(|pb| pb.get("data")) {
-                    if let Some(n) = push.get("data").and_then(|d| d.get("n")).and_then(|s| s.as_str()) {
-                        payload = n;
-                    } else if let Some(n) = push.get("n").and_then(|s| s.as_str()) {
-                        payload = n;
-                    }
-                } else if let Some(res) = val.get("result").and_then(|r| r.get("data")).and_then(|d| d.get("data")) {
-                    if let Some(n) = res.get("n").and_then(|s| s.as_str()) {
-                        payload = n;
-                    }
-                }
+                // Універсальний витяг корисного навантаження (~5:...) через JSON-pointer
+                let payload = val.pointer("/result/data/data/n")
+                    .or_else(|| val.pointer("/result/data/n"))
+                    .or_else(|| val.pointer("/result/n"))
+                    .or_else(|| val.pointer("/push/pub/data/data/n"))
+                    .or_else(|| val.pointer("/push/pub/data/n"))
+                    .or_else(|| val.pointer("/push/pub/n"))
+                    .or_else(|| val.pointer("/pub/data/n"))
+                    .or_else(|| val.pointer("/data/n"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
 
-                if !payload.is_empty() && payload.starts_with("~5:") {
-                    match decode_payload_native(payload) {
-                        Ok(decoded) => {
-                            let extracted = extract_targets(&decoded);
-                            let mut state = threat_state.write().await;
-                            let lost_tracks = state.tracker.update_batch(&extracted, &detector);
-                            state.recompute_oblast_alerts(&detector);
-                            let now = now_sec();
-                            state.last_update_ts = now;
-                            state.last_targets_update_ts = now;
-                            state.update_seq += 1;
-                            state.upstream_provider = "Centrifugo (ws.ukrainealarm.com)".to_string();
-
-                            // Синхронізація активних траєкторій в історію
-                            for trk in state.tracker.tracks.values() {
-                                history_mgr.record_track(trk, "active");
-                            }
-                            // Фіксація завершення польоту зі збереженням повної траєкторії!
-                            for trk in &lost_tracks {
-                                history_mgr.record_track(trk, "lost");
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Payload decode error: {}", e);
-                        }
-                    }
+                if !payload.is_empty() {
+                    process_ukrainealarm_payload(
+                        payload,
+                        "UkraineAlarm WS",
+                        &threat_state,
+                        &detector,
+                        &history_mgr,
+                        &exchange_mgr,
+                    ).await;
                 }
             }
         }
 
         sleep(Duration::from_secs(5)).await;
+    }
+}
+
+/// Фоновий збирач Tier 2 REST Fallback для UkraineAlarm:
+/// Активується, якщо Centrifugo WebSocket мовчить понад 10 секунд.
+/// Опитує https://map.ukrainealarm.com/api/centrifuge/map/fallback кожні 9.5-10 секунд
+/// (згідно з Cache-Control: public, max-age=10) та декодує знімок цілей.
+pub async fn run_ukrainealarm_http_fallback(
+    threat_state: Arc<RwLock<ThreatState>>,
+    detector: Arc<OblastDetector>,
+    history_mgr: Arc<HistoryManager>,
+    exchange_mgr: Arc<ExchangeLogManager>,
+    http_client: reqwest::Client,
+) {
+    info!("Starting Cold Start bootstrap from UkraineAlarm Fallback...");
+    let mut last_hash: Option<String> = None;
+    let mut last_fetch_instant = std::time::Instant::now() - Duration::from_secs(20);
+
+    // 1. Cold Start Bootstrap: негайно отримуємо повний знімок активних цілей та їхніх хвостів
+    {
+        let req = http_client
+            .get(FALLBACK_URL)
+            .header(USER_AGENT, BROWSER_UA)
+            .header(ORIGIN, "https://map.ukrainealarm.com")
+            .header(REFERER, "https://map.ukrainealarm.com/")
+            .header("X-Requested-With", "XMLHttpRequest")
+            .timeout(Duration::from_secs(8));
+
+        if let Ok(resp) = req.send().await {
+            if resp.status().is_success() {
+                if let Ok(data) = resp.json::<Value>().await {
+                    if let Some(payload) = data.get("n").and_then(|v| v.as_str()) {
+                        if !payload.is_empty() {
+                            if let Ok(decoded) = decode_payload_native(payload) {
+                                let meta = extract_snapshot_meta(&decoded);
+                                last_hash = meta.revision_hash;
+                            }
+                            let ok = process_ukrainealarm_payload(
+                                payload,
+                                "UkraineAlarm Fallback (Cold Start)",
+                                &threat_state,
+                                &detector,
+                                &history_mgr,
+                                &exchange_mgr,
+                            ).await;
+                            if ok {
+                                info!("Cold Start bootstrap successfully initialized active radar targets and historical trails");
+                            }
+                        }
+                    }
+                }
+            }
+            last_fetch_instant = std::time::Instant::now();
+        }
+    }
+
+    // 2. Dual-Stack Smart Fusion Engine
+    loop {
+        let silence_sec = {
+            let state = threat_state.read().await;
+            now_sec() - state.last_targets_update_ts
+        };
+
+        // Якщо WebSocket стабільно постачає дані (мовчання <= 8.0 сек), працюємо як фоновий Anchor Reconciler (раз на 35 сек)
+        if silence_sec <= 8.0 {
+            sleep(Duration::from_secs(35)).await;
+        }
+
+        // Захист від занадто частого опитування: мінімум 9.5 секунд між запитами (Rate Limit & max-age=10 guard)
+        let elapsed = last_fetch_instant.elapsed();
+        if elapsed < Duration::from_millis(9500) {
+            sleep(Duration::from_millis(9500) - elapsed).await;
+        }
+
+        debug!(
+            "Polling UkraineAlarm Fallback (silence: {:.1}s, last_hash: {:?})...",
+            silence_sec, last_hash
+        );
+
+        let req = http_client
+            .get(FALLBACK_URL)
+            .header(USER_AGENT, BROWSER_UA)
+            .header(ORIGIN, "https://map.ukrainealarm.com")
+            .header(REFERER, "https://map.ukrainealarm.com/")
+            .header("X-Requested-With", "XMLHttpRequest")
+            .timeout(Duration::from_secs(8));
+
+        last_fetch_instant = std::time::Instant::now();
+
+        match req.send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                if status.is_success() {
+                    match resp.json::<Value>().await {
+                        Ok(data) => {
+                            let payload = data.get("n").and_then(|v| v.as_str()).unwrap_or("");
+                            if !payload.is_empty() {
+                                // Швидка перевірка ревізії: якщо хеш знімка не змінився, пропускаємо розбір (0% CPU)
+                                let mut skip_reprocessing = false;
+                                if let Ok(decoded) = decode_payload_native(payload) {
+                                    let meta = extract_snapshot_meta(&decoded);
+                                    if let Some(ref h) = meta.revision_hash {
+                                        if last_hash.as_ref() == Some(h) {
+                                            debug!("Fallback snapshot hash {:?} unchanged, skipping redundant update", h);
+                                            skip_reprocessing = true;
+                                        } else {
+                                            last_hash = Some(h.clone());
+                                        }
+                                    }
+                                }
+
+                                if !skip_reprocessing {
+                                    let success = process_ukrainealarm_payload(
+                                        payload,
+                                        if silence_sec > 8.0 { "UkraineAlarm HTTP Fallback" } else { "UkraineAlarm Fallback (Anchor Sync)" },
+                                        &threat_state,
+                                        &detector,
+                                        &history_mgr,
+                                        &exchange_mgr,
+                                    ).await;
+                                    if success {
+                                        info!("Updated radar snapshot via UkraineAlarm Fallback");
+                                    }
+                                }
+                            } else {
+                                warn!("HTTP fallback response has empty 'n' payload field");
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to parse HTTP fallback JSON: {}", e);
+                        }
+                    }
+                } else if status.as_u16() == 429 {
+                    warn!("HTTP 429 Too Many Requests from Fallback endpoint. Backing off for 20s...");
+                    sleep(Duration::from_secs(20)).await;
+                } else {
+                    warn!("HTTP fallback endpoint returned HTTP {}", status);
+                }
+            }
+            Err(e) => {
+                debug!("HTTP fallback request error: {}", e);
+            }
+        }
+
+        sleep(Duration::from_millis(1000)).await;
     }
 }

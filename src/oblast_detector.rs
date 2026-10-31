@@ -1,4 +1,4 @@
-﻿use std::collections::HashMap;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use serde::{Deserialize, Serialize};
@@ -367,6 +367,23 @@ impl OblastDetector {
             }
         }
         "0".to_string()
+    }
+
+    pub fn is_known_region(&self, reg_id: &str) -> bool {
+        if reg_id.is_empty() || reg_id == "0" {
+            return false;
+        }
+        self.oblasts_by_id.contains_key(reg_id)
+            || self.raions_by_id.contains_key(reg_id)
+            || self.region_to_oblast.contains_key(reg_id)
+            || self.raion_regions.iter().any(|r| r.id == reg_id)
+    }
+
+    pub fn is_known_region_name(&self, name: &str) -> bool {
+        if name.is_empty() {
+            return false;
+        }
+        self.get_oblast_id_by_name(name) != "0" || self.get_raion_id_by_name(name) != "0"
     }
 }
 

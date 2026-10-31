@@ -1,4 +1,4 @@
-﻿use std::collections::HashMap;
+use std::collections::HashMap;
 use std::fs;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -54,6 +54,7 @@ pub fn client_routes() -> Router<AppState> {
         .route("/api/v1/map", get(handle_get_map))
         .route("/api/v1/stream", get(handle_ws_stream))
         .route("/api/v1/history/months", get(handle_history_months))
+        .route("/api/v1/history/summary", get(handle_get_history_summary))
         .route("/api/v1/history", get(handle_get_history))
         .route("/api/v1/history/upload", post(handle_upload_history))
         .route("/api/ukraine_alarm_plus/map", get(handle_radar_map_html))
@@ -116,6 +117,22 @@ async fn handle_health(
     let total_sirens = st.official_alerts.values().filter(|a| a.alert).count();
     let active_threats = st.tracker.tracks.len();
 
+    let ex_summary = state.exchange_mgr.get_summary();
+    let unmapped_threats = ex_summary.get("unmapped_threats_count").and_then(|v| v.as_u64()).unwrap_or(0);
+    let recent_unmapped_threats: Vec<_> = ex_summary.get("recent_entries")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter(|e| e.get("category").and_then(|c| c.as_str()) == Some("threat"))
+                .map(|e| json!({
+                    "type_identifier": e.get("raw_value").and_then(|r| r.as_str()).unwrap_or("unknown"),
+                    "raw_code": e.get("raw_code").and_then(|c| c.as_i64()).unwrap_or(0),
+                    "count": 1
+                }))
+                .collect()
+        })
+        .unwrap_or_default();
+
     Json(json!({
         "status": "online",
         "app": "Air Alert Radar Hub (Rust)",
@@ -131,7 +148,9 @@ async fn handle_health(
         "mig31k_active": st.mig_active,
         "last_update_ts": st.last_update_ts,
         "update_seq": st.update_seq,
-        "registered_users": state.storage.get_all_users().len()
+        "registered_users": state.storage.get_all_users().len(),
+        "unknown_target_types_count": unmapped_threats,
+        "unknown_target_types": recent_unmapped_threats
     })).into_response()
 }
 
@@ -142,19 +161,61 @@ async fn handle_unknown_types(
     Json(summary).into_response()
 }
 
-async fn handle_directory() -> Response {
+async fn handle_directory(
+    State(state): State<AppState>,
+) -> Response {
     let threats_list: Vec<&ThreatMeta> = vec![
         &THREAT_SHAHED, &THREAT_SHAHED_JET, &THREAT_MISSILE, &THREAT_BALLISTIC,
         &THREAT_KAB, &THREAT_LANCET, &THREAT_RECON, &THREAT_FPV,
         &THREAT_AVIATION, &THREAT_BANDEROL, &THREAT_ARTILLERY, &THREAT_UNKNOWN
     ];
 
+    let alerts_list = vec![
+        json!({"category": "missile", "name_ua": "Повітряна тривога (Ракетна небезпека)", "color": "red"}),
+        json!({"category": "drone", "name_ua": "Підвищена небезпека (БпЛА / Шахед)", "color": "yellow"}),
+        json!({"category": "artillery", "name_ua": "Артилерійський обстріл / РСЗВ", "color": "red"}),
+        json!({"category": "none", "name_ua": "Відбій тривоги", "color": "none"}),
+    ];
+
+    let oblasts: Vec<_> = state.detector.regions.iter().map(|o| {
+        json!({
+            "id": o.id,
+            "name": o.name,
+            "center": o.center,
+        })
+    }).collect();
+
+    let raions: Vec<_> = state.detector.raion_regions.iter().map(|r| {
+        json!({
+            "id": r.id,
+            "name": r.name,
+            "oblast_id": r.oblast_id,
+            "center": r.center,
+        })
+    }).collect();
+
+    let summary = state.exchange_mgr.get_summary();
+
     (
-        [(header::CACHE_CONTROL, "public, max-age=3600")],
+        [(header::CACHE_CONTROL, "public, max-age=1800")],
         Json(json!({
             "status": "ok",
+            "version": "1.0.0",
+            "updated_at": chrono::Utc::now().to_rfc3339(),
             "threats": threats_list,
-            "total_categories": threats_list.len()
+            "total_threat_categories": threats_list.len(),
+            "alerts": alerts_list,
+            "regions": {
+                "total_oblasts": oblasts.len(),
+                "total_raions": raions.len(),
+                "oblasts": oblasts,
+                "raions": raions
+            },
+            "unmapped_summary": {
+                "unmapped_total": summary.get("unmapped_total").and_then(|v| v.as_u64()).unwrap_or(0),
+                "unmapped_threats": summary.get("unmapped_threats_count").and_then(|v| v.as_u64()).unwrap_or(0),
+                "unmapped_regions": summary.get("unmapped_regions_count").and_then(|v| v.as_u64()).unwrap_or(0),
+            }
         }))
     ).into_response()
 }
@@ -476,14 +537,25 @@ pub fn build_user_snapshot(
 ) -> Value {
     let today_stats_val = if let Some(h) = history_mgr {
         let (tot, cats) = h.get_today_counts();
+        let kyiv = crate::history::HistoryManager::now_kyiv();
+        let today_str = kyiv.format("%Y-%m-%d").to_string();
+        let (status, last_reconciled_at) = if let Some(ds) = h.get_daily_summary(&today_str) {
+            (ds.status, ds.last_reconciled_at)
+        } else {
+            ("accumulated".to_string(), None)
+        };
         serde_json::json!({
             "total": tot,
-            "categories": cats
+            "categories": cats,
+            "status": status,
+            "last_reconciled_at": last_reconciled_at
         })
     } else {
         serde_json::json!({
             "total": 0,
-            "categories": {}
+            "categories": {},
+            "status": "accumulated",
+            "last_reconciled_at": serde_json::Value::Null
         })
     };
     // Підтримка вибору декількох точок ("1", "1,2", "all")
@@ -1091,6 +1163,42 @@ async fn handle_history_months(
         "status": "ok",
         "months": months_map,
         "sources": sources
+    })).into_response()
+}
+
+async fn handle_get_history_summary(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ClientQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Response {
+    if authenticate_user(&headers, &query, &state, Some(addr)).await.is_none() {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+
+    if let Some(ref date) = query.date {
+        if let Some(summary) = state.history_mgr.get_daily_summary(date) {
+            return Json(json!({
+                "status": "ok",
+                "date": date,
+                "summary": summary
+            })).into_response();
+        }
+    }
+
+    let month = query.month.clone().unwrap_or_else(|| {
+        if let Some(ref d) = query.date {
+            if d.len() >= 7 { d[..7].to_string() } else { crate::history::HistoryManager::current_month() }
+        } else {
+            crate::history::HistoryManager::current_month()
+        }
+    });
+
+    let summaries = state.history_mgr.get_month_summaries(&month);
+    Json(json!({
+        "status": "ok",
+        "month": month,
+        "summaries": summaries
     })).into_response()
 }
 

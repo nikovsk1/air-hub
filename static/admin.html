@@ -428,6 +428,15 @@
         </div>
       </div>
 
+      <!-- Швидкий фільтр та статус буфера -->
+      <div class="px-3 py-2 bg-gray-950/40 border-b border-gray-800 flex items-center justify-between gap-3 text-xs">
+        <div class="flex items-center gap-2 flex-1 max-w-md">
+          <span class="text-gray-500">🔍</span>
+          <input type="text" id="exchangeLogSearch" oninput="filterExchangeLog()" placeholder="Швидкий фільтр за джерелом, значенням чи описом..." class="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-sky-500 transition" />
+        </div>
+        <div id="exchangeLogBufferStatus" class="text-gray-500 text-[11px] font-mono">Буфер: 0 записів</div>
+      </div>
+
       <!-- Таблиця останніх нерозпізнаних записів -->
       <div class="overflow-x-auto max-h-72 overflow-y-auto">
         <table class="w-full text-left text-xs text-gray-400">
@@ -666,6 +675,14 @@
             unkBanner.classList.remove("hidden");
           } else {
             unkBanner.classList.add("hidden");
+          }
+        }
+
+        // Автоматичне періодичне оновлення логу обміну раз на 20 сек
+        if (currentAdminKey) {
+          window.__exchangeLogTicks = (window.__exchangeLogTicks || 0) + 1;
+          if (window.__exchangeLogTicks % 5 === 0) {
+            loadExchangeLog();
           }
         }
       } catch(e) {}
@@ -1588,6 +1605,8 @@ ${resp.api_key}
     }
 
     // ==================== ЛОГ ОБМІНУ ТА ДОВІДНИК ====================
+    let __rawExchangeEntries = [];
+
     async function loadExchangeLog() {
       if (!currentAdminKey) return;
       try {
@@ -1595,9 +1614,15 @@ ${resp.api_key}
         if (!res.ok) return;
         const data = await res.json();
 
+        const total = data.unmapped_total || 0;
         const badge = document.getElementById("unmappedCountBadge");
         if (badge) {
-          badge.innerText = `${data.unmapped_total || 0} нерозпізнаних`;
+          badge.innerText = `${total} нерозпізнаних`;
+          if (total > 0) {
+            badge.className = "text-xs bg-amber-600 text-white border border-amber-500 px-2.5 py-0.5 rounded-full font-mono font-bold animate-pulse";
+          } else {
+            badge.className = "text-xs bg-gray-800 text-gray-400 border border-gray-700 px-2 py-0.5 rounded-full font-mono font-medium";
+          }
         }
 
         const sThr = document.getElementById("statUnmappedThreats");
@@ -1605,30 +1630,64 @@ ${resp.api_key}
         const sReg = document.getElementById("statUnmappedRegions");
         if (sReg) sReg.innerText = data.unmapped_regions_count || 0;
 
-        const tbody = document.getElementById("exchangeLogTableBody");
-        if (!data.recent_entries || data.recent_entries.length === 0) {
-          tbody.innerHTML = `
-            <tr>
-              <td colspan="5" class="p-4 text-center text-gray-500 font-sans">
-                Журнал нерозпізнаних даних порожній (усі дані інтерпретуються згідно з канонічним довідником).
-              </td>
-            </tr>
-          `;
-          return;
+        __rawExchangeEntries = data.recent_entries || [];
+        const bufStatus = document.getElementById("exchangeLogBufferStatus");
+        if (bufStatus) {
+          bufStatus.innerText = `Буфер: ${__rawExchangeEntries.length} записів`;
         }
 
-        tbody.innerHTML = data.recent_entries.map(e => `
-          <tr class="hover:bg-gray-800/40 transition border-b border-gray-800">
-            <td class="p-2.5 text-gray-400 whitespace-nowrap">${e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString() : '--'}</td>
-            <td class="p-2.5 text-gray-300 font-semibold">${escapeHtml(e.source || 'upstream')}</td>
-            <td class="p-2.5 text-amber-400 font-semibold">${escapeHtml(e.category || '--')}</td>
-            <td class="p-2.5 text-white bg-gray-950/80 rounded px-2 py-1 select-all font-mono">${escapeHtml(e.raw_value)}</td>
-            <td class="p-2.5 text-gray-400 font-sans">${escapeHtml(e.details)}</td>
-          </tr>
-        `).join("");
+        filterExchangeLog();
       } catch (e) {
         console.error("Error loading exchange log:", e);
       }
+    }
+
+    function renderExchangeLogRows(entries) {
+      const tbody = document.getElementById("exchangeLogTableBody");
+      if (!tbody) return;
+      if (!entries || entries.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="p-4 text-center text-gray-500 font-sans">
+              Журнал нерозпізнаних даних порожній (усі дані інтерпретуються згідно з канонічним довідником).
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      const catBadges = {
+        threat: '<span class="px-2 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-800/60 font-semibold">Ціль / Загроза</span>',
+        threat_type: '<span class="px-2 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-800/60 font-semibold">Ціль / Загроза</span>',
+        region: '<span class="px-2 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 font-semibold">Регіон</span>',
+        alert: '<span class="px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800/60 font-semibold">Сирена / Статус</span>',
+        protocol: '<span class="px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 font-semibold">Протокол потоку</span>'
+      };
+
+      tbody.innerHTML = entries.map(e => `
+        <tr class="hover:bg-gray-800/40 transition border-b border-gray-800">
+          <td class="p-2.5 text-gray-400 whitespace-nowrap">${e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString() : '--'}</td>
+          <td class="p-2.5 text-gray-300 font-semibold">${escapeHtml(e.source || 'upstream')}</td>
+          <td class="p-2.5">${catBadges[e.category] || `<span class="text-amber-400 font-semibold">${escapeHtml(e.category || '--')}</span>`}</td>
+          <td class="p-2.5"><code class="text-sky-300 bg-gray-950/90 border border-gray-800 rounded px-2 py-1 select-all font-mono text-[11px]">${escapeHtml(e.raw_value || 'None')}</code></td>
+          <td class="p-2.5 text-gray-300 font-sans text-xs">${escapeHtml(e.details || '--')}</td>
+        </tr>
+      `).join("");
+    }
+
+    function filterExchangeLog() {
+      const q = (document.getElementById("exchangeLogSearch")?.value || "").toLowerCase().trim();
+      if (!q) {
+        renderExchangeLogRows(__rawExchangeEntries);
+        return;
+      }
+      const filtered = __rawExchangeEntries.filter(e => {
+        return (e.source && e.source.toLowerCase().includes(q)) ||
+               (e.category && e.category.toLowerCase().includes(q)) ||
+               (e.raw_value && e.raw_value.toLowerCase().includes(q)) ||
+               (e.details && e.details.toLowerCase().includes(q));
+      });
+      renderExchangeLogRows(filtered);
     }
 
     function downloadExchangeLog() {

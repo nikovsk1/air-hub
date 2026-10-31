@@ -1,4 +1,4 @@
-﻿use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -32,7 +32,7 @@ pub static THREAT_SHAHED: ThreatMeta = ThreatMeta {
     description: "Ударний БпЛА Shahed-136 / Герань-2",
     ha_icon: "mdi:navigation-variant",
     svg_icon: "ic_shahed.svg",
-    color_hex: "#FACC15",
+    color_hex: "#FFB703",
     default_speed_kmh: 185.0,
     default_speed: 185.0,
     is_drone: true,
@@ -64,7 +64,7 @@ pub static THREAT_MISSILE: ThreatMeta = ThreatMeta {
     description: "Крилата або керована авіаційна ракета (Х-101, Калібр, Х-59/69)",
     ha_icon: "mdi:rocket",
     svg_icon: "ic_missile.svg",
-    color_hex: "#EF4444",
+    color_hex: "#FF2A6D",
     default_speed_kmh: 850.0,
     default_speed: 850.0,
     is_drone: false,
@@ -80,7 +80,7 @@ pub static THREAT_BALLISTIC: ThreatMeta = ThreatMeta {
     description: "Надзвукова балістична або аеробалістична ракета (Іскандер-М, Кинджал, С-300/400)",
     ha_icon: "mdi:rocket-launch",
     svg_icon: "ic_missile.svg",
-    color_hex: "#DC2626",
+    color_hex: "#D946EF",
     default_speed_kmh: 3600.0,
     default_speed: 3600.0,
     is_drone: false,
@@ -144,7 +144,7 @@ pub static THREAT_FPV: ThreatMeta = ThreatMeta {
     description: "Ударний FPV-дрон або крило Молнія в прифронтовій смузі",
     ha_icon: "mdi:quadcopter",
     svg_icon: "ic_fpv.svg",
-    color_hex: "#EAB308",
+    color_hex: "#84CC16",
     default_speed_kmh: 120.0,
     default_speed: 120.0,
     is_drone: true,
@@ -208,75 +208,138 @@ pub static THREAT_UNKNOWN: ThreatMeta = ThreatMeta {
     description: "Повітряний об'єкт, тип якого ще уточнюється засобами РЕР / ППО",
     ha_icon: "mdi:help-rhombus",
     svg_icon: "ic_air_threat_combined_white.svg",
-    color_hex: "#94A3B8",
+    color_hex: "#F8FAFC",
     default_speed_kmh: 200.0,
     default_speed: 200.0,
     is_drone: true,
     threat_level: "unknown",
 };
 
-/// Класифікація цілей зі строгим пріоритетом вирішення
+/// Класифікація цілей за принципом Semantic-First (текстова назва має вищий пріоритет над кодом)
 pub fn classify_target(raw_str: &str, raw_code: i64) -> (&'static str, &'static ThreatMeta) {
-    let lower = raw_str.to_lowercase();
+    let lower = raw_str.trim().to_lowercase();
 
-    // 1. Реактивний шахед (shahed_jet)
-    if raw_code == 2 || lower.contains("jet") || lower.contains("238") || lower.contains("реактив") {
-        return ("shahed_jet", &THREAT_SHAHED_JET);
+    // =========================================================================
+    // ФАЗА 1: СЕМАНТИЧНИЙ АНАЛІЗ ЗА НАЗВОЮ ДОТИЧНО ДО ДОВІДНИКА (Semantic-First)
+    // Якщо назва містить осмислені ключові слова, вона однозначно визначає тип,
+    // запобігаючи спотворенню цілей через неочікувані або змінені коди першоджерел.
+    // =========================================================================
+    if !lower.is_empty() && lower != "ціль" && lower != "повітряна ціль" && lower != "об'єкт" && lower != "target" && lower != "unknown" {
+        // 1. Реактивний шахед (shahed_jet)
+        if lower.contains("jet") || lower.contains("238") || lower.contains("реактив") || lower.contains("shahedjet") {
+            return ("shahed_jet", &THREAT_SHAHED_JET);
+        }
+
+        // 2. Балістика (ballistic)
+        if lower.contains("баліст") || lower.contains("ballistic") || lower.contains("іскандер-м")
+            || lower.contains("кинджал") || lower.contains("кінжал") || lower.contains("с-300")
+            || lower.contains("с-400") || lower.contains("kn-23")
+        {
+            return ("ballistic", &THREAT_BALLISTIC);
+        }
+
+        // 3. Крилата або керована авіаційна ракета (missile)
+        if lower.contains("х-101") || lower.contains("калібр") || lower.contains("х-555")
+            || lower.contains("х-55") || lower.contains("х-59") || lower.contains("х-69")
+            || lower.contains("х-22") || lower.contains("х-32") || lower.contains("циркон")
+            || lower.contains("онікс") || lower.contains("ракета") || lower.contains("missile")
+            || lower.contains("крилат")
+        {
+            return ("missile", &THREAT_MISSILE);
+        }
+
+        // 4. КАБ / УАБ (kab)
+        if lower.contains("каб") || lower.contains("уаб") || lower.contains("авіабомб")
+            || lower.contains("бомб") || lower.contains("airbomb") || lower.contains("плануюч")
+        {
+            return ("kab", &THREAT_KAB);
+        }
+
+        // 5. Ланцет / баражуючий боєприпас (lancet)
+        if lower.contains("ланцет") || lower.contains("lancet") || lower.contains("куб") {
+            return ("lancet", &THREAT_LANCET);
+        }
+
+        // 6. FPV-дрон / Молнія (fpv)
+        if lower.contains("fpv") || lower.contains("молнія") || lower.contains("молния") {
+            return ("fpv", &THREAT_FPV);
+        }
+
+        // 7. Розвідувальний БпЛА (recon)
+        if lower.contains("розвід") || lower.contains("recon") || lower.contains("zala")
+            || lower.contains("зала") || lower.contains("supercam") || lower.contains("суперкам")
+            || lower.contains("орлан") || lower.contains("orlan") || lower.contains("mohajer")
+        {
+            return ("recon", &THREAT_RECON);
+        }
+
+        // 8. Ворожа авіація (aviation)
+        if lower.contains("авіа") || lower.contains("літак") || lower.contains("plane")
+            || lower.contains("винищувач") || lower.contains("бомбардувальник")
+            || lower.contains("су-34") || lower.contains("су-35") || lower.contains("ту-95")
+            || lower.contains("ту-22") || lower.contains("міг-31")
+        {
+            return ("aviation", &THREAT_AVIATION);
+        }
+
+        // 9. Артилерія / РСЗВ (artillery)
+        if lower.contains("артилер") || lower.contains("рсзв") || lower.contains("обстріл")
+            || lower.contains("град") || lower.contains("ураган") || lower.contains("смерч")
+        {
+            return ("artillery", &THREAT_ARTILLERY);
+        }
+
+        // 10. Бандероль / фальш-ціль (banderol)
+        if lower.contains("бандерол") || lower.contains("decoy") || lower.contains("фальш")
+            || lower.contains("пароді") || lower.contains("приманка")
+        {
+            return ("banderol", &THREAT_BANDEROL);
+        }
+
+        // 11. Поршневий або mesh-дрон Shahed / Герань (shahed)
+        if raw_code == 1 || raw_code == 8 || raw_code == 11
+            || lower.contains("шахед") || lower.contains("shahed") || lower.contains("геран")
+            || lower.contains("136") || lower.contains("дрон-камікадзе") || lower.contains("гербера")
+            || lower.contains("бпла") || lower.contains("дрон") || lower.contains("mesh")
+            || lower.contains("удар") || lower.contains("мопед")
+        {
+            return ("shahed", &THREAT_SHAHED);
+        }
     }
 
-    // 2. Бандероль / фальш-ціль (banderol)
-    if raw_code == 4 || lower.contains("бандерол") || lower.contains("decoy") || lower.contains("фальш") || lower.contains("пароді") {
-        return ("banderol", &THREAT_BANDEROL);
+    // =========================================================================
+    // ФАЗА 2: СТРАХОВКА ЗА ЧИСЛОВИМ КОДОМ (Fallback by Raw Code)
+    // Використовується, якщо назва цілі відсутня, порожня або є суто загальною
+    // ("Ціль", "Об'єкт"), забезпечуючи надійність радарних засічок та API Neptun.
+    // =========================================================================
+    match raw_code {
+        // Реактивний дрон
+        2 => ("shahed_jet", &THREAT_SHAHED_JET),
+        // Балістика
+        12 | 112 => ("ballistic", &THREAT_BALLISTIC),
+        // Крилата ракета
+        3 | 100..=107 => ("missile", &THREAT_MISSILE),
+        // КАБ / УАБ
+        5 => ("kab", &THREAT_KAB),
+        // Бандероль / приманка
+        4 => ("banderol", &THREAT_BANDEROL),
+        // Ланцет
+        80 => ("lancet", &THREAT_LANCET),
+        // FPV
+        7 | 17 => ("fpv", &THREAT_FPV),
+        // Розвідник
+        6 | 16 => ("recon", &THREAT_RECON),
+        // Авіація
+        9 | 19 => ("aviation", &THREAT_AVIATION),
+        // Артилерія
+        10 => ("artillery", &THREAT_ARTILLERY),
+        // Поршневий шахед (включаючи канонічний код 1)
+        1 | 8 | 11 => ("shahed", &THREAT_SHAHED),
+        // =====================================================================
+        // ФАЗА 3: НЕВІДОМИЙ ОБ'ЄКТ
+        // =====================================================================
+        _ => ("unknown", &THREAT_UNKNOWN),
     }
-
-    // 3. Ланцет (lancet)
-    if raw_code == 80 || lower.contains("ланцет") || lower.contains("lancet") || lower.contains("куб") {
-        return ("lancet", &THREAT_LANCET);
-    }
-
-    // 4. Балістика (ballistic)
-    if raw_code == 12 || raw_code == 112 || lower.contains("баліст") || lower.contains("ballistic") || lower.contains("іскандер-м") || lower.contains("кинджал") || lower.contains("с-300") || lower.contains("с-400") || lower.contains("kn-23") {
-        return ("ballistic", &THREAT_BALLISTIC);
-    }
-
-    // 5. Крилата ракета (missile)
-    if [3, 100, 101, 102, 103, 104, 105, 106, 107].contains(&raw_code)
-        || lower.contains("ракета") || lower.contains("missile") || lower.contains("х-101") || lower.contains("калібр") || lower.contains("х-59") || lower.contains("х-69") || lower.contains("х-22") || lower.contains("х-32") || lower.contains("циркон") || lower.contains("онікс") {
-        return ("missile", &THREAT_MISSILE);
-    }
-
-    // 6. КАБ / УАБ (kab)
-    if raw_code == 5 || lower.contains("каб") || lower.contains("уаб") || lower.contains("бомб") || lower.contains("airbomb") {
-        return ("kab", &THREAT_KAB);
-    }
-
-    // 7. FPV-дрон / Молнія (fpv)
-    if raw_code == 7 || raw_code == 17 || lower.contains("fpv") || lower.contains("молнія") || lower.contains("молния") {
-        return ("fpv", &THREAT_FPV);
-    }
-
-    // 8. Розвідник (recon)
-    if raw_code == 6 || raw_code == 16 || lower.contains("розвід") || lower.contains("recon") || lower.contains("zala") || lower.contains("supercam") || lower.contains("орлан") || lower.contains("mohajer") {
-        return ("recon", &THREAT_RECON);
-    }
-
-    // 9. Авіація (aviation)
-    if raw_code == 9 || raw_code == 19 || lower.contains("авіа") || lower.contains("літак") || lower.contains("су-34") || lower.contains("су-35") || lower.contains("ту-95") || lower.contains("міг-31") {
-        return ("aviation", &THREAT_AVIATION);
-    }
-
-    // 10. Артилерія / РСЗВ (artillery)
-    if raw_code == 10 || lower.contains("артилер") || lower.contains("рсзв") || lower.contains("обстріл") || lower.contains("град") || lower.contains("ураган") || lower.contains("смерч") {
-        return ("artillery", &THREAT_ARTILLERY);
-    }
-
-    // 11. Поршневий шахед (shahed)
-    if raw_code == 8 || raw_code == 11 || lower.contains("шахед") || lower.contains("shahed") || lower.contains("геран") || lower.contains("136") || lower.contains("бпла") || lower.contains("дрон") {
-        return ("shahed", &THREAT_SHAHED);
-    }
-
-    // 12. Невідома ціль (unknown)
-    ("unknown", &THREAT_UNKNOWN)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -298,6 +361,7 @@ pub struct ExchangeLogManager {
     recent_entries: RwLock<VecDeque<ExchangeLogEntry>>,
     unmapped_threats_count: RwLock<u64>,
     unmapped_regions_count: RwLock<u64>,
+    known_keys: RwLock<HashSet<String>>,
 }
 
 impl ExchangeLogManager {
@@ -308,45 +372,103 @@ impl ExchangeLogManager {
             recent_entries: RwLock::new(VecDeque::with_capacity(300)),
             unmapped_threats_count: RwLock::new(0),
             unmapped_regions_count: RwLock::new(0),
+            known_keys: RwLock::new(HashSet::new()),
         }
     }
 
+    /// Зручний сумісний метод для фіксації нерозпізнаних даних без деталей
     #[allow(dead_code)]
-    pub fn record_unmapped(&self, log_type: &str, raw_id: &str, raw_code: Option<i64>, mapped_as: &str, source: &str) {
+    pub fn record_unmapped_simple(
+        &self,
+        log_type: &str,
+        raw_id: &str,
+        raw_code: Option<i64>,
+        mapped_as: &str,
+        source: &str,
+    ) {
+        self.record_unmapped(log_type, raw_id, raw_code, mapped_as, source, None);
+    }
+
+    pub fn record_unmapped(
+        &self,
+        log_type: &str,
+        raw_id: &str,
+        raw_code: Option<i64>,
+        mapped_as: &str,
+        source: &str,
+        details: Option<&str>,
+    ) {
+        let norm_id: String = raw_id.trim().chars().take(64).collect::<String>().to_lowercase();
+        let key = format!("{}:{}:{:?}", log_type, norm_id, raw_code);
+        {
+            let mut known = self.known_keys.write();
+            if !known.insert(key) {
+                return;
+            }
+        }
+
         let now = Utc::now().timestamp();
+        let effective_raw_id = if raw_id.trim().is_empty() {
+            if let Some(c) = raw_code {
+                format!("code_{}", c)
+            } else {
+                "unknown".to_string()
+            }
+        } else if raw_id.len() > 256 {
+            let truncated: String = raw_id.trim().chars().take(256).collect();
+            format!("{}... [len={}]", truncated, raw_id.len())
+        } else {
+            raw_id.trim().to_string()
+        };
+
+        let detail_str = details
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| match log_type {
+                "threat" | "threat_type" => {
+                    format!("Невідомий тип цілі raw='{}', код={:?} -> інтерпретовано як '{}'", effective_raw_id, raw_code, mapped_as)
+                }
+                "region" => {
+                    format!("Регіон '{}' не знайдено в канонічному переліку 26 областей / 136 районів", effective_raw_id)
+                }
+                "protocol" => {
+                    format!("Непідтримуваний протокол/префікс пакета: '{}'", effective_raw_id)
+                }
+                _ => format!("Нерозпізнане значення: '{}' -> '{}'", effective_raw_id, mapped_as),
+            });
+
         let entry = ExchangeLogEntry {
             timestamp: now,
             log_type: log_type.to_string(),
-            raw_identifier: raw_id.to_string(),
+            raw_identifier: effective_raw_id.clone(),
             raw_code,
             mapped_as: mapped_as.to_string(),
             source: source.to_string(),
-            details: Some(format!("Mapped as {}", mapped_as)),
+            details: Some(detail_str.clone()),
         };
 
-        if log_type == "threat" {
+        if log_type == "threat" || log_type == "threat_type" {
             let mut count = self.unmapped_threats_count.write();
             *count += 1;
-        } else if log_type == "region" {
+        } else if log_type == "region" || log_type == "alert" {
             let mut count = self.unmapped_regions_count.write();
             *count += 1;
         }
 
         // Запис у файл
         let line = format!(
-            "[{}] [{}] ID='{}' CODE={:?} MAPPED='{}' SRC='{}'\n",
-            now, log_type, raw_id, raw_code, mapped_as, source
+            "[{}] [{}] [{}] ID='{}' CODE={:?} MAPPED='{}' | {}\n",
+            Utc::now().to_rfc3339(), source, log_type, effective_raw_id, raw_code, mapped_as, detail_str
         );
         if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&self.log_file_path) {
             let _ = f.write_all(line.as_bytes());
         }
 
-        // Оновлення кільцевого буфера в оперативній пам'яті (макс 300)
+        // Оновлення кільцевого буфера в оперативній пам'яті (макс 300, найновіші на початку)
         let mut entries = self.recent_entries.write();
         if entries.len() >= 300 {
-            entries.pop_front();
+            entries.pop_back();
         }
-        entries.push_back(entry);
+        entries.push_front(entry);
     }
 
     pub fn get_summary(&self) -> serde_json::Value {
@@ -374,7 +496,49 @@ impl ExchangeLogManager {
     pub fn clear(&self) {
         *self.unmapped_threats_count.write() = 0;
         *self.unmapped_regions_count.write() = 0;
+        self.known_keys.write().clear();
         self.recent_entries.write().clear();
         let _ = File::create(&self.log_file_path);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_classify_target_semantic_first() {
+        // Текстова назва має вищий пріоритет над конфліктними кодами
+        let (cat, _) = classify_target("КАБ", 4);
+        assert_eq!(cat, "kab");
+
+        let (cat, _) = classify_target("Су-34 винищувач", 2);
+        assert_eq!(cat, "aviation");
+
+        let (cat, _) = classify_target("Х-101 ракета", 0);
+        assert_eq!(cat, "missile");
+
+        let (cat, _) = classify_target("Shahed-136", 0);
+        assert_eq!(cat, "shahed");
+    }
+
+    #[test]
+    fn test_classify_target_code_fallback() {
+        // Якщо назва порожня або загальна ("Ціль"), спрацьовує перевірка коду
+        let (cat, _) = classify_target("", 1);
+        assert_eq!(cat, "shahed");
+
+        let (cat, _) = classify_target("Ціль", 12);
+        assert_eq!(cat, "ballistic");
+
+        let (cat, _) = classify_target("Повітряна ціль", 3);
+        assert_eq!(cat, "missile");
+
+        let (cat, _) = classify_target("", 5);
+        assert_eq!(cat, "kab");
+
+        // Невідомий код без назви
+        let (cat, _) = classify_target("", 999);
+        assert_eq!(cat, "unknown");
     }
 }

@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::debug;
 
+use crate::canonical_registry::ExchangeLogManager;
 use crate::oblast_detector::OblastDetector;
 use crate::tracker::{now_sec, OfficialAlert, ThreatState};
 
@@ -15,6 +16,7 @@ const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 pub async fn run_official_alerts_collector(
     threat_state: Arc<RwLock<ThreatState>>,
     detector: Arc<OblastDetector>,
+    exchange_mgr: Arc<ExchangeLogManager>,
     http_client: reqwest::Client,
 ) {
     loop {
@@ -87,6 +89,18 @@ pub async fn run_official_alerts_collector(
                                 .and_then(|t| t.as_str())
                                 .unwrap_or("State")
                                 .to_string();
+
+                            // Фіксація нерозпізнаних регіонів у журналі обміну
+                            if reg_type != "Community" && !detector.is_known_region(&reg_id) && !detector.is_known_region_name(&name) {
+                                exchange_mgr.record_unmapped(
+                                    "region",
+                                    &format!("id={}, name={}", reg_id, name),
+                                    None,
+                                    "unmapped",
+                                    "UkraineAlarm",
+                                    Some(&format!("Регіон '{}' (ID {}) відсутній у канонічному списку областей/районів", name, reg_id)),
+                                );
+                            }
 
                             let mut is_alert = false;
                             let mut alert_type = "none".to_string();

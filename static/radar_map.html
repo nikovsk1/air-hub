@@ -81,9 +81,9 @@
 
     /* ================= AUTHENTIC LIQUID GLASS CLASSES ================= */
     .liquid-glass {
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(12, 16, 26, 0.62);
-      backdrop-filter: blur(16px) saturate(190%);
-      -webkit-backdrop-filter: blur(16px) saturate(190%);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(13, 17, 28, 0.88);
+      backdrop-filter: blur(20px) saturate(190%);
+      -webkit-backdrop-filter: blur(20px) saturate(190%);
       border: 1px solid var(--glass-border);
       box-shadow: var(--glass-shadow), var(--glass-specular);
     }
@@ -108,9 +108,10 @@
 
     .hud-card {
       height: 38px;
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(11, 15, 25, 0.65);
-      backdrop-filter: blur(16px) saturate(180%);
-      -webkit-backdrop-filter: blur(16px) saturate(180%);
+      line-height: 1;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(12, 16, 26, 0.90);
+      backdrop-filter: blur(20px) saturate(190%);
+      -webkit-backdrop-filter: blur(20px) saturate(190%);
       border: 1px solid var(--glass-border);
       border-radius: 10px;
       padding: 0 12px; pointer-events: auto;
@@ -118,6 +119,32 @@
       display: inline-flex; align-items: center; gap: 8px;
       font-size: 12px; font-weight: 600;
       box-sizing: border-box;
+    }
+    .slot-eta-badge {
+      display: inline-flex; align-items: center;
+      background: rgba(14, 165, 233, 0.18);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+      font-size: 11px; font-weight: 700;
+      padding: 2px 7px; border-radius: 6px;
+    }
+    body.recording-mode .hud-container,
+    body.recording-mode .sidebar-panel,
+    body.recording-mode .bottom-timeline-bar,
+    body.recording-mode .leaflet-control-zoom,
+    body.recording-mode .leaflet-control-attribution {
+      display: none !important;
+    }
+    .screen-record-floating-badge {
+      position: fixed; top: 16px; right: 16px; z-index: 99999;
+      background: #ef4444; color: #fff; font-weight: 700; font-size: 13px;
+      padding: 8px 16px; border-radius: 20px; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.5);
+      cursor: pointer; display: flex; align-items: center; gap: 8px;
+      animation: pulseRecord 1.5s infinite;
+    }
+    @keyframes pulseRecord {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.85; }
     }
 
     .badge {
@@ -174,13 +201,14 @@
 
     /* ETA Waypoint Point on Vector Line (------•------•------•) */
     .eta-waypoint-dot {
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
-      background: #ffffff;
-      border: 2px solid var(--dot-color);
-      box-shadow: 0 0 8px var(--dot-color), 0 0 2px #000000;
-      transition: transform 0.15s ease;
+      background: rgba(255, 255, 255, 0.7);
+      border: 1.5px solid var(--dot-color);
+      box-shadow: none;
+      opacity: 0.42;
+      transition: transform 0.15s ease, opacity 0.15s ease;
       cursor: pointer;
     }
     .eta-waypoint-dot:hover {
@@ -466,11 +494,11 @@
 
     .sidebar-panel {
       position: absolute; top: 12px; left: 12px; bottom: 72px; width: 330px;
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(11, 15, 25, 0.65);
-      backdrop-filter: blur(18px) saturate(190%); -webkit-backdrop-filter: blur(18px) saturate(190%);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(12, 16, 26, 0.90);
+      backdrop-filter: blur(20px) saturate(190%); -webkit-backdrop-filter: blur(20px) saturate(190%);
       border: 1px solid var(--glass-border); border-radius: 14px;
       z-index: 1050; display: flex; flex-direction: column;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), var(--glass-specular);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), var(--glass-specular);
       transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
       overflow: hidden;
     }
@@ -687,9 +715,11 @@
       width: 32px; height: 32px; border-radius: 50%;
       background: var(--accent-orange); color: #fff; border: none; outline: none;
       cursor: pointer; display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 2px 10px rgba(234, 88, 12, 0.4);
-      transition: all 0.2s; flex-shrink: 0;
+      box-shadow: 0 2px 10px rgba(249, 115, 22, 0.4);
+      flex-shrink: 0;
       position: relative;
+      padding: 0;
+      line-height: 0;
     }
     .play-circle-btn:hover { transform: scale(1.08); background: var(--accent-orange-light); }
     .play-circle-btn.playing { background: var(--accent-violet); box-shadow: 0 2px 10px rgba(139, 92, 246, 0.4); }
@@ -1048,18 +1078,16 @@
       </div>
 
       <!-- Closest Threat Card (Clickable with breakdown & relocated distance badge) -->
-      <div class="hud-card" id="closestCard" onclick="toggleClosestBreakdown(event)" style="position:relative; cursor:pointer;" title="Натисніть для перегляду загроз за всіма точками">
+      <div class="hud-card" id="closestCard" onclick="toggleClosestBreakdown(event)" style="position:relative; cursor:pointer;" title="Натисніть для перегляду загроз за обраними точками">
         <span class="closest-label">Найближча ціль:</span>
-        <span class="closest-val" id="closestInfo">--</span>
-        <span id="slotClosestDistBadge" class="slot-dist-badge calm" style="margin-left:4px;">Спокійно</span>
+        <span class="closest-val" id="closestTargetName">--</span>
+        <span id="slotClosestDistBadge" class="slot-dist-badge calm">--</span>
+        <span id="slotClosestEtaBadge" class="slot-eta-badge" style="display:none;">--</span>
         <span id="closestChevron" class="closest-chevron">▾</span>
 
         <!-- Floating Popover breakdown across all points -->
         <div id="closestBreakdownPopover" class="liquid-glass-card closest-popover" style="display:none;" onclick="event.stopPropagation()">
-          <div class="popover-header">
-            <span style="font-size:11.5px;font-weight:700;color:#f8fafc;display:flex;align-items:center;gap:5px;">
-              <span>🎯</span> <span>Стан цілей за точками</span>
-            </span>
+          <div class="popover-header" style="justify-content:flex-end;">
             <button class="popover-close-btn" onclick="toggleClosestBreakdown(event, false)" title="Закрити">✕</button>
           </div>
           <div class="slot-drop-divider"></div>
@@ -1086,11 +1114,21 @@
 
     <!-- TAB 1: OPERATIONAL LIVE RADAR (Item 3) -->
     <div class="tab-content active" id="tabRadar">
+      <!-- Компактний фрейм синхронізації добових параметрів (НАД розділом «Активні цілі») -->
+      <div class="sync-status-box" style="margin: 0 0 8px 0; padding: 6px 9px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1;">
+          <span style="font-size: 9.5px; color: var(--text-gray); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Остання синхронізація добових параметрів:</span>
+          <span id="syncDateLabel" style="font-size: 10.5px; color: #cbd5e1; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2;">Очікується звірка</span>
+        </div>
+        <span id="summaryReconcileBadge" style="flex-shrink: 0; font-size: 9.5px; padding: 2px 7px; border-radius: 4px; font-weight: 600; letter-spacing: 0.2px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); cursor: default; transition: all 0.2s ease;" title="Локальний оперативний підрахунок Air Alert Hub (до найближчої щогодинної звірки)">⚡ Локально</span>
+      </div>
+
       <!-- Розділ "АКТИВНІ ЦІЛІ" (без емодзі в заголовку) -->
       <div class="panel-section">
         <div class="section-header">
           <span>Активні цілі</span>
         </div>
+
         <div id="liveCategorySummaryList" class="threat-filter-list"></div>
         <!-- Centered Collapse Chevron -->
         <div class="filter-collapse-tab" onclick="toggleLiveListCollapse(event)" title="Згорнути / розгорнути список">
@@ -1110,7 +1148,7 @@
 
       <!-- Розділ "СТАТУС ТОЧОК ЗАХИСТУ" -->
       <div class="panel-section">
-        <div class="section-header"><span>Статус точок захисту</span></div>
+        <div class="section-header"><span>Статус точок</span></div>
         <div id="radarSlotsStatusList" style="display:flex;flex-direction:column;gap:6px;font-size:11.5px;max-height:180px;overflow-y:auto;overflow-x:hidden;padding-right:4px;scrollbar-gutter:stable;">
           <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:rgba(255,255,255,0.03);border-radius:8px;border-left:3.5px solid #10b981;">
             <div style="display:flex;flex-direction:column;gap:1px;">
@@ -1178,7 +1216,7 @@
 
       <!-- Візуалізація на карті (Чекбокси зліва) -->
       <div class="panel-section">
-        <div class="section-header"><span>Візуалізація на карті</span></div>
+        <div class="section-header"><span>Налаштування історичної мапи</span></div>
         <label class="toggle-row-left" style="display:flex;align-items:center;justify-content:space-between;">
           <div style="display:flex;align-items:center;gap:9px;">
             <input type="checkbox" id="chkHeatmapCorridors" checked onchange="refreshMapVisuals()">
@@ -1201,8 +1239,16 @@
           <input type="range" id="rngHeatmapOpacity" class="timeline-scrubber" min="15" max="100" value="85" oninput="onHeatmapOpacityChange(this.value)">
         </div>
         <label class="toggle-row-left">
-          <input type="checkbox" id="chkShowSampleTrails" onchange="refreshMapVisuals()">
+          <input type="checkbox" id="chkShowSampleTrails" checked onchange="refreshMapVisuals()">
           <span>Траєкторії руху цілей</span>
+        </label>
+        <label class="toggle-row-left">
+          <input type="checkbox" id="chkShowHistoryIcons" checked onchange="refreshMapVisuals()">
+          <span>Відображення піктограм цілей</span>
+        </label>
+        <label class="toggle-row-left">
+          <input type="checkbox" id="chkShowHistoryNames" checked onchange="refreshMapVisuals()">
+          <span>Назви цілей</span>
         </label>
         <label class="toggle-row-left">
           <input type="checkbox" id="chkShowSampleImpacts" checked onchange="refreshMapVisuals()">
@@ -1212,7 +1258,10 @@
 
       <!-- Статистика вибірки (без піктограми) -->
       <div class="panel-section">
-        <div class="section-header"><span>Статистика вибірки</span></div>
+        <div class="section-header" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>Статистика вибірки</span>
+          <span id="analyticsReconcileBadge" style="display:none;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600;text-transform:uppercase;"></span>
+        </div>
         <div class="stats-cards-grid">
           <div class="stat-box">
             <div class="stat-num" id="statTotalTargets" style="color:#38bdf8;">0</div>
@@ -1234,8 +1283,8 @@
           <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:59</span>
         </div>
 
-        <button class="secondary-action-btn" onclick="copyAnalyticsReport()">
-          <span>📋 Скопіювати аналітичний звіт</span>
+        <button id="btnScreenRecord" class="secondary-action-btn" onclick="toggleScreenRecording()" style="display:flex;align-items:center;justify-content:center;gap:7px;transition:all 0.2s;">
+          <span id="recordIcon">📹</span> <span id="recordLabel">Запис екрану (без HUD)</span>
         </button>
       </div>
     </div>
@@ -1256,19 +1305,22 @@
           <span>Налаштування точок</span>
         </div>
 
-        <div class="field-label">Вибір точки для редагування:</div>
+        <div class="field-label" style="margin-top:8px;margin-bottom:4px;font-size:11px;font-weight:600;color:#94a3b8;">Вибір точки для редагування:</div>
         <div style="display:flex;gap:6px;align-items:center;">
-          <select id="editorSlotSelect" class="ctrl-input" style="flex:1;" onchange="onEditorSlotChanged(this.value)">
+          <select id="editorSlotSelect" class="ctrl-input" style="flex:1;height:36px;" onchange="onEditorSlotChanged(this.value)">
             <option value="1">Точка 1</option>
           </select>
-          <button id="btnAddSlotMap" onclick="addNewSlotFromMap()" title="Додати нову точку" style="height:34px;width:36px;padding:0;background:var(--accent-orange);color:#fff;border:none;border-radius:6px;font-size:18px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background='#c2410c'" onmouseout="this.style.background='var(--accent-orange)'">
+          <button id="btnAddSlotMap" onclick="addNewSlotFromMap()" title="Додати нову точку" style="height:36px;width:36px;padding:0;background:var(--accent-orange);color:#fff;border:none;border-radius:6px;font-size:18px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background='#c2410c'" onmouseout="this.style.background='var(--accent-orange)'">
             +
           </button>
         </div>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
-          <span style="font-size:11px;color:var(--text-gray);">Тип точки:</span>
-          <select id="cfgSlotTypeSelect" onchange="onSlotTypeChanged(this.value)" style="font-size:10.5px;padding:2px 8px;border-radius:12px;font-weight:700;font-family:monospace;cursor:pointer;outline:none;border:1px solid #334155;background:#1e293b;color:#94a3b8;transition:all 0.2s;">
+        <div class="field-label" style="margin-top:8px;margin-bottom:4px;font-size:11px;font-weight:600;color:#94a3b8;">Назва точки:</div>
+        <input type="text" id="cfgSlotName" class="ctrl-input" style="height:36px;box-sizing:border-box;" placeholder="Назва точки (напр. Точка 1, Дім)">
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;margin-bottom:4px;">
+          <span style="font-size:11px;font-weight:600;color:#94a3b8;">Тип точки:</span>
+          <select id="cfgSlotTypeSelect" onchange="onSlotTypeChanged(this.value)" style="height:28px;font-size:10.5px;padding:2px 8px;border-radius:10px;font-weight:700;font-family:monospace;cursor:pointer;outline:none;border:1px solid #334155;background:#1e293b;color:#94a3b8;transition:all 0.2s;">
             <option value="static">📍 Статична</option>
             <option value="dynamic">📡 Динамічна (GPS)</option>
           </select>
@@ -1277,7 +1329,7 @@
           ℹ️ Для динамічної точки координати оновлюються автоматично з GPS / сервісу трекінгу. Ручне введення координат вимкнено.
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
           <label class="toggle-row-left">
             <input type="checkbox" id="cfgSlotActive" checked onchange="onEditorSlotToggled()">
             <span>Увімкнути моніторинг периметра</span>
@@ -1296,34 +1348,30 @@
           </label>
         </div>
 
-        <div class="field-label" style="margin-top:6px;">Назва:</div>
-        <input type="text" id="cfgSlotName" class="ctrl-input" placeholder="Назва точки (напр. Точка 1, Дім)">
-
-        <div style="margin-top:4px;">
-          <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#cbd5e1;margin-bottom:3px;">
+        <div style="margin-top:8px;">
+          <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:600;color:#cbd5e1;margin-bottom:3px;">
             <span>Радіус тривоги:</span>
             <span id="cfgSlotDangerLabel" style="color:var(--accent-cyan);font-weight:700;">35 км</span>
           </div>
           <input type="range" id="cfgSlotDangerSlider" class="timeline-scrubber" min="5" max="150" value="35" oninput="onEditorRadiusInput(this.value)">
         </div>
 
-        <div class="field-label" style="margin-top:2px;">Координати центру (Шир / Довг):</div>
+        <div class="field-label" style="margin-top:8px;margin-bottom:4px;font-size:11px;font-weight:600;color:#94a3b8;">Координати центру (Шир / Довг):</div>
         <div class="date-grid">
-          <input type="number" step="0.0001" id="cfgSlotLat" class="ctrl-input" placeholder="Широта (Lat)">
-          <input type="number" step="0.0001" id="cfgSlotLon" class="ctrl-input" placeholder="Довгота (Lon)">
+          <input type="number" step="0.0001" id="cfgSlotLat" class="ctrl-input" style="height:36px;" placeholder="Широта (Lat)">
+          <input type="number" step="0.0001" id="cfgSlotLon" class="ctrl-input" style="height:36px;" placeholder="Довгота (Lon)">
         </div>
 
-        <!-- Вказати кліком на карті вище між введенням координат та нижніми кнопками -->
-        <button class="secondary-action-btn" id="btnPickPointOnMap" onclick="togglePickPointOnMap()" style="width:100%;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:6px;">
+        <button class="secondary-action-btn" id="btnPickPointOnMap" onclick="togglePickPointOnMap()" style="width:100%;height:36px;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px;">
           <span>📍 Вказати кліком на карті</span>
         </button>
 
-        <!-- В нижній частині 2 кнопки: Зберегти зміни та Видалити точку -->
-        <div style="display:flex;gap:6px;margin-top:8px;">
-          <button class="primary-action-btn" style="flex:1;" onclick="saveCurrentSlotSettings()">
+        <!-- В нижній частині 2 рівні кнопки: Зберегти зміни та Видалити точку -->
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="primary-action-btn" style="flex:1;height:36px;display:flex;align-items:center;justify-content:center;gap:6px;" onclick="saveCurrentSlotSettings()">
             <span>💾 Зберегти зміни</span>
           </button>
-          <button class="secondary-action-btn" id="btnDeleteSlotMap" onclick="deleteCurrentSlotFromMap()" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#fca5a5;padding:0 12px;display:flex;align-items:center;justify-content:center;gap:4px;" onmouseover="this.style.background='rgba(239,68,68,0.3)'" onmouseout="this.style.background='rgba(239,68,68,0.15)'" title="Видалити цю точку">
+          <button class="secondary-action-btn" id="btnDeleteSlotMap" onclick="deleteCurrentSlotFromMap()" style="flex:1;height:36px;display:flex;align-items:center;justify-content:center;gap:6px;background:rgba(239,68,68,0.18);border:1px solid rgba(239,68,68,0.45);color:#fca5a5;" title="Видалити поточну точку">
             <span>🗑️ Видалити точку</span>
           </button>
         </div>
@@ -1331,7 +1379,7 @@
 
       <!-- MAP VISUAL TOGGLES (Чекбокси зліва) -->
       <div class="panel-section">
-        <div class="section-header"><span>Маршрути та цілі</span></div>
+        <div class="section-header"><span>Налаштування Live мапи</span></div>
         <label class="toggle-row-left">
           <input type="checkbox" id="cfgShowTrails" checked onchange="saveVisualSettings()">
           <span>Показувати траєкторії руху (Trails)</span>
@@ -1354,7 +1402,7 @@
         </label>
         <label class="toggle-row-left">
           <input type="checkbox" id="cfgShowSpeedLabels" checked onchange="saveVisualSettings()">
-          <span>Плашки швидкості біля цілей</span>
+          <span>Назви цілей</span>
         </label>
       </div>
 
@@ -1406,9 +1454,9 @@
     </button>
 
     <div id="timelineControlsGroup" class="timeline-controls-group">
-      <button id="btnPlayPause" class="play-circle-btn" onclick="togglePlayPause()" title="Відтворити історію">
-        <svg id="playIconSvg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="transform: translateX(1px); display: block;"><path d="M8 5v14l11-7z"/></svg>
-        <svg id="pauseIconSvg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+      <button id="btnPlayPause" class="play-circle-btn" onclick="togglePlayPause()" title="Пуск / Пауза">
+        <svg id="playIconSvg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="display:block;margin-left:1.5px;margin-top:0.5px;"><path d="M8 5v14l11-7z"/></svg>
+        <svg id="pauseIconSvg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
       </button>
 
       <select id="speedSelect" class="speed-pill-select" onchange="onSpeedChanged(this.value)" title="Швидкість відтворення">
@@ -1452,17 +1500,17 @@
       shahed: {
         name: 'Шахед / Герань',
         icon: '📐',
-        color: '#FACC15',
-        glowWeight: 7, glowOpacity: 0.22,
+        color: '#FFB703',
+        glowWeight: 0, glowOpacity: 0,
         coreWeight: 2.2,
-        vectorColor: '#FDE047', vectorDash: '4, 6',
-        badgeBg: '#ca8a04'
+        vectorColor: '#FFB703', vectorDash: '4, 6',
+        badgeBg: '#b45309'
       },
       shahed_jet: {
         name: 'Реактивний шахед',
         icon: '⚡',
         color: '#00E5FF',
-        glowWeight: 8, glowOpacity: 0.3,
+        glowWeight: 0, glowOpacity: 0,
         coreWeight: 2.5,
         vectorColor: '#00E5FF', vectorDash: '6, 4',
         badgeBg: '#0891b2'
@@ -1470,26 +1518,26 @@
       missile: {
         name: 'Крилата ракета',
         icon: '🚀',
-        color: '#EF4444',
-        glowWeight: 9, glowOpacity: 0.35,
+        color: '#FF2A6D',
+        glowWeight: 0, glowOpacity: 0,
         coreWeight: 2.4,
-        vectorColor: '#F87171', vectorDash: '8, 4',
-        badgeBg: '#dc2626'
+        vectorColor: '#FF2A6D', vectorDash: '8, 4',
+        badgeBg: '#e11d48'
       },
       ballistic: {
         name: 'Балістична ракета',
         icon: '☄️',
-        color: '#DC2626',
-        glowWeight: 10, glowOpacity: 0.4,
+        color: '#D946EF',
+        glowWeight: 0, glowOpacity: 0,
         coreWeight: 3.0,
-        vectorColor: '#F43F5E', vectorDash: '4, 4',
-        badgeBg: '#be123c'
+        vectorColor: '#D946EF', vectorDash: '4, 4',
+        badgeBg: '#a21caf'
       },
       kab: {
         name: 'КАБ / Бомба',
         icon: '💣',
         color: '#FB923C',
-        glowWeight: 6, glowOpacity: 0.4,
+        glowWeight: 0, glowOpacity: 0,
         coreWeight: 2.2,
         vectorColor: '#FB923C', vectorDash: '3, 5',
         badgeBg: '#ea580c'
@@ -1498,34 +1546,43 @@
         name: 'Ланцет',
         icon: '✳️',
         color: '#F43F5E',
-        glowWeight: 4, glowOpacity: 0.3,
+        glowWeight: 0, glowOpacity: 0,
         coreWeight: 2.0,
         vectorColor: '#F43F5E', vectorDash: '2, 4',
-        badgeBg: '#e11d48'
+        badgeBg: '#be123c'
+      },
+      artillery: {
+        name: 'Артилерія / РСЗВ',
+        icon: '💥',
+        color: '#DC2626',
+        glowWeight: 0, glowOpacity: 0,
+        coreWeight: 2.5,
+        vectorColor: '#DC2626', vectorDash: '2, 4',
+        badgeBg: '#b91c1c'
       },
       recon: {
         name: 'Розвідник',
         icon: '🛰️',
         color: '#A855F7',
-        glowWeight: 4, glowOpacity: 0.3,
+        glowWeight: 0, glowOpacity: 0,
         coreWeight: 2.0,
         vectorColor: '#C084FC', vectorDash: '4, 4',
-        badgeBg: '#9333ea'
+        badgeBg: '#7e22ce'
       },
       fpv: {
         name: 'FPV / Молнія',
         icon: '🛸',
-        color: '#EAB308',
-        glowWeight: 3, glowOpacity: 0.3,
+        color: '#84CC16',
+        glowWeight: 0, glowOpacity: 0,
         coreWeight: 1.8,
-        vectorColor: '#FACC15', vectorDash: '2, 4',
-        badgeBg: '#ca8a04'
+        vectorColor: '#84CC16', vectorDash: '2, 4',
+        badgeBg: '#4d7c0f'
       },
       aviation: {
         name: 'Авіація (Су/Ту/МіГ)',
         icon: '✈️',
         color: '#E11D48',
-        glowWeight: 7, glowOpacity: 0.3,
+        glowWeight: 0, glowOpacity: 0,
         coreWeight: 2.4,
         vectorColor: '#FDA4AF', vectorDash: '6, 4',
         badgeBg: '#be123c'
@@ -1534,28 +1591,19 @@
         name: 'Бандероль',
         icon: '🛩️',
         color: '#34D399',
-        glowWeight: 5, glowOpacity: 0.25,
+        glowWeight: 0, glowOpacity: 0,
         coreWeight: 2.2,
         vectorColor: '#6EE7B7', vectorDash: '4, 4',
         badgeBg: '#059669'
       },
-      artillery: {
-        name: 'Артилерія / РСЗВ',
-        icon: '💥',
-        color: '#DC2626',
-        glowWeight: 6, glowOpacity: 0.35,
-        coreWeight: 2.2,
-        vectorColor: '#F87171', vectorDash: '3, 3',
-        badgeBg: '#b91c1c'
-      },
       unknown: {
-        name: 'Ціль не визначена',
+        name: 'Невідома ціль',
         icon: '❓',
-        color: '#94A3B8',
-        glowWeight: 4, glowOpacity: 0.2,
+        color: '#F8FAFC',
+        glowWeight: 0, glowOpacity: 0,
         coreWeight: 2.0,
-        vectorColor: '#CBD5E1', vectorDash: '4, 4',
-        badgeBg: '#64748b'
+        vectorColor: '#F8FAFC', vectorDash: '3, 3',
+        badgeBg: '#475569'
       }
     };
 
@@ -1785,6 +1833,14 @@
           </svg>
         `;
       }
+      if (cat === 'artillery') {
+        return `
+          <svg width="32" height="32" viewBox="0 0 40 40" style="filter: drop-shadow(0 0 6px ${color});">
+            <path d="M20 3 L23 13 L33 9 L28 18 L37 20 L28 22 L33 31 L23 27 L20 37 L17 27 L7 31 L12 22 L3 20 L12 18 L7 9 L17 13 Z" fill="${color}" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/>
+            <circle cx="20" cy="20" r="4.5" fill="#ffffff" stroke="${color}" stroke-width="1.3"/>
+          </svg>
+        `;
+      }
       if (cat === 'kab') {
         return `
           <svg width="30" height="30" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
@@ -1847,14 +1903,6 @@
           </svg>
         `;
       }
-      if (cat === 'artillery') {
-        return `
-          <svg width="28" height="28" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 7px ${color});">
-            <path d="M20 6 L25 15 L23 33 L17 33 L15 15 Z" fill="${color}" stroke="#ffffff" stroke-width="1.3"/>
-            <circle cx="20" cy="35" r="2.5" fill="#facc15"/>
-          </svg>
-        `;
-      }
       // Default / unknown: delta wing with '?' in center (matches Image 3)
       return `
         <svg width="32" height="32" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
@@ -1877,7 +1925,7 @@
 
       return L.divIcon({
         className: 'target-marker',
-        html: `<div style="position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;">${svgShape}${tagHtml}</div>`,
+        html: `<div style="position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;"><div class="icon-rotator" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">${svgShape}</div>${tagHtml}</div>`,
         iconSize: [32, 32],
         iconAnchor: [16, 16]
       });
@@ -1906,12 +1954,12 @@
       });
     }
 
-    function createEtaDotIcon(mins, color) {
+    function createEtaWaypointIcon(mins, clockStr, color) {
       return L.divIcon({
         className: 'eta-dot-marker',
-        html: `<div class="eta-waypoint-dot" style="--dot-color: ${color};" title="Прогноз курсу: +${mins} хв"></div>`,
-        iconSize: [10, 10],
-        iconAnchor: [5, 5]
+        html: `<div class="eta-waypoint-dot" style="--dot-color: ${color};" title="Прогноз курсу: +${mins} хв (${clockStr})"></div>`,
+        iconSize: [8, 8],
+        iconAnchor: [4, 4]
       });
     }
 
@@ -2078,6 +2126,82 @@
       }
     }, 1000);
 
+    
+    // Chaikin corner smoothing for realistic flight turns without jagged 90-deg staircases (Task 7)
+    function smoothTrajectory(pts) {
+      if (!pts || pts.length < 3) return pts;
+      const res = [pts[0]];
+      for (let i = 1; i < pts.length - 1; i++) {
+        const pPrev = pts[i - 1];
+        const pCur = pts[i];
+        const pNext = pts[i + 1];
+
+        const b1 = Math.atan2(pCur[1] - pPrev[1], pCur[0] - pPrev[0]);
+        const b2 = Math.atan2(pNext[1] - pCur[1], pNext[0] - pCur[0]);
+        let angleDelta = Math.abs(b2 - b1);
+        if (angleDelta > Math.PI) angleDelta = 2 * Math.PI - angleDelta;
+
+        if (angleDelta >= 0.35) {
+          const qLat = 0.78 * pCur[0] + 0.22 * pPrev[0];
+          const qLon = 0.78 * pCur[1] + 0.22 * pPrev[1];
+          const rLat = 0.78 * pCur[0] + 0.22 * pNext[0];
+          const rLon = 0.78 * pCur[1] + 0.22 * pNext[1];
+          res.push([qLat, qLon], [rLat, rLon]);
+        } else {
+          res.push(pCur);
+        }
+      }
+      res.push(pts[pts.length - 1]);
+      return res;
+    }
+
+    // Dead Reckoning Animation Loop for Silky Smooth Target Translation & Shortest-Arc Rotation (Task 19)
+    let deadReckonRafId = null;
+    function startDeadReckonLoop() {
+      if (deadReckonRafId) return;
+      function loop() {
+        const now = performance.now();
+        if (isLiveMode) {
+          for (const tid in liveLayers) {
+            const it = liveLayers[tid];
+            if (!it || !it.marker || !it.sim) continue;
+            const sim = it.sim;
+            const dt = (now - sim.lastPacketTs) / 1000.0;
+
+            let curLat = sim.targetLat;
+            let curLon = sim.targetLon;
+            if (dt < 2.0) {
+              const t = Math.min(1.0, dt / 1.5);
+              curLat = sim.startLat + (sim.targetLat - sim.startLat) * t;
+              curLon = sim.startLon + (sim.targetLon - sim.startLon) * t;
+            } else if (dt < 10.0 && sim.speedKmh > 10) {
+              const extraSec = dt - 2.0;
+              const distKm = (sim.speedKmh * extraSec) / 3600.0;
+              const rad = (sim.currentHeading * Math.PI) / 180.0;
+              curLat = sim.targetLat + (distKm / 111.0) * Math.cos(rad);
+              curLon = sim.targetLon + (distKm / (111.0 * Math.cos((sim.targetLat * Math.PI) / 180.0))) * Math.sin(rad);
+            }
+            it.marker.setLatLng([curLat, curLon]);
+
+            const deltaH = ((sim.targetHeading - sim.currentHeading + 540) % 360) - 180;
+            if (Math.abs(deltaH) > 0.5) {
+              sim.currentHeading += deltaH * Math.min(1.0, 0.15);
+              sim.currentHeading = (sim.currentHeading + 360) % 360;
+              if (!it.rotatorEl) {
+                const iconEl = it.marker.getElement();
+                if (iconEl) it.rotatorEl = iconEl.querySelector('.icon-rotator');
+              }
+              if (it.rotatorEl) {
+                it.rotatorEl.style.transform = `rotate(${Math.round(sim.currentHeading)}deg)`;
+              }
+            }
+          }
+        }
+        deadReckonRafId = requestAnimationFrame(loop);
+      }
+      deadReckonRafId = requestAnimationFrame(loop);
+    }
+
     function renderLiveRadarSnapshot(data) {
       if (!data) return;
       if (data.owner) {
@@ -2103,41 +2227,69 @@
       updateLiveSidebarSummary(rawThreats);
 
       // Якщо бекенд надав готову агреговану статистику за сьогодні - застосовуємо миттєво
-      if (data.today_stats && data.today_stats.categories) {
-        todayTargetCounts = Object.assign({}, data.today_stats.categories);
-        todayHistoryLoaded = true;
+      if (data.today_stats) {
+        if (data.today_stats.categories) {
+          todayTargetCounts = Object.assign({}, data.today_stats.categories);
+          todayHistoryLoaded = true;
+        }
+        updateReconcileUI(data.today_stats.status, data.today_stats.last_reconciled_at);
       }
       updateTodayStatsAndGauge();
 
-      // Closest Threat HUD Pill & Distance Badge for Selected Slot / Multi-Slots
+      // Closest Threat HUD Pill: <назва цілі> <Зелений дистанція км> <новий блок ETA> (Task 4)
       const closestCard = document.getElementById('closestCard');
-      const closestInfo = document.getElementById('closestInfo');
-      const slotDistBadge = document.getElementById('slotClosestDistBadge');
-      const dz = data.danger_zone;
+      const targetNameEl = document.getElementById('closestTargetName');
+      const distBadge = document.getElementById('slotClosestDistBadge');
+      const etaBadge = document.getElementById('slotClosestEtaBadge');
 
-      if (dz && dz.closest_distance_km !== null && dz.closest_distance_km !== undefined) {
+      let bestDz = null;
+      if (selectedSlotIds.size > 0 && data.slots) {
+        for (const sid of selectedSlotIds) {
+          const s = data.slots[sid];
+          if (s && s.closest_distance_km !== null && s.closest_distance_km !== undefined) {
+            if (!bestDz || s.closest_distance_km < bestDz.closest_distance_km) {
+              bestDz = {
+                closest_type: s.closest_type,
+                closest_distance_km: s.closest_distance_km,
+                closest_eta_formatted: s.closest_eta_formatted,
+                closest_eta_minutes: s.closest_eta_minutes,
+                active: s.danger_zone_active,
+                slot_name: s.name || ('Точка ' + sid)
+              };
+            }
+          }
+        }
+      }
+      if (!bestDz) bestDz = data.danger_zone;
+
+      if (bestDz && bestDz.closest_distance_km !== null && bestDz.closest_distance_km !== undefined) {
         closestCard.style.display = 'flex';
-        const typeName = dz.closest_type || 'Ціль';
-        const distStr = `${dz.closest_distance_km} км`;
-        const etaStr = dz.closest_eta_formatted && dz.closest_eta_formatted !== '--'
-          ? `, ETA: ${dz.closest_eta_formatted}`
-          : (dz.closest_eta_minutes ? `, ETA: ${dz.closest_eta_minutes} хв` : '');
-        const targetSlotStr = dz.closest_slot_name ? ` → ${dz.closest_slot_name}` : '';
-        closestInfo.innerText = `${typeName} (${distStr}${etaStr})${targetSlotStr}`;
-        closestInfo.style.color = dz.active ? '#f87171' : '#fb923c';
+        const typeName = bestDz.closest_type || 'Ціль';
+        targetNameEl.innerText = typeName;
+        targetNameEl.style.color = '#f8fafc';
 
-        if (slotDistBadge) {
-          slotDistBadge.innerText = `${dz.closest_distance_km} км`;
-          slotDistBadge.className = dz.active ? 'slot-dist-badge' : 'slot-dist-badge calm';
+        distBadge.innerText = `${bestDz.closest_distance_km} км`;
+        distBadge.className = 'slot-dist-badge calm';
+        distBadge.style.display = 'inline-flex';
+
+        const etaText = bestDz.closest_eta_formatted && bestDz.closest_eta_formatted !== '--'
+          ? bestDz.closest_eta_formatted
+          : (bestDz.closest_eta_minutes ? `${bestDz.closest_eta_minutes} хв` : '');
+
+        if (etaText) {
+          etaBadge.innerText = etaText.includes('хв') || etaText.includes('год') ? etaText : `${etaText} хв`;
+          etaBadge.style.display = 'inline-flex';
+        } else {
+          etaBadge.style.display = 'none';
         }
       } else {
         closestCard.style.display = count > 0 ? 'flex' : 'none';
-        closestInfo.innerText = 'Загроз поблизу немає';
-        closestInfo.style.color = '#34d399';
-        if (slotDistBadge) {
-          slotDistBadge.innerText = 'Спокійно';
-          slotDistBadge.className = 'slot-dist-badge calm';
-        }
+        targetNameEl.innerText = 'Загроз немає';
+        targetNameEl.style.color = '#94a3b8';
+        distBadge.innerText = 'Спокійно';
+        distBadge.className = 'slot-dist-badge calm';
+        distBadge.style.display = 'inline-flex';
+        etaBadge.style.display = 'none';
       }
       if (data.slots) {
         updateClosestBreakdownList(data.slots);
@@ -2160,19 +2312,33 @@
         });
       }
 
-      // Render Active Live Targets
+      // Render Active Live Targets (Tasks 1, 7, 8, 9, 19)
+      const actualServerThreatIds = new Set(rawThreats.map(t => t.id));
       const seenIds = new Set();
+
       rawThreats.forEach(trk => {
         const tid = trk.id;
         const cat = normalizeCategory(trk.type || trk.type_ua, trk.category);
-        if (!liveCategoryFilters.has(cat)) return;
+        if (!liveCategoryFilters.has(cat)) {
+          if (liveLayers[tid]) {
+            const it = liveLayers[tid];
+            if (it.marker) map.removeLayer(it.marker);
+            if (it.coreTrail) map.removeLayer(it.coreTrail);
+            if (it.originDot) map.removeLayer(it.originDot);
+            if (it.futureLine) map.removeLayer(it.futureLine);
+            (it.etaMarkers || []).forEach(m => map.removeLayer(m));
+            delete liveLayers[tid];
+          }
+          return;
+        }
 
         seenIds.add(tid);
         const meta = THREAT_CATEGORIES[cat] || THREAT_CATEGORIES.unknown;
         const icon = createTargetMarkerIcon(cat, trk.heading_deg || trk.heading, trk.type || meta.name, trk.speed_kmh);
 
-        const trajPts = (trk.trajectory || []).map(p => [p.lat, p.lon]);
-        if (trajPts.length === 0) trajPts.push([trk.lat, trk.lon]);
+        const rawTrajPts = (trk.trajectory || []).map(p => [p.lat, p.lon]);
+        if (rawTrajPts.length === 0) rawTrajPts.push([trk.lat, trk.lon]);
+        const trajPts = smoothTrajectory(rawTrajPts); // Corner smoothing (Task 7)
 
         const corridor = trk.extrapolated || trk.extrapolated_path || [];
         const extraPts = [[trk.lat, trk.lon]].concat(corridor.map(p => [p.lat, p.lon]));
@@ -2188,25 +2354,25 @@
 
         if (!liveLayers[tid]) {
           const marker = L.marker([trk.lat, trk.lon], { icon }).addTo(map).bindPopup(popupHtml);
-          let glowTrail = null, coreTrail = null, originDot = null, futureLine = null;
+          let coreTrail = null, originDot = null, futureLine = null;
           const etaMarkers = [];
 
+          // Pure crisp route without blur glow (Task 8)
           if (visualConfig.showTrails && trajPts.length > 1) {
-            glowTrail = L.polyline(trajPts, {
-              color: meta.color, weight: meta.glowWeight, opacity: meta.glowOpacity, lineCap: 'round'
-            }).addTo(map);
             coreTrail = L.polyline(trajPts, {
-              color: meta.color, weight: meta.coreWeight, opacity: 0.92, lineCap: 'round'
+              color: meta.color, weight: meta.coreWeight, opacity: 0.92, lineCap: 'round', lineJoin: 'round'
             }).addTo(map);
           }
           if (visualConfig.showOriginDot && trajPts.length > 0) {
             originDot = L.circleMarker(trajPts[0], {
-              radius: 4, color: '#fff', fillColor: meta.color, fillOpacity: 0.9, weight: 1.5
-            }).addTo(map).bindTooltip(`Точка появи: ${trk.type || meta.name}`);
+              radius: 4, color: '#fff', fillColor: meta.color, fillOpacity: 0.85, weight: 1.5
+            }).addTo(map);
           }
+
+          // Subtle, transparent forecast vector (Task 1)
           if (visualConfig.showFutureVector && extraPts.length > 1) {
             futureLine = L.polyline(extraPts, {
-              color: meta.vectorColor, weight: 2.0, opacity: 0.7, dashArray: meta.vectorDash
+              color: meta.vectorColor, weight: 1.6, opacity: 0.38, dashArray: meta.vectorDash
             }).addTo(map);
 
             const nowSec = Math.floor(Date.now() / 1000);
@@ -2214,47 +2380,65 @@
               const mins = pt.minutes || pt.minutes_ahead || 5;
               const clockStr = new Date((nowSec + mins * 60) * 1000).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
               const m = L.marker([pt.lat, pt.lon], {
-                icon: createEtaDotIcon(mins, meta.color)
+                icon: createEtaWaypointIcon(mins, clockStr, meta.vectorColor)
               }).addTo(map);
               etaMarkers.push(m);
             });
           }
 
-          liveLayers[tid] = { marker, glowTrail, coreTrail, originDot, futureLine, etaMarkers, cat, trk };
+          const sim = {
+            startLat: trk.lat, startLon: trk.lon,
+            targetLat: trk.lat, targetLon: trk.lon,
+            currentHeading: trk.heading_deg || trk.heading || 0,
+            targetHeading: trk.heading_deg || trk.heading || 0,
+            speedKmh: trk.speed_kmh || 0,
+            lastPacketTs: performance.now()
+          };
+
+          liveLayers[tid] = { marker, coreTrail, originDot, futureLine, etaMarkers, cat, trk, sim };
         } else {
           const item = liveLayers[tid];
           item.trk = trk;
-          item.marker.setLatLng([trk.lat, trk.lon]);
+
+          if (item.sim) {
+            item.sim.startLat = item.marker.getLatLng().lat;
+            item.sim.startLon = item.marker.getLatLng().lng;
+            item.sim.targetLat = trk.lat;
+            item.sim.targetLon = trk.lon;
+            item.sim.targetHeading = trk.heading_deg || trk.heading || 0;
+            item.sim.speedKmh = trk.speed_kmh || 0;
+            item.sim.lastPacketTs = performance.now();
+          }
+
           item.marker.setIcon(icon);
           item.marker.setPopupContent(popupHtml);
 
           if (visualConfig.showTrails && trajPts.length > 1) {
-            if (item.glowTrail) item.glowTrail.setLatLngs(trajPts);
-            else item.glowTrail = L.polyline(trajPts, { color: meta.color, weight: meta.glowWeight, opacity: meta.glowOpacity }).addTo(map);
             if (item.coreTrail) item.coreTrail.setLatLngs(trajPts);
-            else item.coreTrail = L.polyline(trajPts, { color: meta.color, weight: meta.coreWeight, opacity: 0.92 }).addTo(map);
+            else item.coreTrail = L.polyline(trajPts, { color: meta.color, weight: meta.coreWeight, opacity: 0.92, lineCap: 'round', lineJoin: 'round' }).addTo(map);
           } else {
-            if (item.glowTrail) { map.removeLayer(item.glowTrail); item.glowTrail = null; }
             if (item.coreTrail) { map.removeLayer(item.coreTrail); item.coreTrail = null; }
           }
 
           if (visualConfig.showOriginDot && trajPts.length > 0) {
             if (item.originDot) item.originDot.setLatLng(trajPts[0]);
-            else item.originDot = L.circleMarker(trajPts[0], { radius: 4, color: '#fff', fillColor: meta.color, fillOpacity: 0.9, weight: 1.5 }).addTo(map).bindTooltip(`Точка появи: ${trk.type || meta.name}`);
+            else item.originDot = L.circleMarker(trajPts[0], { radius: 4, color: '#fff', fillColor: meta.color, fillOpacity: 0.85, weight: 1.5 }).addTo(map);
           } else {
             if (item.originDot) { map.removeLayer(item.originDot); item.originDot = null; }
           }
 
           if (visualConfig.showFutureVector && extraPts.length > 1) {
             if (item.futureLine) item.futureLine.setLatLngs(extraPts);
-            else item.futureLine = L.polyline(extraPts, { color: meta.vectorColor, weight: 2.0, opacity: 0.7, dashArray: meta.vectorDash }).addTo(map);
+            else item.futureLine = L.polyline(extraPts, { color: meta.vectorColor, weight: 1.6, opacity: 0.38, dashArray: meta.vectorDash }).addTo(map);
 
             (item.etaMarkers || []).forEach(m => map.removeLayer(m));
             item.etaMarkers = [];
+            const nowSec = Math.floor(Date.now() / 1000);
             corridor.forEach(pt => {
               const mins = pt.minutes || pt.minutes_ahead || 5;
+              const clockStr = new Date((nowSec + mins * 60) * 1000).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
               const m = L.marker([pt.lat, pt.lon], {
-                icon: createEtaDotIcon(mins, meta.color)
+                icon: createEtaWaypointIcon(mins, clockStr, meta.vectorColor)
               }).addTo(map);
               item.etaMarkers.push(m);
             });
@@ -2266,32 +2450,14 @@
         }
       });
 
-      // Retain recent lost targets
-      (data.recent_lost || []).forEach(lost => {
-        const cat = normalizeCategory(lost.type_ua, lost.category);
-        if (liveCategoryFilters.has(cat)) {
-          addOrUpdateLiveLostTarget(lost.id, lost, cat);
-        }
-      });
-
-      // Instantly remove live lost markers if category was deselected
-      for (const lid in liveLostLayers) {
-        const it = liveLostLayers[lid];
-        if (it && it.cat && !liveCategoryFilters.has(it.cat)) {
-          if (it.crossMarker) map.removeLayer(it.crossMarker);
-          if (it.trailLine) map.removeLayer(it.trailLine);
-          if (it.originDot) map.removeLayer(it.originDot);
-          delete liveLostLayers[lid];
-        }
-      }
-
-      // Remove disappeared live targets
+      // Prune Targets Only If Actually Disappeared From Server (Task 9)
       for (const tid in liveLayers) {
         if (!seenIds.has(tid)) {
           const it = liveLayers[tid];
-          addOrUpdateLiveLostTarget(tid, it.trk, it.cat);
+          if (!actualServerThreatIds.has(tid)) {
+            addOrUpdateLiveLostTarget(tid, it.trk, it.cat);
+          }
           if (it.marker) map.removeLayer(it.marker);
-          if (it.glowTrail) map.removeLayer(it.glowTrail);
           if (it.coreTrail) map.removeLayer(it.coreTrail);
           if (it.originDot) map.removeLayer(it.originDot);
           if (it.futureLine) map.removeLayer(it.futureLine);
@@ -2308,6 +2474,48 @@
       if (rem10 === 1 && rem100 !== 11) return `${cnt} ціль`;
       if (rem10 >= 2 && rem10 <= 4 && (rem100 < 10 || rem100 >= 20)) return `${cnt} цілі`;
       return `${cnt} цілей`;
+    }
+
+    function formatSyncDate(isoStr) {
+      if (!isoStr) return 'Очікується звірка';
+      try {
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime())) return isoStr;
+        const day = String(d.getDate()).padStart(2, '0');
+        const mon = String(d.getMonth() + 1).padStart(2, '0');
+        const yr = d.getFullYear();
+        const hr = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        return `${day}.${mon}.${yr} ${hr}:${min}`;
+      } catch (e) {
+        return isoStr;
+      }
+    }
+
+    function updateReconcileUI(status, lastReconciledAt) {
+      const badge = document.getElementById('summaryReconcileBadge');
+      const dateLbl = document.getElementById('syncDateLabel');
+      const formattedDate = formatSyncDate(lastReconciledAt);
+
+      if (dateLbl) {
+        dateLbl.innerText = formattedDate;
+      }
+
+      if (badge) {
+        if (status === 'reconciled') {
+          badge.innerText = '✓ Верифіковано';
+          badge.style.background = 'rgba(16, 185, 129, 0.15)';
+          badge.style.color = '#34d399';
+          badge.style.border = '1px solid rgba(16, 185, 129, 0.35)';
+          badge.title = `Підтверджено серверами UkraineAlarm (${formattedDate})`;
+        } else {
+          badge.innerText = '⚡ Локально';
+          badge.style.background = 'rgba(245, 158, 11, 0.15)';
+          badge.style.color = '#fbbf24';
+          badge.style.border = '1px solid rgba(245, 158, 11, 0.35)';
+          badge.title = 'Локальний оперативний підрахунок Air Alert Hub (до найближчої щогодинної звірки)';
+        }
+      }
     }
 
     // Sidebar Summary: "Активні цілі"
@@ -2349,15 +2557,26 @@
         const day = String(now.getDate()).padStart(2, '0');
         const todayStr = `${year}-${month}-${day}`;
 
-        // Оптимізований запит: сервер повертає лише цілі за сьогодні (~50 КБ замість 10 МБ)
+        // Оптимізований запит: сервер повертає добове зведення та цілі за сьогодні (~50 КБ замість 10 МБ)
         const res = await fetch(`/api/v1/history?date=${encodeURIComponent(todayStr)}&token=${encodeURIComponent(token)}`);
         if (res.ok) {
           const ds = await res.json();
-          const targets = ds.targets || {};
-          todayTargetCounts = {};
-          for (const [id, item] of Object.entries(targets)) {
-            const cat = normalizeCategory(item.name_ua || item.type, item.cat || item.category);
-            todayTargetCounts[cat] = (todayTargetCounts[cat] || 0) + 1;
+          if (ds.summary) {
+            updateReconcileUI(ds.summary.status, ds.summary.last_reconciled_at);
+          }
+          if (ds.summary && ds.summary.types && Object.keys(ds.summary.types).length > 0) {
+            todayTargetCounts = {};
+            for (const [k, v] of Object.entries(ds.summary.types)) {
+              const cat = normalizeCategory(k, k);
+              todayTargetCounts[cat] = (todayTargetCounts[cat] || 0) + v;
+            }
+          } else {
+            const targets = ds.targets || {};
+            todayTargetCounts = {};
+            for (const [id, item] of Object.entries(targets)) {
+              const cat = normalizeCategory(item.name_ua || item.type, item.cat || item.category);
+              todayTargetCounts[cat] = (todayTargetCounts[cat] || 0) + 1;
+            }
           }
         }
       } catch (e) {
@@ -2390,6 +2609,16 @@
       renderRadialTodayGauge(mergedCounts, totalToday);
     }
 
+    let selectedGaugeCategory = null;
+    function toggleGaugeCategorySelection(catKey) {
+      if (selectedGaugeCategory === catKey) {
+        selectedGaugeCategory = null;
+      } else {
+        selectedGaugeCategory = catKey;
+      }
+      renderRadialTodayGauge(todayTargetCounts, Object.values(todayTargetCounts).reduce((a, b) => a + b, 0));
+    }
+
     function renderRadialTodayGauge(countsMap, total) {
       const container = document.getElementById('todayGaugeContainer');
       if (!container) return;
@@ -2397,17 +2626,14 @@
       const numSpokes = 64;
       const cx = 110, cy = 110;
       const rIn = 52;
-      const rOutBase = 68;
-      const rOutSpike = 82;
-
       const activeEntries = Object.entries(countsMap).filter(([k, v]) => v > 0);
       let spokeLines = '';
+      const nowTime = performance.now();
 
       if (total === 0) {
         for (let i = 0; i < numSpokes; i++) {
           const angle = (i / numSpokes) * 2 * Math.PI - Math.PI / 2;
-          const isSpike = (i % 8 === 0);
-          const rOut = isSpike ? rOutSpike - 4 : rOutBase;
+          const rOut = 68;
           const x1 = (cx + rIn * Math.cos(angle)).toFixed(1);
           const y1 = (cy + rIn * Math.sin(angle)).toFixed(1);
           const x2 = (cx + rOut * Math.cos(angle)).toFixed(1);
@@ -2428,42 +2654,57 @@
           }
 
           const catKey = activeEntries[currentCatIdx] ? activeEntries[currentCatIdx][0] : 'unknown';
+          const catCount = activeEntries[currentCatIdx] ? activeEntries[currentCatIdx][1] : 0;
           const meta = THREAT_CATEGORIES[catKey] || THREAT_CATEGORIES.unknown;
           const color = meta.color;
 
-          const angle = (i / numSpokes) * 2 * Math.PI - Math.PI / 2;
-          const isSpike = (i % 8 === 0);
-          const rOut = isSpike ? rOutSpike : rOutBase;
+          const isSelected = (selectedGaugeCategory === null || selectedGaugeCategory === catKey);
+          const isTargetCat = (selectedGaugeCategory === catKey);
 
+          const shareRatio = catCount / Math.max(1, total);
+          const baseHeight = 14 + 18 * Math.sqrt(shareRatio);
+          const wave = isSelected ? 2.5 * Math.sin((nowTime / 450) + (i * 0.4)) : 0;
+          const rOut = Math.min(88, rIn + baseHeight + wave);
+
+          const angle = (i / numSpokes) * 2 * Math.PI - Math.PI / 2;
           const x1 = (cx + rIn * Math.cos(angle)).toFixed(1);
           const y1 = (cy + rIn * Math.sin(angle)).toFixed(1);
           const x2 = (cx + rOut * Math.cos(angle)).toFixed(1);
           const y2 = (cy + rOut * Math.sin(angle)).toFixed(1);
 
-          spokeLines += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>`;
+          const strokeWidth = isTargetCat ? '3.2' : (isSelected ? '2.5' : '1.8');
+          const opacity = isSelected ? '1' : '0.18';
+          const filterStyle = isTargetCat ? `filter="drop-shadow(0 0 4px ${color})"` : '';
+
+          spokeLines += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" opacity="${opacity}" ${filterStyle}/>`;
         }
       }
 
       const pillsHtml = activeEntries.length > 0 ? activeEntries.map(([k, count]) => {
         const meta = THREAT_CATEGORIES[k] || THREAT_CATEGORIES.unknown;
         const pct = Math.round((count / total) * 100);
+        const isSel = (selectedGaugeCategory === k);
+        const borderStyle = isSel ? `border: 1.5px solid ${meta.color}; box-shadow: 0 0 10px ${meta.color}66; transform: scale(1.05);` : 'border: 1px solid rgba(255,255,255,0.12);';
         return `
-          <div style="display:flex;align-items:center;gap:5px;padding:3px 7px;background:rgba(255,255,255,0.03);border:1px solid ${meta.color}40;border-left:3px solid ${meta.color};border-radius:6px;font-size:11px;">
-            <span style="font-weight:800;color:#fff;">${count}</span>
-            <span style="color:#94a3b8;">${meta.name}</span>
-            <span style="color:${meta.color};font-weight:700;">(${pct}%)</span>
+          <div onclick="toggleGaugeCategorySelection('${k}')" style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:12px;background:rgba(255,255,255,0.05);font-size:11px;font-weight:700;cursor:pointer;transition:all 0.15s ease;${borderStyle}" title="Натисніть для виділення сегменту">
+            <span style="display:inline-block;width:16px;height:16px;line-height:16px;text-align:center;border-radius:4px;background:${meta.badgeBg || meta.color};color:#fff;font-size:10px;font-weight:800;">${count}</span>
+            <span style="color:#f8fafc;">${meta.name}</span>
+            <span style="color:${meta.color};font-weight:800;font-size:10.5px;">(${pct}%)</span>
           </div>
         `;
-      }).join('') : '<div style="font-size:11px;color:#64748b;text-align:center;padding:4px 0;">За сьогодні загроз не зафіксовано</div>';
+      }).join('') : `<div style="font-size:11.5px;color:var(--text-gray);text-align:center;">За сьогодні загроз не зафіксовано</div>`;
 
       container.innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;width:100%;">
-          <svg width="220" height="220" viewBox="0 0 220 220" style="filter: drop-shadow(0 4px 16px rgba(0,0,0,0.5));">
-            ${spokeLines}
-            <circle cx="${cx}" cy="${cy}" r="${rIn - 4}" fill="rgba(10, 14, 24, 0.75)" stroke="rgba(255,255,255,0.14)" stroke-width="1.2"/>
-            <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="38" font-weight="900" fill="#ffffff" font-family="'Satoshi', sans-serif">${total}</text>
-          </svg>
-          <div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:4px;width:100%;">
+          <div style="position:relative;width:220px;height:220px;margin:0 auto;display:flex;align-items:center;justify-content:center;">
+            <svg width="220" height="220" viewBox="0 0 220 220" style="position:absolute;top:0;left:0;pointer-events:none;">
+              ${spokeLines}
+            </svg>
+            <div onclick="selectedGaugeCategory=null; renderRadialTodayGauge(todayTargetCounts, Object.values(todayTargetCounts).reduce((a, b) => a + b, 0));" style="width:84px;height:84px;border-radius:50%;background:#090d16;border:2px solid rgba(255,255,255,0.15);display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:inset 0 2px 10px rgba(0,0,0,0.8), 0 0 16px rgba(0,0,0,0.6);z-index:2;cursor:pointer;" title="Натисніть для скидання виділення">
+              <span style="font-size:32px;font-weight:900;color:#f8fafc;line-height:1;letter-spacing:-0.5px;">${total}</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px;">
             ${pillsHtml}
           </div>
         </div>
@@ -2639,19 +2880,26 @@
 
       const statusList = document.getElementById('radarSlotsStatusList');
       if (statusList) {
-        statusList.innerHTML = entries.map(([id, s]) => `
-          <div onclick="selectSlot('${id}'); centerMapOnSelectedSlots();" style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:rgba(255,255,255,0.03);border-radius:8px;border-left:3.5px solid ${s.danger_zone_active ? '#ef4444' : (s.active ? '#10b981' : '#64748b')};cursor:pointer;transition:all 0.15s ease;" title="Натисніть для вибору та центрування на карті" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+        statusList.innerHTML = entries.map(([id, s]) => {
+          const isDanger = s.danger_zone_active;
+          const isActive = s.active;
+          const statusColor = isDanger ? '#ef4444' : (isActive ? '#10b981' : '#64748b');
+          const statusBg = isDanger ? 'rgba(239,68,68,0.12)' : (isActive ? 'rgba(16,185,129,0.08)' : 'rgba(100,116,139,0.06)');
+          const borderContour = isDanger ? '1px solid rgba(239,68,68,0.45)' : (isActive ? '1px solid rgba(16,185,129,0.35)' : '1px solid rgba(100,116,139,0.25)');
+          return `
+          <div onclick="selectSlot('${id}'); centerMapOnSelectedSlots();" style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:${statusBg};border-radius:8px;${borderContour};border-left:3.5px solid ${statusColor};cursor:pointer;transition:all 0.15s ease;width:100%;box-sizing:border-box;margin-bottom:6px;" title="Натисніть для вибору та центрування на карті" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='${statusBg}'">
             <div style="display:flex;flex-direction:column;gap:1px;">
               <span style="font-weight:700;color:#f8fafc;">${s.name || ('Точка ' + id)}</span>
               <span style="font-size:10px;color:var(--text-gray);">Радіус: ${s.danger_zone || s.danger_radius_km || 35} км</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
-              <span style="color:${s.danger_zone_active ? '#f87171' : (s.active ? '#34d399' : '#94a3b8')};font-weight:800;font-size:11px;background:${s.danger_zone_active ? 'rgba(239,68,68,0.18)' : (s.active ? 'rgba(16,185,129,0.14)' : 'rgba(100,116,139,0.12)')};padding:2px 7px;border-radius:5px;">
-                ${s.active ? (s.danger_zone_active ? (s.closest_distance_km ? `${s.closest_distance_km} км ⚠️` : 'Небезпека!') : '🟢 Спокійно') : 'Вимкнено'}
+              <span style="color:${isDanger ? '#f87171' : (isActive ? '#34d399' : '#94a3b8')};font-weight:800;font-size:11px;background:${isDanger ? 'rgba(239,68,68,0.18)' : (isActive ? 'rgba(16,185,129,0.14)' : 'rgba(100,116,139,0.12)')};padding:2px 7px;border-radius:5px;">
+                ${isActive ? (isDanger ? (s.closest_distance_km ? `${s.closest_distance_km} км ⚠️` : 'Небезпека!') : '🟢 Спокійно') : 'Вимкнено'}
               </span>
             </div>
           </div>
-        `).join('');
+        `;
+        }).join('');
       }
 
       entries.forEach(([id, s]) => {
@@ -2661,7 +2909,7 @@
         const shouldDrawCircle = visualConfig.showSlotCircles && isMonitored && isSelected;
 
         if (!slotMapLayers[id]) {
-          const circle = L.circle([s.lat, s.lon], {
+          const circle = L.circle([s.lat, s.lon], { interactive: false,
             radius: radiusM,
             color: s.danger_zone_active ? '#ef4444' : '#38bdf8',
             fillColor: s.danger_zone_active ? '#ef4444' : '#38bdf8',
@@ -3277,6 +3525,7 @@
     let availableServerMonths = {};
     let externalFileDates = [];
     let loadedAnalyticsTracks = [];
+    let latestLoadedSummary = null;
     let analyticsSimTime = 0;
     let analyticsMinTime = 0;
     let analyticsMaxTime = 0;
@@ -3349,6 +3598,7 @@
             "fpv": "FPV-дрон / Молнія",
             "aviation": "Тактична або стратегічна авіація",
             "artillery": "Артилерія / РСЗВ",
+            "banderol": "Бандероль / фальш-ціль (приманка, пародія)",
             "unknown": "Невідома повітряна загроза"
           },
           "statuses": {
@@ -3496,10 +3746,16 @@
       const toTs = toDateStr ? Math.floor(new Date(toDateStr + 'T23:59:59').getTime() / 1000) : Infinity;
 
       loadedAnalyticsTracks = [];
+      latestLoadedSummary = null;
       let minT = Infinity, maxT = -Infinity;
       const detectedDates = new Set();
 
       datasets.forEach(ds => {
+        if (ds.summary) {
+          latestLoadedSummary = ds.summary;
+        } else if (ds.daily_summaries && fromDateStr && ds.daily_summaries[fromDateStr]) {
+          latestLoadedSummary = ds.daily_summaries[fromDateStr];
+        }
         const targetsMap = ds.targets || {};
         for (const [id, item] of Object.entries(targetsMap)) {
           if (!item) continue;
@@ -3596,7 +3852,37 @@
         }
       });
 
+      if (loadedAnalyticsTracks.length === 0 && latestLoadedSummary && latestLoadedSummary.hours) {
+        latestLoadedSummary.hours.forEach(h => {
+          if (h.hour >= 0 && h.hour < 24) {
+            hourlyBins[h.hour] = h.total || 0;
+          }
+        });
+      }
+
       renderAnalyticsThreatCheckboxes(catCounts);
+
+      const analyticsBadge = document.getElementById('analyticsReconcileBadge');
+      if (analyticsBadge) {
+        if (latestLoadedSummary) {
+          analyticsBadge.style.display = 'inline-block';
+          if (latestLoadedSummary.status === 'reconciled') {
+            analyticsBadge.innerText = '✓ Верифіковано';
+            analyticsBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+            analyticsBadge.style.color = '#34d399';
+            analyticsBadge.style.border = '1px solid rgba(16, 185, 129, 0.35)';
+            analyticsBadge.title = `Підтверджено серверами UkraineAlarm (${formatSyncDate(latestLoadedSummary.last_reconciled_at)})`;
+          } else {
+            analyticsBadge.innerText = '⚡ Локально';
+            analyticsBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+            analyticsBadge.style.color = '#fbbf24';
+            analyticsBadge.style.border = '1px solid rgba(245, 158, 11, 0.35)';
+            analyticsBadge.title = 'Локальний оперативний підрахунок Air Alert Hub (до найближчої щогодинної звірки)';
+          }
+        } else {
+          analyticsBadge.style.display = 'none';
+        }
+      }
 
       const total = filteredTracks.length;
       document.getElementById('statTotalTargets').innerText = total;
@@ -3671,6 +3957,7 @@
     }
 
     function refreshMapVisuals() {
+      const isMobile = window.innerWidth <= 768;
       if (isLiveMode) {
         clearLiveMapLayers();
         clearAnalyticsMapLayers();
@@ -3684,20 +3971,19 @@
       const showImpactHeat = document.getElementById('chkHeatmapImpacts').checked;
       const showSampleTrails = document.getElementById('chkShowSampleTrails').checked;
       const showSampleImpacts = document.getElementById('chkShowSampleImpacts').checked;
+      const showHistoryIcons = document.getElementById('chkShowHistoryIcons')?.checked ?? true;
+      const showHistoryNames = document.getElementById('chkShowHistoryNames')?.checked ?? true;
       const heatOpacity = Number(document.getElementById('rngHeatmapOpacity').value || 85) / 100;
 
       const corridorPoints = [];
       const impactPoints = [];
       const curT = analyticsSimTime || analyticsMaxTime;
 
-      const isMobile = window.innerWidth <= 768;
-      // 1. Попередній аналіз відфільтрованої вибірки цілей для адаптивного масштабування
       const activeSampleTracks = loadedAnalyticsTracks.filter(trk => {
         return analyticsCategoryFilters.has(trk.cat) && trk.start_time <= curT && trk.path && trk.path.length > 0;
       });
       const totalTargets = activeSampleTracks.length;
 
-      // 2. Адаптивні ваги: запобігають перепалу при 50+ цілях і тьмяності при 1..3 цілях
       const corridorWeight = totalTargets <= 3 ? 0.65 : Math.max(0.08, 1.35 / Math.sqrt(totalTargets));
       const corridorMidWeight = corridorWeight * 0.70;
 
@@ -3715,7 +4001,6 @@
         } else if (trk.path[0].time > curT) {
           return;
         } else {
-          // Binary search for upper bound index where path[i].time <= curT
           let low = 0, high = lastIdx;
           while (low <= high) {
             const mid = (low + high) >> 1;
@@ -3730,7 +4015,6 @@
         if (visibleCount === 0) return;
         const visiblePts = visibleCount === trk.path.length ? trk.path : trk.path.slice(0, visibleCount);
 
-        // Точки теплової мапи коридорів руху
         if (showCorridorHeat) {
           for (let i = 0; i < visiblePts.length; i++) {
             corridorPoints.push([visiblePts[i].lat, visiblePts[i].lon, corridorWeight]);
@@ -3743,25 +4027,42 @@
         }
 
         const lastPt = visiblePts[visiblePts.length - 1];
-        // Точки теплової мапи прильотів / збиттів / втрат
         if (showImpactHeat && curT >= trk.end_time) {
           impactPoints.push([lastPt.lat, lastPt.lon, impactWeight]);
         }
 
+        // Render smoothed trajectory trails and origin launch marker (Tasks 7, 10, 14, 15)
         if (showSampleTrails && visiblePts.length > 1) {
-          const poly = L.polyline(visiblePts.map(p => [p.lat, p.lon]), {
-            color: trk.color, weight: 2, opacity: 0.65
+          const rawPts = visiblePts.map(p => [p.lat, p.lon]);
+          const smoothPts = smoothTrajectory(rawPts);
+          const poly = L.polyline(smoothPts, {
+            color: trk.color, weight: 2.2, opacity: 0.75, lineCap: 'round', lineJoin: 'round'
           }).addTo(map);
           sampleTrailLayers.push(poly);
         }
 
+        // Origin Launch Marker at path[0] (Task 10)
+        if (showSampleTrails && trk.path && trk.path.length > 0) {
+          const originPoint = trk.path[0];
+          const originDot = L.circleMarker([originPoint.lat, originPoint.lon], {
+            radius: 3.5, color: '#ffffff', fillColor: trk.color, fillOpacity: 0.9, weight: 1.5
+          }).addTo(map).bindTooltip(`Старт: ${trk.name} (${new Date(trk.start_time * 1000).toLocaleTimeString('uk-UA', {hour:'2-digit', minute:'2-digit'})})`, { direction: 'top' });
+          sampleTrailLayers.push(originDot);
+        }
+
+        // Active Moving Flight at curT
         if (curT >= trk.start_time && curT <= trk.end_time) {
-          const icon = createTargetMarkerIcon(trk.cat, lastPt.heading, trk.name, lastPt.speed);
-          const m = L.marker([lastPt.lat, lastPt.lon], { icon }).addTo(map);
-          playbackActiveMarkers[trk.id] = m;
-          if (visualConfig.showTrails && visiblePts.length > 1) {
-            playbackActiveTrails[trk.id] = L.polyline(visiblePts.map(p => [p.lat, p.lon]), {
-              color: trk.color, weight: 2.6, opacity: 0.9
+          if (showHistoryIcons) {
+            const displayName = showHistoryNames ? trk.name : '';
+            const icon = createTargetMarkerIcon(trk.cat, lastPt.heading, displayName, lastPt.speed);
+            const m = L.marker([lastPt.lat, lastPt.lon], { icon }).addTo(map);
+            playbackActiveMarkers[trk.id] = m;
+          }
+          if (showSampleTrails && visiblePts.length > 1) {
+            const rawPts = visiblePts.map(p => [p.lat, p.lon]);
+            const smoothPts = smoothTrajectory(rawPts);
+            playbackActiveTrails[trk.id] = L.polyline(smoothPts, {
+              color: trk.color, weight: 2.6, opacity: 0.92, lineCap: 'round', lineJoin: 'round'
             }).addTo(map);
           }
         } else if (showSampleImpacts && curT >= trk.end_time) {
@@ -3874,9 +4175,16 @@
       if (slider) slider.value = slider.max;
       clearAnalyticsMapLayers();
       clearLiveMapLayers();
-      pollLiveOnce();
-      if (!livePollTimer) {
-        livePollTimer = setInterval(pollLiveOnce, 3500);
+      if (!liveWebSocket || liveWebSocket.readyState !== WebSocket.OPEN) {
+        pollLiveOnce();
+        if (!livePollTimer) {
+          livePollTimer = setInterval(pollLiveOnce, 3500);
+        }
+      } else {
+        if (livePollTimer) {
+          clearInterval(livePollTimer);
+          livePollTimer = null;
+        }
       }
     }
 
@@ -3952,20 +4260,103 @@
       if (isPlayingHistory) requestAnimationFrame(playbackStepLoop);
     }
 
-    function copyAnalyticsReport() {
-      const fromStr = document.getElementById('dateFromInput').value;
-      const toStr = document.getElementById('dateToInput').value;
-      const total = document.getElementById('statTotalTargets').innerText;
-      const downed = document.getElementById('statDownedPct').innerText;
-      const avgTime = document.getElementById('statAvgDuration').innerText;
+    let screenMediaRecorder = null;
+    let screenRecordChunks = [];
+    let screenRecordStream = null;
 
-      const text = `📊 Аналітичний звіт Повітряного Радара (${fromStr} — ${toStr}):\n` +
-                   `• Всього зафіксовано цілей: ${total}\n` +
-                   `• Збито / локаційно втрачено: ${downed}\n` +
-                   `• Середній час супроводу: ${avgTime}`;
-      navigator.clipboard?.writeText(text).then(() => {
-        alert('✅ Аналітичний звіт скопійовано в буфер обміну!');
-      });
+    async function toggleScreenRecording() {
+      const btn = document.getElementById('btnScreenRecord');
+      const icon = document.getElementById('recordIcon');
+      const label = document.getElementById('recordLabel');
+
+      if (screenMediaRecorder && screenMediaRecorder.state === 'recording') {
+        screenMediaRecorder.stop();
+        return;
+      }
+
+      try {
+        screenRecordStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { displaySurface: 'browser' },
+          audio: false
+        });
+
+        document.body.classList.add('recording-mode');
+
+        const badge = document.createElement('div');
+        badge.id = 'floatingRecordBadge';
+        badge.className = 'screen-record-floating-badge';
+        badge.innerHTML = '<span>🔴 Запис... Натисніть для зупинки</span>';
+        badge.onclick = () => toggleScreenRecording();
+        document.body.appendChild(badge);
+
+        if (btn) {
+          btn.style.background = 'rgba(239, 68, 68, 0.25)';
+          btn.style.borderColor = '#ef4444';
+          if (icon) icon.innerText = '⏹️';
+          if (label) label.innerText = 'Зупинити запис';
+        }
+
+        screenRecordChunks = [];
+        const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+        screenMediaRecorder = new MediaRecorder(screenRecordStream, { mimeType: mime });
+
+        screenMediaRecorder.ondataavailable = e => {
+          if (e.data && e.data.size > 0) screenRecordChunks.push(e.data);
+        };
+
+        screenMediaRecorder.onstop = () => {
+          document.body.classList.remove('recording-mode');
+          const fb = document.getElementById('floatingRecordBadge');
+          if (fb) fb.remove();
+
+          if (btn) {
+            btn.style.background = '';
+            btn.style.borderColor = '';
+            if (icon) icon.innerText = '📹';
+            if (label) label.innerText = 'Запис екрану (без HUD)';
+          }
+
+          if (screenRecordStream) {
+            screenRecordStream.getTracks().forEach(t => t.stop());
+            screenRecordStream = null;
+          }
+
+          if (screenRecordChunks.length > 0) {
+            const blob = new Blob(screenRecordChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            const dtStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            a.download = `air_alert_hub_map_${dtStr}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            }, 1000);
+          }
+        };
+
+        screenRecordStream.getVideoTracks()[0].onended = () => {
+          if (screenMediaRecorder && screenMediaRecorder.state === 'recording') {
+            screenMediaRecorder.stop();
+          }
+        };
+
+        screenMediaRecorder.start(1000);
+      } catch (err) {
+        console.warn('Screen recording error / canceled:', err);
+        document.body.classList.remove('recording-mode');
+        const fb = document.getElementById('floatingRecordBadge');
+        if (fb) fb.remove();
+        if (btn) {
+          btn.style.background = '';
+          btn.style.borderColor = '';
+          if (icon) icon.innerText = '📹';
+          if (label) label.innerText = 'Запис екрану (без HUD)';
+        }
+      }
     }
 
     // Initialize: collapse sidebar on mobile
@@ -3978,6 +4369,7 @@
       if (uEl) uEl.innerText = savedOwner;
     }
     startLiveConnection();
+    startDeadReckonLoop();
   </script>
 </body>
 </html>

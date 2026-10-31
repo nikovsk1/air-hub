@@ -1,6 +1,10 @@
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
+use flate2::read::GzDecoder;
+use regex::Regex;
 use serde_json::{json, Value};
+use std::io::Read;
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone)]
 pub struct Prng {
@@ -39,13 +43,10 @@ fn quarter_round(st: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize) {
     st[b] = rotl(st[b] ^ st[c], 7);
 }
 
-/// Декодування зашифрованого ChaCha20/AST корисного навантаження від карти ukrainealarm
+/// Декодування зашифрованого ChaCha20/AST корисного навантаження від карти ukrainealarm (~5:, ~6: тощо)
 pub fn decode_payload_native(payload_str: &str) -> Result<Value, String> {
-    if !payload_str.starts_with("~5:") {
-        return Err("Unsupported payload: missing ~5: prefix".to_string());
-    }
-
-    let b64_part = &payload_str[3..];
+    let colon_pos = payload_str.find(':').ok_or_else(|| "Missing colon in payload prefix".to_string())?;
+    let b64_part = &payload_str[colon_pos + 1..];
     let sanitized = b64_part.replace('-', "+").replace('_', "/");
     let pad_len = (4 - sanitized.len() % 4) % 4;
     let mut padded = sanitized;
@@ -270,6 +271,140 @@ pub struct RawExtractedTarget {
     pub raw_name: String,
     pub raw_type_code: i64,
     pub heading_deg: f64,
+    #[serde(default)]
+    pub speed_kmh: Option<f64>,
+    #[serde(default)]
+    pub confidence: Option<u8>,
+    #[serde(default)]
+    pub time_offset_ms: Option<i64>,
+    #[serde(default)]
+    pub trail_points: Vec<(f64, f64)>,
+}
+
+impl RawExtractedTarget {
+    pub fn simple(id: String, lat: f64, lon: f64, raw_name: String, raw_type_code: i64, heading_deg: f64) -> Self {
+        Self {
+            id,
+            lat,
+            lon,
+            raw_name,
+            raw_type_code,
+            heading_deg,
+            speed_kmh: None,
+            confidence: None,
+            time_offset_ms: None,
+            trail_points: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SnapshotMeta {
+    pub revision_hash: Option<String>,
+    pub sequence_num: Option<String>,
+    pub combat_active: bool,
+    pub server_ts_ms: Option<i64>,
+    pub ttl_sec: Option<u64>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TaxonomyItem {
+    pub code: i64,
+    pub name_ua: String,
+    pub name_en: String,
+    pub icon: String,
+    pub scale: f64,
+}
+
+/// Витяг метаданих знімка кадру з decoded[0..3]
+pub fn extract_snapshot_meta(decoded: &Value) -> SnapshotMeta {
+    let mut meta = SnapshotMeta {
+        revision_hash: None,
+        sequence_num: None,
+        combat_active: true,
+        server_ts_ms: None,
+        ttl_sec: Some(30),
+    };
+
+    if let Some(arr) = decoded.as_array() {
+        // decoded[1]: revision metadata (seq, hash)
+        if arr.len() > 1 {
+            if let Some(rev_arr) = arr[1].as_array() {
+                for item in rev_arr {
+                    if let Some(s) = item.as_str() {
+                        if s.starts_with("http-") || s.len() > 16 {
+                            meta.revision_hash = Some(s.to_string());
+                        } else if s.chars().all(|c| c.is_ascii_digit()) {
+                            meta.sequence_num = Some(s.to_string());
+                        }
+                    }
+                }
+            } else if let Some(s) = arr[1].as_str() {
+                meta.revision_hash = Some(s.to_string());
+            }
+        }
+
+        // decoded[2]: TTL & combat active flag
+        if arr.len() > 2 {
+            if let Some(ttl_arr) = arr[2].as_array() {
+                if let Some(ttl) = ttl_arr.first().and_then(|v| v.as_u64()) {
+                    meta.ttl_sec = Some(ttl);
+                }
+                if let Some(active) = ttl_arr.get(1).and_then(|v| v.as_bool()) {
+                    meta.combat_active = active;
+                }
+            } else if let Some(active) = arr[2].as_bool() {
+                meta.combat_active = active;
+            }
+        }
+
+        // decoded[3]: Server timestamp
+        if arr.len() > 3 {
+            if let Some(ts) = arr[3].as_i64() {
+                meta.server_ts_ms = Some(ts);
+            } else if let Some(ts_arr) = arr[3].as_array() {
+                if let Some(ts) = ts_arr.first().and_then(|v| v.as_i64()) {
+                    meta.server_ts_ms = Some(ts);
+                }
+            }
+        }
+    }
+
+    meta
+}
+
+/// Витяг динамічної таксономії типів цілей з decoded[4][2]
+pub fn extract_taxonomy(decoded: &Value) -> Vec<TaxonomyItem> {
+    let mut items = Vec::new();
+    if let Some(arr) = decoded.as_array() {
+        if arr.len() > 4 {
+            if let Some(fourth) = arr[4].as_array() {
+                for sec in fourth {
+                    if let Some(table) = sec.as_array() {
+                        if !table.is_empty() {
+                            if let Some(first_row) = table[0].as_array() {
+                                if first_row.len() >= 4 && first_row[0].is_number() && first_row[1].is_string() {
+                                    for row in table {
+                                        if let Some(r) = row.as_array() {
+                                            if r.len() >= 3 {
+                                                let code = r[0].as_i64().unwrap_or(0);
+                                                let name_ua = r[1].as_str().unwrap_or("").to_string();
+                                                let name_en = r[2].as_str().unwrap_or("").to_string();
+                                                let icon = if r.len() > 3 { r[3].as_str().unwrap_or("").to_string() } else { String::new() };
+                                                let scale = if r.len() > 4 { r[4].as_f64().unwrap_or(1.0) } else { 1.0 };
+                                                items.push(TaxonomyItem { code, name_ua, name_en, icon, scale });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    items
 }
 
 /// Витяг координат та типів цілей з розкодованого AST дерева
@@ -392,9 +527,48 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
     const MAX_LAT: f64 = 52.37;
     const LAT_RANGE: f64 = 7.99;
 
+    // Спроба знайти масив попередніх точок траєкторій у decoded[5][0]
+    let mut trails_map: std::collections::HashMap<usize, Vec<(f64, f64)>> = std::collections::HashMap::new();
+    if let Some(arr) = decoded.as_array() {
+        if arr.len() > 5 {
+            if let Some(fifth) = arr[5].as_array() {
+                if let Some(trails_arr) = fifth.first().and_then(|v| v.as_array()) {
+                    for (t_idx, trk_val) in trails_arr.iter().enumerate() {
+                        if let Some(pt_list) = trk_val.as_array() {
+                            let mut trail_pts = Vec::new();
+                            for pt_item in pt_list {
+                                if let Some(pt_coords) = pt_item.as_array() {
+                                    if pt_coords.len() >= 2 {
+                                        let nx = pt_coords[0].as_f64().unwrap_or(0.0);
+                                        let ny = pt_coords[1].as_f64().unwrap_or(0.0);
+                                        if (0.0..=1.0).contains(&nx) && (0.0..=1.0).contains(&ny) {
+                                            let lon = MIN_LON + (nx * LON_RANGE);
+                                            let lat = MAX_LAT - (ny * LAT_RANGE);
+                                            trail_pts.push((lat, lon));
+                                        }
+                                    }
+                                } else if let Some(c_idx_val) = pt_item.as_u64() {
+                                    let c_i = c_idx_val as usize;
+                                    if c_i < coords.len() {
+                                        let lon = MIN_LON + (coords[c_i][0] * LON_RANGE);
+                                        let lat = MAX_LAT - (coords[c_i][1] * LAT_RANGE);
+                                        trail_pts.push((lat, lon));
+                                    }
+                                }
+                            }
+                            if !trail_pts.is_empty() {
+                                trails_map.insert(t_idx, trail_pts);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let mut result = Vec::new();
 
-    for t in targets {
+    for (target_row_idx, t) in targets.iter().enumerate() {
         if t.len() < 3 {
             continue;
         }
@@ -405,6 +579,43 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
         let c_idx = t[1] as usize;
         let typ_idx = t[2] as usize;
         let heading = if t.len() > 3 && !t[3].is_nan() { t[3] } else { 0.0 };
+
+        // Витяг confidence, time_offset, vel_x, vel_y
+        let confidence = if t.len() > 5 && t[5] >= 1.0 && t[5] <= 5.0 {
+            Some(t[5] as u8)
+        } else {
+            None
+        };
+
+        let time_offset_ms = if t.len() > 6 && t[6] >= 0.0 && t[6] <= 600000.0 {
+            Some(t[6] as i64)
+        } else {
+            None
+        };
+
+        let speed_kmh = if t.len() >= 9 {
+            let vel_x = t[7];
+            let vel_y = t[8];
+            if vel_x.abs() > 0.000001 || vel_y.abs() > 0.000001 {
+                let dx_km = vel_x * 1320.0;
+                let dy_km = vel_y * 888.0;
+                let dist_unit = (dx_km * dx_km + dy_km * dy_km).sqrt();
+                let cand = dist_unit * 180.0;
+                if cand >= 30.0 && cand <= 3500.0 {
+                    Some(cand)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let trail = trails_map.remove(&target_row_idx)
+            .or_else(|| trails_map.remove(&uuid_idx))
+            .unwrap_or_default();
 
         let uid = if let Some(ref uuids) = found_uuids {
             if uuid_idx < uuids.len() {
@@ -433,9 +644,378 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
                 raw_name,
                 raw_type_code: raw_code,
                 heading_deg: heading,
+                speed_kmh,
+                confidence,
+                time_offset_ms,
+                trail_points: trail,
             });
         }
     }
 
     result
+}
+
+/// Перетворення координат SVG (viewBox 0 0 260 175) у географічні (lon, lat)
+pub fn svg_xy_to_lon_lat(x: f64, y: f64) -> (f64, f64) {
+    let ce = |deg: f64| deg * std::f64::consts::PI / 180.0;
+    let te = |rad: f64| rad * 180.0 / std::f64::consts::PI;
+    let re = |lat: f64| ((std::f64::consts::PI / 4.0) + (ce(lat) / 2.0)).tan().ln();
+
+    let fe = ce(40.2275801 - 22.137059);
+    let ie = re(52.3791473) - re(44.184598);
+    let pe = (260.0 / fe).min(175.0 / ie);
+    let de = (260.0 - fe * pe) / 2.0;
+    let ke = (175.0 - ie * pe) / 2.0;
+
+    let lon = 22.137059 + te((x - de) / pe);
+    let c = re(52.3791473) - (y - ke) / pe;
+    let lat = te(2.0 * c.exp().atan() - (std::f64::consts::PI / 2.0));
+
+    (lon, lat)
+}
+
+/// Класифікація типу за назвою/міткою з SVG у канонічний код та назву
+pub fn classify_raw_surface_target(label: &str) -> (i64, String) {
+    let lower = label.to_lowercase();
+    if lower.contains("шахед") || lower.contains("shahed") || lower.contains("герань") {
+        (1, "Шахед".to_string())
+    } else if lower.contains("крилат") || lower.contains("х-101") || lower.contains("калібр") || lower.contains("missile") || lower.contains("ракета") {
+        (3, "Ракета".to_string())
+    } else if lower.contains("баліст") || lower.contains("ballistic") || lower.contains("іскандер-м") || lower.contains("кінжал") || lower.contains("srr") || lower.contains("mrr") {
+        (12, "Балістика".to_string())
+    } else if lower.contains("каб") || lower.contains("airbomb") || lower.contains("бомб") {
+        (5, "КАБ".to_string())
+    } else if lower.contains("дрон") || lower.contains("бпла") || lower.contains("drone") || lower.contains("розвід") {
+        (11, "БпЛА".to_string())
+    } else if lower.contains("літак") || lower.contains("plane") || lower.contains("авіація") || lower.contains("винищувач") || lower.contains("бомбардувальник") {
+        (9, "Авіація".to_string())
+    } else {
+        (0, if label.trim().is_empty() { "Ціль".to_string() } else { label.trim().to_string() })
+    }
+}
+
+static RE_TITLE_TAG: OnceLock<Regex> = OnceLock::new();
+static RE_TITLE_ATTR: OnceLock<Regex> = OnceLock::new();
+static RE_ID: OnceLock<Regex> = OnceLock::new();
+static RE_TRANS: OnceLock<Regex> = OnceLock::new();
+static RE_ANIM_TRANS: OnceLock<Regex> = OnceLock::new();
+static RE_MATRIX: OnceLock<Regex> = OnceLock::new();
+static RE_ROT: OnceLock<Regex> = OnceLock::new();
+static RE_ANIM_ROT: OnceLock<Regex> = OnceLock::new();
+
+/// Парсинг векторних цілей з декомпресованого SVG-документа
+pub fn extract_targets_from_svg(svg_str: &str) -> Result<Vec<RawExtractedTarget>, String> {
+    let re_title_tag = RE_TITLE_TAG.get_or_init(|| Regex::new(r"(?i)<title\b([^>]*)>(.*?)</title>").unwrap());
+    let re_title_attr = RE_TITLE_ATTR.get_or_init(|| Regex::new(r#"(?i)\bdata-l=["']([^"']+)["']"#).unwrap());
+    let re_id = RE_ID.get_or_init(|| Regex::new(r#"(?i)\bid=["']([^"']+)["']"#).unwrap());
+    let re_trans = RE_TRANS.get_or_init(|| Regex::new(r"(?i)translate\(\s*([-\d\.]+)[,\s]+([-\d\.]+)\s*\)").unwrap());
+    let re_anim_trans = RE_ANIM_TRANS.get_or_init(|| Regex::new(r#"(?is)<animateTransform\b[^>]*\btype=["']translate["'][^>]*(?:from|to|values)=["']([-\d\.]+)[,\s]+([-\d\.]+)"#).unwrap());
+    let re_matrix = RE_MATRIX.get_or_init(|| Regex::new(r"(?i)matrix\(\s*[-\d\.]+[,\s]+[-\d\.]+[,\s]+[-\d\.]+[,\s]+[-\d\.]+[,\s]+([-\d\.]+)[,\s]+([-\d\.]+)\s*\)").unwrap());
+    let re_rot = RE_ROT.get_or_init(|| Regex::new(r"(?i)rotate\(\s*([-\d\.]+)").unwrap());
+    let re_anim_rot = RE_ANIM_ROT.get_or_init(|| Regex::new(r#"(?is)<animateTransform\b[^>]*\btype=["']rotate["'][^>]*(?:from|to|values)=["']([-\d\.]+)"#).unwrap());
+
+    let mut results = Vec::new();
+
+    // Кожна векторна ціль має елемент <title>
+    for title_cap in re_title_tag.captures_iter(svg_str) {
+        let title_match = title_cap.get(0).unwrap();
+        let title_pos = title_match.start();
+
+        // Шукаємо найближчий відкриваючий тег <g перед <title>
+        let prefix = &svg_str[..title_pos];
+        let g_start = match prefix.rfind("<g") {
+            Some(idx) => idx,
+            None => continue,
+        };
+
+        let g_tag_content = match svg_str[g_start..].find('>') {
+            Some(idx) => &svg_str[g_start..g_start + idx + 1],
+            None => continue,
+        };
+
+        // Тіло цілі від закриття <g ...> до наступного </g>
+        let body_start = g_start + g_tag_content.len();
+        let body_end = match svg_str[title_pos..].find("</g>") {
+            Some(idx) => title_pos + idx,
+            None => svg_str.len().min(title_pos + 1024),
+        };
+        let body = &svg_str[body_start..body_end];
+
+        let title_attrs = title_cap.get(1).map(|m| m.as_str()).unwrap_or("");
+        let title_inner = title_cap.get(2).map(|m| m.as_str()).unwrap_or("");
+
+        let label = if let Some(tc) = re_title_attr.captures(title_attrs) {
+            tc.get(1).map(|m| m.as_str().to_string())
+        } else if !title_inner.trim().is_empty() {
+            Some(title_inner.trim().to_string())
+        } else {
+            None
+        };
+
+        let label_str = label.unwrap_or_else(|| "Ціль".to_string());
+        let (raw_type_code, raw_name) = classify_raw_surface_target(&label_str);
+
+        let id = if let Some(ic) = re_id.captures(g_tag_content) {
+            ic.get(1).map(|m| m.as_str().to_string()).unwrap_or_else(|| format!("s2_{}", results.len()))
+        } else if let Some(ic) = re_id.captures(body) {
+            ic.get(1).map(|m| m.as_str().to_string()).unwrap_or_else(|| format!("s2_{}", results.len()))
+        } else {
+            format!("s2_{}", results.len())
+        };
+
+        let coords = if let Some(tc) = re_trans.captures(g_tag_content).or_else(|| re_trans.captures(body)) {
+            let x: f64 = tc.get(1).and_then(|m| m.as_str().parse().ok()).unwrap_or(0.0);
+            let y: f64 = tc.get(2).and_then(|m| m.as_str().parse().ok()).unwrap_or(0.0);
+            Some((x, y))
+        } else if let Some(tc) = re_anim_trans.captures(body) {
+            let x: f64 = tc.get(1).and_then(|m| m.as_str().parse().ok()).unwrap_or(0.0);
+            let y: f64 = tc.get(2).and_then(|m| m.as_str().parse().ok()).unwrap_or(0.0);
+            Some((x, y))
+        } else if let Some(mc) = re_matrix.captures(g_tag_content).or_else(|| re_matrix.captures(body)) {
+            let x: f64 = mc.get(1).and_then(|m| m.as_str().parse().ok()).unwrap_or(0.0);
+            let y: f64 = mc.get(2).and_then(|m| m.as_str().parse().ok()).unwrap_or(0.0);
+            Some((x, y))
+        } else {
+            None
+        };
+
+        let (x, y) = match coords {
+            Some((x, y)) if x >= 0.0 && y >= 0.0 && !x.is_nan() && !y.is_nan() => (x, y),
+            _ => continue,
+        };
+
+        let heading_deg = if let Some(rc) = re_rot.captures(g_tag_content).or_else(|| re_rot.captures(body)) {
+            rc.get(1).and_then(|m| m.as_str().parse().ok()).unwrap_or(0.0)
+        } else if let Some(rc) = re_anim_rot.captures(body) {
+            rc.get(1).and_then(|m| m.as_str().parse().ok()).unwrap_or(0.0)
+        } else {
+            0.0
+        };
+
+        let (lon, lat) = svg_xy_to_lon_lat(x, y);
+
+        results.push(RawExtractedTarget {
+            id,
+            lat,
+            lon,
+            raw_name,
+            raw_type_code,
+            heading_deg,
+            speed_kmh: None,
+            confidence: None,
+            time_offset_ms: None,
+            trail_points: Vec::new(),
+        });
+    }
+
+    Ok(results)
+}
+
+/// Декодування зашифрованого ChaCha20 + GZIP корисного навантаження Surface v2/vX (~s2:, ~s3:, ~s4: тощо)
+pub fn decode_surface_v2_payload(payload_str: &str) -> Result<Vec<RawExtractedTarget>, String> {
+    let colon_pos = payload_str.find(':').ok_or_else(|| "Missing colon in payload prefix".to_string())?;
+    let b64_part = &payload_str[colon_pos + 1..];
+    let sanitized = b64_part.replace('-', "+").replace('_', "/");
+    let pad_len = (4 - sanitized.len() % 4) % 4;
+    let mut padded = sanitized;
+    padded.push_str(&"=".repeat(pad_len));
+
+    let mut raw_bytes = BASE64_STANDARD
+        .decode(padded.as_bytes())
+        .map_err(|e| format!("Base64 decode failed: {}", e))?;
+
+    let raw_len = raw_bytes.len();
+    if raw_len < 16 {
+        return Err("Payload too short: < 16 bytes".to_string());
+    }
+
+    let f = u32::from_le_bytes(raw_bytes[0..4].try_into().unwrap());
+    let h = u32::from_le_bytes(raw_bytes[4..8].try_into().unwrap());
+    let g = u32::from_le_bytes(raw_bytes[8..12].try_into().unwrap());
+    let checksum_expected = u32::from_le_bytes(raw_bytes[12..16].try_into().unwrap());
+
+    let mut state_arr: [u32; 16] = [
+        1634760805, 857760878, 2036477234, 1797285236,
+        2838917605, 566540499, 2028117766, 3025996967,
+        1063430289, 3353677899, 1519178294, 2422993229,
+        1, f, h, g,
+    ];
+
+    let mut block = [0u32; 16];
+
+    // ChaCha20 розшифрування блоками по 64 байти
+    for i in (16..raw_len).step_by(64) {
+        block.copy_from_slice(&state_arr);
+        for _ in 0..10 {
+            quarter_round(&mut block, 0, 4, 8, 12);
+            quarter_round(&mut block, 1, 5, 9, 13);
+            quarter_round(&mut block, 2, 6, 10, 14);
+            quarter_round(&mut block, 3, 7, 11, 15);
+            quarter_round(&mut block, 0, 5, 10, 15);
+            quarter_round(&mut block, 1, 6, 11, 12);
+            quarter_round(&mut block, 2, 7, 8, 13);
+            quarter_round(&mut block, 3, 4, 9, 14);
+        }
+
+        let block_len = 64.min(raw_len - i);
+        for j in 0..block_len {
+            let key_word = block[j >> 2].wrapping_add(state_arr[j >> 2]);
+            raw_bytes[i + j] ^= ((key_word >> (8 * (3 & j))) & 0xFF) as u8;
+        }
+        state_arr[12] = state_arr[12].wrapping_add(1);
+    }
+
+    // FNV-1a перевірка цілісності корисного навантаження
+    let mut fnv: u32 = 2166136261;
+    for &b in &raw_bytes[16..] {
+        fnv = (fnv ^ (b as u32)).wrapping_mul(16777619);
+    }
+    if fnv != checksum_expected {
+        return Err(format!(
+            "FNV-1a checksum mismatch: expected {}, got {}",
+            checksum_expected, fnv
+        ));
+    }
+
+    let compressed_slice = &raw_bytes[16..];
+    let mut xml_str = String::new();
+
+    if compressed_slice.len() >= 2 && compressed_slice[0] == 0x1f && compressed_slice[1] == 0x8b {
+        let mut gz = GzDecoder::new(compressed_slice);
+        gz.read_to_string(&mut xml_str)
+            .map_err(|e| format!("Gzip decompression failed: {}", e))?;
+    } else {
+        use flate2::read::DeflateDecoder;
+        let mut def = DeflateDecoder::new(compressed_slice);
+        if def.read_to_string(&mut xml_str).is_err() {
+            xml_str.clear();
+            use flate2::read::ZlibDecoder;
+            let mut zlib = ZlibDecoder::new(compressed_slice);
+            zlib.read_to_string(&mut xml_str)
+                .map_err(|e| format!("Decompression failed: {}", e))?;
+        }
+    }
+
+    extract_targets_from_svg(&xml_str)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_svg_xy_to_lon_lat() {
+        // Київ: lon ~30.5234, lat ~50.4501 -> x ~120.66, y ~43.83
+        let (lon, lat) = svg_xy_to_lon_lat(120.66, 43.83);
+        assert!((lon - 30.5234).abs() < 0.1, "Longitude mismatch: {}", lon);
+        assert!((lat - 50.4501).abs() < 0.1, "Latitude mismatch: {}", lat);
+    }
+
+    #[test]
+    fn test_extract_targets_from_svg() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 175" data-f="4">
+            <g data-z="m">
+                <g id="tgt-shahed-1" transform="translate(120.66, 43.83)">
+                    <title data-l="Shahed">Шахед</title>
+                    <animateTransform type="rotate" from="135" to="135"/>
+                </g>
+                <g id="tgt-missile-2">
+                    <title data-l="Ракета">Крилата ракета</title>
+                    <animateTransform type="translate" from="150.0 60.0" to="152.0 62.0"/>
+                    <animateTransform type="rotate" from="270" to="270"/>
+                </g>
+            </g>
+        </svg>"#;
+
+        let targets = extract_targets_from_svg(svg).expect("Extraction should succeed");
+        assert_eq!(targets.len(), 2);
+        assert_eq!(targets[0].id, "tgt-shahed-1");
+        assert_eq!(targets[0].raw_name, "Шахед");
+        assert_eq!(targets[0].raw_type_code, 1);
+        assert_eq!(targets[0].heading_deg, 135.0);
+        assert!((targets[0].lon - 30.5234).abs() < 0.1);
+        assert!((targets[0].lat - 50.4501).abs() < 0.1);
+
+        assert_eq!(targets[1].id, "tgt-missile-2");
+        assert_eq!(targets[1].raw_name, "Ракета");
+        assert_eq!(targets[1].raw_type_code, 3);
+        assert_eq!(targets[1].heading_deg, 270.0);
+    }
+
+    #[test]
+    fn test_decode_surface_v2_payload() {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 175" data-f="4">
+            <g data-z="m">
+                <g id="tgt-shahed-test" transform="translate(120.66, 43.83)">
+                    <title data-l="Shahed">Шахед</title>
+                    <animateTransform type="rotate" from="180" to="180"/>
+                </g>
+            </g>
+        </svg>"#;
+
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(svg.as_bytes()).unwrap();
+        let gz_bytes = encoder.finish().unwrap();
+
+        let mut fnv: u32 = 2166136261;
+        for &b in &gz_bytes {
+            fnv = (fnv ^ (b as u32)).wrapping_mul(16777619);
+        }
+
+        let f = 0x11223344u32;
+        let h = 0x55667788u32;
+        let g = 0x99aabbc0u32;
+
+        let mut state_arr: [u32; 16] = [
+            1634760805, 857760878, 2036477234, 1797285236,
+            2838917605, 566540499, 2028117766, 3025996967,
+            1063430289, 3353677899, 1519178294, 2422993229,
+            1, f, h, g,
+        ];
+
+        let mut encrypted = gz_bytes.clone();
+        let mut block = [0u32; 16];
+        let raw_len = encrypted.len();
+
+        for i in (0..raw_len).step_by(64) {
+            block.copy_from_slice(&state_arr);
+            for _ in 0..10 {
+                quarter_round(&mut block, 0, 4, 8, 12);
+                quarter_round(&mut block, 1, 5, 9, 13);
+                quarter_round(&mut block, 2, 6, 10, 14);
+                quarter_round(&mut block, 3, 7, 11, 15);
+                quarter_round(&mut block, 0, 5, 10, 15);
+                quarter_round(&mut block, 1, 6, 11, 12);
+                quarter_round(&mut block, 2, 7, 8, 13);
+                quarter_round(&mut block, 3, 4, 9, 14);
+            }
+            let block_len = 64.min(raw_len - i);
+            for j in 0..block_len {
+                let key_word = block[j >> 2].wrapping_add(state_arr[j >> 2]);
+                encrypted[i + j] ^= ((key_word >> (8 * (3 & j))) & 0xFF) as u8;
+            }
+            state_arr[12] = state_arr[12].wrapping_add(1);
+        }
+
+        let mut full_bytes = Vec::new();
+        full_bytes.extend_from_slice(&f.to_le_bytes());
+        full_bytes.extend_from_slice(&h.to_le_bytes());
+        full_bytes.extend_from_slice(&g.to_le_bytes());
+        full_bytes.extend_from_slice(&fnv.to_le_bytes());
+        full_bytes.extend_from_slice(&encrypted);
+
+        let b64 = BASE64_STANDARD.encode(&full_bytes);
+        let payload = format!("~s2:{}", b64);
+
+        let decoded = decode_surface_v2_payload(&payload).expect("Decryption should succeed");
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].id, "tgt-shahed-test");
+        assert_eq!(decoded[0].raw_name, "Шахед");
+        assert_eq!(decoded[0].raw_type_code, 1);
+        assert_eq!(decoded[0].heading_deg, 180.0);
+    }
 }

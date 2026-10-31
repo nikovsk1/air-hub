@@ -1,8 +1,8 @@
-﻿use std::collections::HashMap;
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
-use crate::canonical_registry::classify_target;
+use crate::canonical_registry::{classify_target, ExchangeLogManager};
 use crate::crypto_decoder::RawExtractedTarget;
 use crate::geo_math::{
     calculate_bearing, calculate_haversine_distance
@@ -53,6 +53,10 @@ pub struct TargetTrack {
     pub first_seen: f64,
     pub last_seen: f64,
     pub trajectory: Vec<TrajectoryPoint>,
+    #[serde(default)]
+    pub confidence: Option<u8>,
+    #[serde(default)]
+    pub last_history_sync_ts: f64,
 }
 
 fn heading_diff(a: f64, b: f64) -> f64 {
@@ -100,7 +104,32 @@ impl TargetTrack {
                 lon,
                 ts: now as i64,
             }],
+            confidence: None,
+            last_history_sync_ts: 0.0,
         }
+    }
+
+    pub fn with_trail(mut self, trail_pts: &[(f64, f64)], base_ts: i64) -> Self {
+        if !trail_pts.is_empty() {
+            let total = trail_pts.len();
+            let step = if total > 100 { total / 60 } else { 1 };
+            let mut traj = Vec::with_capacity(total / step + 2);
+            for (idx, pt) in trail_pts.iter().enumerate().step_by(step) {
+                let offset_sec = ((total - idx) * 10) as i64;
+                traj.push(TrajectoryPoint {
+                    lat: pt.0,
+                    lon: pt.1,
+                    ts: base_ts.saturating_sub(offset_sec),
+                });
+            }
+            traj.push(TrajectoryPoint {
+                lat: self.lat,
+                lon: self.lon,
+                ts: base_ts,
+            });
+            self.trajectory = traj;
+        }
+        self
     }
 
     pub fn update(
@@ -236,7 +265,13 @@ pub struct TargetTracker {
 }
 
 impl TargetTracker {
-    pub fn update_batch(&mut self, incoming_targets: &[RawExtractedTarget], detector: &OblastDetector) -> Vec<TargetTrack> {
+    pub fn update_batch(
+        &mut self,
+        incoming_targets: &[RawExtractedTarget],
+        detector: &OblastDetector,
+        exchange_mgr: Option<&ExchangeLogManager>,
+        source: &str,
+    ) -> Vec<TargetTrack> {
         let now = now_sec();
         let mut seen_ids = std::collections::HashSet::new();
 
@@ -244,37 +279,76 @@ impl TargetTracker {
             seen_ids.insert(&t.id);
             let ob_info = detector.find_location_info(t.lat, t.lon);
 
+            // Автоматична фіксація нерозпізнаних типів цілей у журналі обміну
+            let (cat, _meta) = classify_target(&t.raw_name, t.raw_type_code);
+            if cat == "unknown" && (!t.raw_name.is_empty() || t.raw_type_code != 0) {
+                if let Some(mgr) = exchange_mgr {
+                    mgr.record_unmapped(
+                        "threat",
+                        &t.raw_name,
+                        Some(t.raw_type_code),
+                        "unknown",
+                        source,
+                        Some(&format!("Нерозпізнана назва '{}', сирий код {}", t.raw_name, t.raw_type_code)),
+                    );
+                }
+            }
+
+            let eff_speed = t.speed_kmh.unwrap_or(0.0);
+
             if let Some(trk) = self.tracks.get_mut(&t.id) {
-                trk.update(
-                    t.lat,
-                    t.lon,
-                    t.heading_deg,
-                    0.0,
-                    ob_info.name,
-                    ob_info.id,
-                    Some(&t.raw_name),
-                    Some(t.raw_type_code),
-                );
+                // Timestamp Guard: захист від перескоків назад у часі між стрімами
+                let obs_ts = if let Some(offset) = t.time_offset_ms {
+                    now - (offset as f64 / 1000.0)
+                } else {
+                    now
+                };
+
+                let is_newer = obs_ts >= (trk.last_seen - 3.0);
+                if is_newer {
+                    trk.update(
+                        t.lat,
+                        t.lon,
+                        t.heading_deg,
+                        eff_speed,
+                        ob_info.name,
+                        ob_info.id,
+                        Some(&t.raw_name),
+                        Some(t.raw_type_code),
+                    );
+                } else if eff_speed > 0.0 {
+                    trk.speed_kmh = eff_speed;
+                }
+
+                if let Some(c) = t.confidence {
+                    trk.confidence = Some(c);
+                }
             } else {
-                let trk = TargetTrack::new(
+                let mut trk = TargetTrack::new(
                     t.id.clone(),
                     t.raw_name.clone(),
                     t.raw_type_code,
                     t.lat,
                     t.lon,
                     t.heading_deg,
-                    0.0,
+                    eff_speed,
                     ob_info.name,
                     ob_info.id,
                 );
+                if !t.trail_points.is_empty() {
+                    trk = trk.with_trail(&t.trail_points, now as i64);
+                }
+                if let Some(c) = t.confidence {
+                    trk.confidence = Some(c);
+                }
                 self.tracks.insert(t.id.clone(), trk);
             }
         }
 
-        // Перевірка застарілих треків (> 25 сек) -> фіксація як status: "lost"
+        // Перевірка застарілих треків (> 40 сек) -> фіксація як status: "lost"
         let mut expired_ids = Vec::new();
         for (id, trk) in &self.tracks {
-            if !seen_ids.contains(id) && (now - trk.last_seen) > 25.0 {
+            if !seen_ids.contains(id) && (now - trk.last_seen) > 40.0 {
                 expired_ids.push(id.clone());
             }
         }
@@ -313,12 +387,13 @@ impl TargetTracker {
             || self.recent_lost.values().any(|v| (now - v.lost_ts) > 120.0)
     }
 
-    pub fn cleanup_stale(&mut self, now: f64) {
+    pub fn cleanup_stale(&mut self, now: f64) -> Vec<TargetTrack> {
         let expired_ids: Vec<String> = self.tracks.iter()
             .filter(|(_, trk)| (now - trk.last_seen) > 180.0)
             .map(|(id, _)| id.clone())
             .collect();
 
+        let mut expired_tracks = Vec::new();
         for tid in expired_ids {
             if let Some(trk) = self.tracks.remove(&tid) {
                 self.recent_lost.insert(
@@ -337,9 +412,11 @@ impl TargetTracker {
                         trajectory: trk.trajectory.clone(),
                     },
                 );
+                expired_tracks.push(trk);
             }
         }
         self.recent_lost.retain(|_, v| (now - v.lost_ts) <= 120.0);
+        expired_tracks
     }
 }
 
@@ -383,6 +460,7 @@ pub struct ThreatState {
     pub mig_active: bool,
     pub last_update_ts: f64,
     pub last_targets_update_ts: f64,
+    pub last_primary_targets_ts: f64,
     pub last_alerts_update_ts: f64,
     pub update_seq: u64,
     pub upstream_provider: String,
@@ -399,6 +477,7 @@ impl Default for ThreatState {
             mig_active: false,
             last_update_ts: now_sec(),
             last_targets_update_ts: now_sec(),
+            last_primary_targets_ts: now_sec(),
             last_alerts_update_ts: now_sec(),
             update_seq: 1,
             upstream_provider: "Centrifugo (ws.ukrainealarm.com)".to_string(),
@@ -499,3 +578,41 @@ impl ThreatState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_threat_state_primary_targets_ts() {
+        let st = ThreatState::default();
+        assert!(st.last_primary_targets_ts > 0.0);
+        assert!(st.last_targets_update_ts > 0.0);
+        assert_eq!(st.official_alerts.len(), 0);
+    }
+
+    #[test]
+    fn test_cleanup_stale_returns_tracks() {
+        let mut tracker = TargetTracker::default();
+        let trk = TargetTrack::new(
+            "test_1".to_string(),
+            "shahed".to_string(),
+            1,
+            50.0,
+            30.0,
+            90.0,
+            185.0,
+            "Київська".to_string(),
+            "14".to_string(),
+        );
+        tracker.tracks.insert("test_1".to_string(), trk);
+        let future_now = now_sec() + 200.0;
+        assert!(tracker.has_stale_or_expired(future_now));
+        let lost = tracker.cleanup_stale(future_now);
+        assert_eq!(lost.len(), 1);
+        assert_eq!(lost[0].id, "test_1");
+        assert_eq!(tracker.tracks.len(), 0);
+        assert_eq!(tracker.recent_lost.len(), 1);
+    }
+}
+

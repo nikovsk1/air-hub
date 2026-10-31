@@ -1,6 +1,8 @@
-﻿use std::net::SocketAddr;
+use std::fs;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use chrono::Timelike;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{info, warn};
@@ -54,6 +56,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 3. Завантаження географічного детектора областей та районів
     let geojson_path = config.data_dir.join("regions.geojson");
+    if !geojson_path.exists() {
+        let default_geojson = config.data_defaults_dir.join("regions.geojson");
+        if default_geojson.exists() {
+            info!("Initializing regions.geojson from defaults: {:?}", default_geojson);
+            let _ = fs::create_dir_all(&config.data_dir);
+            if let Err(e) = fs::copy(&default_geojson, &geojson_path) {
+                warn!("Failed to copy default regions.geojson: {}", e);
+            }
+        }
+    }
+
     let detector = match OblastDetector::load(&geojson_path) {
         Ok(d) => Arc::new(d),
         Err(e) => {
@@ -111,18 +124,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let t_state = threat_state.clone();
         let det = detector.clone();
         let hist = history_mgr.clone();
+        let exch = exchange_mgr.clone();
         let client = http_client.clone();
         tokio::spawn(async move {
-            collectors::ukrainealarm_ws::run_ukrainealarm_collector(t_state, det, hist, client).await;
-        });
-    }
-
-    {
-        let t_state = threat_state.clone();
-        let det = detector.clone();
-        let client = http_client.clone();
-        tokio::spawn(async move {
-            collectors::official_alerts::run_official_alerts_collector(t_state, det, client).await;
+            collectors::ukrainealarm_ws::run_ukrainealarm_collector(t_state, det, hist, exch, client).await;
         });
     }
 
@@ -130,9 +135,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let t_state = threat_state.clone();
         let det = detector.clone();
         let hist = history_mgr.clone();
+        let exch = exchange_mgr.clone();
         let client = http_client.clone();
         tokio::spawn(async move {
-            collectors::neptun_failover::run_failover_neptun_collector(t_state, det, hist, client).await;
+            collectors::ukrainealarm_ws::run_ukrainealarm_http_fallback(t_state, det, hist, exch, client).await;
+        });
+    }
+
+    {
+        let t_state = threat_state.clone();
+        let det = detector.clone();
+        let exch = exchange_mgr.clone();
+        let client = http_client.clone();
+        tokio::spawn(async move {
+            collectors::official_alerts::run_official_alerts_collector(t_state, det, exch, client).await;
+        });
+    }
+
+    {
+        let t_state = threat_state.clone();
+        let det = detector.clone();
+        let hist = history_mgr.clone();
+        let exch = exchange_mgr.clone();
+        let client = http_client.clone();
+        tokio::spawn(async move {
+            collectors::neptun_failover::run_failover_neptun_collector(t_state, det, hist, exch, client).await;
         });
     }
 
@@ -147,12 +174,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    // 9.1 Фонова задача очищення застарілих цілей без оновлень (кожні 5 сек)
+    // 9.1 Фоновий сторожовий таймер очищення застарілих цілей (кожні 35 сек)
     {
         let t_state = threat_state.clone();
+        let hist = history_mgr.clone();
         tokio::spawn(async move {
             loop {
-                sleep(Duration::from_secs(5)).await;
+                sleep(Duration::from_secs(35)).await;
                 let now = crate::tracker::now_sec();
                 let needs_cleanup = {
                     let st = t_state.read().await;
@@ -160,8 +188,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 };
                 if needs_cleanup {
                     let mut st = t_state.write().await;
-                    st.tracker.cleanup_stale(now);
+                    let expired = st.tracker.cleanup_stale(now);
+                    for trk in &expired {
+                        hist.record_track(trk, "lost");
+                    }
                 }
+            }
+        });
+    }
+
+    // 9.2 Фонова задача щогодинної звірки та виправлення денної статистики
+    {
+        let hist = history_mgr.clone();
+        let client = http_client.clone();
+        tokio::spawn(async move {
+            // Пауза 45 секунд після старту сервера
+            sleep(Duration::from_secs(45)).await;
+            loop {
+                let kyiv = crate::history::HistoryManager::now_kyiv();
+                let today_str = kyiv.format("%Y-%m-%d").to_string();
+
+                info!("Running hourly reconciliation with UkraineAlarm targetHistory for {}...", today_str);
+                let _ = hist.reconcile_date_with_upstream(&today_str, &client).await;
+
+                // Якщо зараз перша година доби (00:00 - 00:20), фіналізуємо вчорашній день
+                if kyiv.hour() == 0 && kyiv.minute() < 20 {
+                    if let Some(prev_date) = kyiv.date_naive().pred_opt() {
+                        let y_str = prev_date.format("%Y-%m-%d").to_string();
+                        info!("Finalizing yesterday's summary for {}...", y_str);
+                        let _ = hist.reconcile_date_with_upstream(&y_str, &client).await;
+                    }
+                }
+
+                sleep(Duration::from_secs(3600)).await;
             }
         });
     }

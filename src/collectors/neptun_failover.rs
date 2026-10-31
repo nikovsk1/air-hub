@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{info, warn};
 
+use crate::canonical_registry::ExchangeLogManager;
 use crate::crypto_decoder::RawExtractedTarget;
 use crate::geo_math::calculate_bearing;
 use crate::history::HistoryManager;
@@ -18,6 +19,7 @@ pub async fn run_failover_neptun_collector(
     threat_state: Arc<RwLock<ThreatState>>,
     detector: Arc<OblastDetector>,
     history_mgr: Arc<HistoryManager>,
+    exchange_mgr: Arc<ExchangeLogManager>,
     http_client: reqwest::Client,
 ) {
     loop {
@@ -25,14 +27,14 @@ pub async fn run_failover_neptun_collector(
 
         let needs_failover = {
             let state = threat_state.read().await;
-            (now_sec() - state.last_targets_update_ts) > 45.0
+            (now_sec() - state.last_primary_targets_ts) > 45.0
         };
 
         if !needs_failover {
             continue;
         }
 
-        warn!("Centrifugo WebSocket targets silent >45s. Triggering Neptun failover poller...");
+        warn!("All UkraineAlarm streams (WebSocket & HTTP Fallback) silent >45s. Triggering Tier 3 Neptun disaster recovery poller...");
 
         // 1. Резервний збір повітряних цілей
         let threats_url = "https://neptun.in.ua/api/v1/threats";
@@ -89,20 +91,32 @@ pub async fn run_failover_neptun_collector(
                             raw_name: raw_combined,
                             raw_type_code: raw_code,
                             heading_deg: heading,
+                            speed_kmh: None,
+                            confidence: None,
+                            time_offset_ms: None,
+                            trail_points: Vec::new(),
                         });
                     }
 
                     let extracted_count = extracted.len();
                     let mut state = threat_state.write().await;
-                    state.tracker.update_batch(&extracted, &detector);
+                    let lost_tracks = state.tracker.update_batch(&extracted, &*detector, Some(&*exchange_mgr), "Neptun Failover");
                     state.recompute_oblast_alerts(&detector);
                     state.last_targets_update_ts = now_sec();
                     state.last_update_ts = now_sec();
                     state.update_seq += 1;
                     state.upstream_provider = "Neptun Failover REST API".to_string();
 
-                    for trk in state.tracker.tracks.values() {
-                        history_mgr.record_track(trk, "active");
+                    for trk in state.tracker.tracks.values_mut() {
+                        let is_new = trk.trajectory.len() <= 1;
+                        let time_since_hist = now_sec() - trk.last_history_sync_ts;
+                        if is_new || time_since_hist >= 15.0 {
+                            history_mgr.record_track(trk, "active");
+                            trk.last_history_sync_ts = now_sec();
+                        }
+                    }
+                    for trk in &lost_tracks {
+                        history_mgr.record_track(trk, "lost");
                     }
                     if extracted_count > 0 {
                         info!("Neptun failover: updated {} active targets from backup feed", extracted_count);
@@ -123,6 +137,7 @@ pub async fn run_failover_neptun_collector(
             if let Ok(val) = resp.json::<Value>().await {
                 let mut state = threat_state.write().await;
                 let mut updated_any = false;
+                let mut active_neptun_ids = std::collections::HashSet::new();
 
                 // 2.1 Області з neptun
                 if let Some(ob_arr) = val.get("oblasts").and_then(|o| o.as_array()) {
@@ -139,6 +154,7 @@ pub async fn run_failover_neptun_collector(
                                 "red".to_string()
                             };
 
+                            active_neptun_ids.insert(ob_id.clone());
                             state.official_alerts.insert(
                                 ob_id.clone(),
                                 OfficialAlert {
@@ -152,6 +168,15 @@ pub async fn run_failover_neptun_collector(
                                 },
                             );
                             updated_any = true;
+                        } else if !ob_name.is_empty() {
+                            exchange_mgr.record_unmapped(
+                                "region",
+                                ob_name,
+                                None,
+                                "unmapped",
+                                "Neptun",
+                                Some(&format!("Область '{}' не знайдена в словнику детектору", ob_name)),
+                            );
                         }
                     }
                 }
@@ -168,6 +193,7 @@ pub async fn run_failover_neptun_collector(
                                 "red".to_string()
                             };
 
+                            active_neptun_ids.insert(r_id.clone());
                             state.official_alerts.insert(
                                 r_id.clone(),
                                 OfficialAlert {
@@ -181,6 +207,15 @@ pub async fn run_failover_neptun_collector(
                                 },
                             );
                             updated_any = true;
+                        } else if !r_name.is_empty() {
+                            exchange_mgr.record_unmapped(
+                                "region",
+                                r_name,
+                                None,
+                                "unmapped",
+                                "Neptun",
+                                Some(&format!("Район '{}' не знайдений в словнику детектору", r_name)),
+                            );
                         }
                     }
                 }
@@ -199,6 +234,9 @@ pub async fn run_failover_neptun_collector(
                         let color = item.get("color").and_then(|c| c.as_str()).unwrap_or("red").to_string();
 
                         if !reg_id.is_empty() {
+                            if alert {
+                                active_neptun_ids.insert(reg_id.clone());
+                            }
                             let level = if crate::oblast_detector::get_canonical_raion_to_oblast().contains_key(reg_id.as_str()) {
                                 "Raion".to_string()
                             } else {
@@ -217,6 +255,38 @@ pub async fn run_failover_neptun_collector(
                                     updated_at: chrono::Utc::now().to_rfc3339(),
                                 },
                             );
+                            updated_any = true;
+                        }
+                    }
+                }
+
+                // 2.4 Скидання відбоїв (Neptun повертає лише активні тривоги: регіони, яких немає у відповіді, вимикаємо)
+                let has_neptun_data = val.get("oblasts").is_some() || val.get("raions").is_some() || val.get("alerts").is_some();
+                if has_neptun_data {
+                    let now_iso = chrono::Utc::now().to_rfc3339();
+                    for alert in state.official_alerts.values_mut() {
+                        if !alert.alert {
+                            continue;
+                        }
+
+                        let should_clear = if alert.level == "State" {
+                            // Якщо це область і її немає в active_neptun_ids -> знімаємо тривогу
+                            !active_neptun_ids.contains(&alert.id)
+                        } else {
+                            // Якщо це район чи громада: якщо в її області немає тривоги -> знімаємо і в громаді
+                            let parent_ob_id = detector.get_oblast_id_by_region(&alert.id);
+                            if parent_ob_id != "0" {
+                                !active_neptun_ids.contains(&parent_ob_id)
+                            } else {
+                                !active_neptun_ids.contains(&alert.id)
+                            }
+                        };
+
+                        if should_clear {
+                            alert.alert = false;
+                            alert.color = "none".to_string();
+                            alert.alert_type = "none".to_string();
+                            alert.updated_at = now_iso.clone();
                             updated_any = true;
                         }
                     }
