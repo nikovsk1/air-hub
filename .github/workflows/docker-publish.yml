@@ -25,7 +25,7 @@ jobs:
             jobs: 2
           - arch: armv7
             platform: linux/arm/v7
-            jobs: 1
+            jobs: 2
 
     steps:
       - name: Checkout Repository
