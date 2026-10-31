@@ -8,10 +8,29 @@ on:
 
 jobs:
   # =========================================================================
+  # Phase 0: Fast CI verification & test gate (fail-fast before Docker builds)
+  # =========================================================================
+  test:
+    name: Fast CI Test Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Stable Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run Cargo Check & Tests
+        run: |
+          cargo check --locked
+          cargo test --locked
+
+  # =========================================================================
   # Phase 1: Parallel multi-platform build across independent runners
   # =========================================================================
   build:
     name: Build ${{ matrix.arch }}
+    needs: test
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
