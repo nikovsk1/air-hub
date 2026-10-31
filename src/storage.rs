@@ -454,7 +454,7 @@ impl StorageManager {
             active: true,
             danger_zone: eff_danger,
             alert_threat: alert_threat.unwrap_or(true),
-            react_threats: react_threats.unwrap_or_else(|| user.target_react_threats.clone()),
+            react_threats: react_threats.filter(|v| !v.is_empty()).unwrap_or_else(|| user.target_react_threats.clone()),
             alert_siren: alert_siren.unwrap_or(user.alert_siren),
             alert_mig: alert_mig.unwrap_or(user.alert_mig),
             alert_artillery: alert_artillery.unwrap_or(user.alert_artillery),
@@ -497,7 +497,7 @@ impl StorageManager {
         if let Some(act) = active { slot.active = act; }
         if let Some(dz) = danger_zone { slot.danger_zone = dz; }
         if let Some(at) = alert_threat { slot.alert_threat = at; }
-        if let Some(rt) = react_threats { slot.react_threats = rt; }
+        if let Some(rt) = react_threats.filter(|v| !v.is_empty()) { slot.react_threats = rt; }
         if let Some(as_) = alert_siren { slot.alert_siren = as_; }
         if let Some(am) = alert_mig { slot.alert_mig = am; }
         if let Some(aa) = alert_artillery { slot.alert_artillery = aa; }

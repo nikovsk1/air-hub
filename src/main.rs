@@ -153,9 +153,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::spawn(async move {
             loop {
                 sleep(Duration::from_secs(5)).await;
-                let mut st = t_state.write().await;
                 let now = crate::tracker::now_sec();
-                st.tracker.cleanup_stale(now);
+                let needs_cleanup = {
+                    let st = t_state.read().await;
+                    st.tracker.has_stale_or_expired(now)
+                };
+                if needs_cleanup {
+                    let mut st = t_state.write().await;
+                    st.tracker.cleanup_stale(now);
+                }
             }
         });
     }

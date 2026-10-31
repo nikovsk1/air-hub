@@ -1,4 +1,4 @@
-﻿use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -42,10 +42,21 @@ pub struct HistoryFileInfo {
     pub size_bytes: u64,
 }
 
+/// Легка структура статистики за поточну добу (живе в RAM, O(1) доступ)
+#[derive(Debug, Clone)]
+struct TodayStats {
+    date: String,
+    tracked_target_ids: HashSet<String>,
+    total: usize,
+    by_category: HashMap<String, usize>,
+}
+
 pub struct HistoryManager {
     pub history_dir: PathBuf,
     dirty_months: RwLock<HashSet<String>>,
-    cache: RwLock<HashMap<String, HashMap<String, Value>>>, // month -> targets
+    pending_dirty: RwLock<HashMap<String, HashMap<String, Value>>>, // month -> targets pending write
+    read_cache: RwLock<HashMap<String, Value>>,                     // LRU cache for queries (max 2)
+    today_stats: RwLock<TodayStats>,                               // O(1) instant stats for gauge
     gdrive_synced_months: RwLock<HashSet<String>>,
 }
 
@@ -54,10 +65,49 @@ impl HistoryManager {
         let history_dir = data_dir.join("history");
         let _ = fs::create_dir_all(&history_dir);
 
+        let now = Utc::now();
+        let today_str = now.format("%Y-%m-%d").to_string();
+        let current_month = format!("{:04}-{:02}", now.year(), now.month());
+
+        // Завантажуємо статистику за сьогодні з диску під час старту (якщо файл уже існує)
+        let mut today_ids = HashSet::new();
+        let mut today_total = 0;
+        let mut today_by_cat = HashMap::new();
+
+        let month_file = history_dir.join(format!("flight_history_{}.json", current_month));
+        if month_file.exists() {
+            if let Ok(content) = fs::read_to_string(&month_file) {
+                if let Ok(val) = serde_json::from_str::<Value>(&content) {
+                    if let Some(targets) = val.get("targets").and_then(|t| t.as_object()) {
+                        for (tid, t) in targets {
+                            if let Some(d) = t.get("date").and_then(|v| v.as_str()) {
+                                if d == today_str {
+                                    today_ids.insert(tid.clone());
+                                    today_total += 1;
+                                    let cat = t.get("cat")
+                                        .or_else(|| t.get("category"))
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("unknown");
+                                    *today_by_cat.entry(cat.to_string()).or_insert(0) += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Self {
             history_dir,
             dirty_months: RwLock::new(HashSet::new()),
-            cache: RwLock::new(HashMap::new()),
+            pending_dirty: RwLock::new(HashMap::new()),
+            read_cache: RwLock::new(HashMap::new()),
+            today_stats: RwLock::new(TodayStats {
+                date: today_str,
+                tracked_target_ids: today_ids,
+                total: today_total,
+                by_category: today_by_cat,
+            }),
             gdrive_synced_months: RwLock::new(HashSet::new()),
         }
     }
@@ -67,11 +117,28 @@ impl HistoryManager {
         format!("{:04}-{:02}", now.year(), now.month())
     }
 
-    /// Фіксація треку цілі в оперативному буфері історії
+    /// Запис активного або завершеного треку в історію
     pub fn record_track(&self, trk: &TargetTrack, status: &str) {
-        let month = Self::current_month();
+        let now = Utc::now();
+        let month = format!("{:04}-{:02}", now.year(), now.month());
+        let date_str = now.format("%Y-%m-%d").to_string();
 
-        // Повнорозмірні координати f64 без зрізання та округлення
+        // 1. Оновлюємо легку статистику за сьогодні (O(1) в RAM)
+        {
+            let mut ts = self.today_stats.write();
+            if ts.date != date_str {
+                ts.date = date_str.clone();
+                ts.tracked_target_ids.clear();
+                ts.total = 0;
+                ts.by_category.clear();
+            }
+            if ts.tracked_target_ids.insert(trk.id.clone()) {
+                ts.total += 1;
+                *ts.by_category.entry(trk.category.clone()).or_insert(0) += 1;
+            }
+        }
+
+        // 2. Формуємо запис траєкторії для збереження
         let path_json: Vec<Value> = trk.trajectory.iter().map(|p| {
             json!([
                 p.ts,
@@ -81,8 +148,6 @@ impl HistoryManager {
                 trk.speed_kmh
             ])
         }).collect();
-
-        let date_str = Utc::now().format("%Y-%m-%d").to_string();
 
         let item = json!({
             "id": trk.id,
@@ -94,70 +159,71 @@ impl HistoryManager {
             "path": path_json
         });
 
+        // 3. Додаємо виключно в буфер незбережених змін (не тримаємо повний місяць у RAM!)
         {
-            let mut cache_guard = self.cache.write();
-            let month_targets = cache_guard.entry(month.clone()).or_insert_with(|| {
-                // Завантаження існуючого місяця з диска, якщо є
-                self.load_month_from_disk(&month).unwrap_or_default()
-            });
-            month_targets.insert(trk.id.clone(), item);
+            let mut pending = self.pending_dirty.write();
+            pending.entry(month.clone()).or_default().insert(trk.id.clone(), item);
         }
-
         {
             let mut dirty = self.dirty_months.write();
             dirty.insert(month);
         }
     }
 
-    /// Періодичний атомарний скид "брудних" місяців на диск (раз на 300 сек для захисту SD-карти)
+    /// Періодичний скид накопичених "брудних" даних на диск (кожні 300 секунд)
     pub fn flush_dirty(&self) {
-        let dirty: Vec<String> = {
-            let mut guard = self.dirty_months.write();
-            let list = guard.iter().cloned().collect();
-            guard.clear();
-            list
+        let dirty_batch: HashMap<String, HashMap<String, Value>> = {
+            let mut guard = self.pending_dirty.write();
+            let mut dm = self.dirty_months.write();
+            dm.clear();
+            std::mem::take(&mut *guard)
         };
 
-        if dirty.is_empty() {
+        if dirty_batch.is_empty() {
             return;
         }
 
-        let cache_guard = self.cache.read();
-        for month in dirty {
-            if let Some(targets) = cache_guard.get(&month) {
-                let file_path = self.history_dir.join(format!("flight_history_{}.json", month));
-                let pid = std::process::id();
-                let tmp_path = file_path.with_extension(format!("tmp.{}_{}", pid, now_ts()));
+        for (month, new_targets) in dirty_batch {
+            let mut targets = self.load_month_from_disk(&month).unwrap_or_default();
+            for (tid, item) in new_targets {
+                targets.insert(tid, item);
+            }
 
-                let mut dates_set = std::collections::BTreeSet::new();
-                for t in targets.values() {
-                    if let Some(d) = t.get("date").and_then(|v| v.as_str()) {
-                        if !d.is_empty() {
-                            dates_set.insert(d.to_string());
-                        }
+            let file_path = self.history_dir.join(format!("flight_history_{}.json", month));
+            let pid = std::process::id();
+            let tmp_path = file_path.with_extension(format!("tmp.{}_{}", pid, now_ts()));
+
+            let mut dates_set = std::collections::BTreeSet::new();
+            for t in targets.values() {
+                if let Some(d) = t.get("date").and_then(|v| v.as_str()) {
+                    if !d.is_empty() {
+                        dates_set.insert(d.to_string());
                     }
                 }
-                let dates_vec: Vec<String> = dates_set.into_iter().collect();
+            }
+            let dates_vec: Vec<String> = dates_set.into_iter().collect();
 
-                let full_data = json!({
-                    "month": month,
-                    "updated_at": Utc::now().to_rfc3339(),
-                    "total_targets": targets.len(),
-                    "dates": dates_vec,
-                    "targets": targets
-                });
+            let total_t = targets.len();
+            let full_data = json!({
+                "month": month,
+                "updated_at": Utc::now().to_rfc3339(),
+                "total_targets": total_t,
+                "dates": dates_vec,
+                "targets": targets
+            });
 
-                if let Ok(json_str) = serde_json::to_string(&full_data) {
-                    if let Ok(mut f) = File::create(&tmp_path) {
-                        let _ = f.write_all(json_str.as_bytes());
-                        let _ = f.flush();
-                        drop(f);
-                        if let Err(e) = fs::rename(&tmp_path, &file_path) {
-                            let _ = fs::remove_file(&tmp_path);
-                            warn!("Failed to save flight history {}: {}", month, e);
-                        } else {
-                            info!("Flushed flight history for {} ({} targets)", month, targets.len());
-                        }
+            if let Ok(json_str) = serde_json::to_string(&full_data) {
+                if let Ok(mut f) = File::create(&tmp_path) {
+                    let _ = f.write_all(json_str.as_bytes());
+                    let _ = f.flush();
+                    drop(f);
+                    if let Err(e) = fs::rename(&tmp_path, &file_path) {
+                        let _ = fs::remove_file(&tmp_path);
+                        warn!("Failed to save flight history {}: {}", month, e);
+                    } else {
+                        info!("Flushed flight history for {} ({} targets)", month, total_t);
+                        // Інвалідуємо старий запис у read_cache, щоб при запиті історії читався свіжий файл
+                        self.read_cache.write().remove(&month);
                     }
                 }
             }
@@ -181,99 +247,96 @@ impl HistoryManager {
         Some(res)
     }
 
-    /// Швидке отримання підсумкової кількості цілей за поточну добу для live-снапшоту
-    pub fn get_today_counts(&self) -> (usize, HashMap<String, usize>) {
-        let now = Utc::now();
-        let month = format!("{:04}-{:02}", now.year(), now.month());
-        let today_str = now.format("%Y-%m-%d").to_string();
-
-        let targets = {
-            let cache_guard = self.cache.read();
-            if let Some(t) = cache_guard.get(&month) {
-                Some(t.clone())
-            } else {
-                None
-            }
-        };
-
-        let targets = match targets {
-            Some(t) => t,
-            None => {
-                if let Some(disk_targets) = self.load_month_from_disk(&month) {
-                    let mut write_guard = self.cache.write();
-                    write_guard.insert(month.clone(), disk_targets.clone());
-                    disk_targets
-                } else {
-                    return (0, HashMap::new());
-                }
-            }
-        };
-
-        let mut counts = HashMap::new();
-        let mut total = 0;
-        for t in targets.values() {
-            if let Some(d) = t.get("date").and_then(|v| v.as_str()) {
-                if d == today_str {
-                    let cat = t.get("cat")
-                        .or_else(|| t.get("category"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    *counts.entry(cat.to_string()).or_insert(0) += 1;
-                    total += 1;
-                }
-            }
+    /// Легке зчитування тільки заголовка місячного файлу без десеріалізації масиву цілей
+    fn load_month_metadata(&self, month: &str) -> Option<(usize, Vec<String>, String)> {
+        let file_path = self.history_dir.join(format!("flight_history_{}.json", month));
+        if !file_path.exists() {
+            return None;
         }
-        (total, counts)
+
+        let content = fs::read_to_string(&file_path).ok()?;
+        #[derive(Deserialize)]
+        struct HeaderOnly {
+            total_targets: Option<usize>,
+            dates: Option<Vec<String>>,
+            updated_at: Option<String>,
+        }
+
+        if let Ok(hdr) = serde_json::from_str::<HeaderOnly>(&content) {
+            Some((
+                hdr.total_targets.unwrap_or(0),
+                hdr.dates.unwrap_or_default(),
+                hdr.updated_at.unwrap_or_default(),
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// Миттєве повернення лічильників за сьогодні для віджета та live-панелі (O(1))
+    pub fn get_today_counts(&self) -> (usize, HashMap<String, usize>) {
+        let now_date = Utc::now().format("%Y-%m-%d").to_string();
+        let ts = self.today_stats.read();
+        if ts.date == now_date {
+            (ts.total, ts.by_category.clone())
+        } else {
+            (0, HashMap::new())
+        }
     }
 
     pub fn get_month_data(&self, month: &str) -> Option<Value> {
         self.get_month_history_filtered(month, None)
     }
 
-    /// Отримання даних місяця з опціональною фільтрацією за датою (день YYYY-MM-DD)
+    /// Отримання історії за вибраний місяць з фільтрацією за днем (YYYY-MM-DD)
     pub fn get_month_history_filtered(&self, month: &str, date_filter: Option<&str>) -> Option<Value> {
-        let targets = {
-            let cache_guard = self.cache.read();
-            if let Some(t) = cache_guard.get(month) {
-                Some(t.clone())
-            } else {
-                None
-            }
+        let cached = {
+            let guard = self.read_cache.read();
+            guard.get(month).cloned()
         };
 
-        let targets = match targets {
-            Some(t) => t,
+        let full_month = match cached {
+            Some(v) => v,
             None => {
-                if let Some(disk_targets) = self.load_month_from_disk(month) {
-                    let mut cache_guard = self.cache.write();
-                    if cache_guard.len() >= 3 {
-                        let first_key = cache_guard.keys().next().cloned();
-                        if let Some(k) = first_key {
-                            cache_guard.remove(&k);
+                let targets = self.load_month_from_disk(month)?;
+                let mut dates_set = std::collections::BTreeSet::new();
+                for t in targets.values() {
+                    if let Some(d) = t.get("date").and_then(|v| v.as_str()) {
+                        if !d.is_empty() {
+                            dates_set.insert(d.to_string());
                         }
                     }
-                    cache_guard.insert(month.to_string(), disk_targets.clone());
-                    disk_targets
-                } else {
-                    return None;
                 }
+                let dates_vec: Vec<String> = dates_set.into_iter().collect();
+
+                let full_data = json!({
+                    "month": month,
+                    "updated_at": Utc::now().to_rfc3339(),
+                    "total_targets": targets.len(),
+                    "dates": dates_vec,
+                    "targets": targets
+                });
+
+                // LRU-кеш: максимум 2 місяці
+                let mut guard = self.read_cache.write();
+                if guard.len() >= 2 {
+                    let oldest_key = guard.keys().next().cloned();
+                    if let Some(k) = oldest_key {
+                        guard.remove(&k);
+                    }
+                }
+                guard.insert(month.to_string(), full_data.clone());
+                full_data
             }
         };
 
-        let mut dates_set = std::collections::BTreeSet::new();
-        for t in targets.values() {
-            if let Some(d) = t.get("date").and_then(|v| v.as_str()) {
-                if !d.is_empty() {
-                    dates_set.insert(d.to_string());
-                }
-            }
-        }
-        let dates_vec: Vec<String> = dates_set.into_iter().collect();
+        let targets = full_month.get("targets").and_then(|t| t.as_object())?;
+        let dates_vec = full_month.get("dates").cloned().unwrap_or_else(|| json!([]));
 
         if let Some(df) = date_filter {
             if !df.is_empty() && df != "all" {
-                let mut filtered_targets = HashMap::new();
-                for (id, t) in &targets {
+                let mut filtered_targets = serde_json::Map::new();
+                for (id, t) in targets {
                     if let Some(d) = t.get("date").and_then(|v| v.as_str()) {
                         if d == df {
                             filtered_targets.insert(id.clone(), t.clone());
@@ -283,7 +346,7 @@ impl HistoryManager {
                 return Some(json!({
                     "month": month,
                     "date": df,
-                    "updated_at": Utc::now().to_rfc3339(),
+                    "updated_at": full_month.get("updated_at"),
                     "total_targets": filtered_targets.len(),
                     "dates": dates_vec,
                     "targets": filtered_targets
@@ -291,16 +354,10 @@ impl HistoryManager {
             }
         }
 
-        Some(json!({
-            "month": month,
-            "updated_at": Utc::now().to_rfc3339(),
-            "total_targets": targets.len(),
-            "dates": dates_vec,
-            "targets": targets
-        }))
+        Some(full_month)
     }
 
-    /// Словник доступних місяців та дат для плеєра історії ukraine-radar-card (локальні + хмара)
+    /// Отримання доступних місяців та дат для ukraine-radar-card (легке зчитування без парсингу цілей)
     pub fn get_available_months_map(&self) -> (HashMap<String, Vec<String>>, HashMap<String, String>) {
         let mut months_dict: HashMap<String, Vec<String>> = HashMap::new();
         let mut sources_dict: HashMap<String, String> = HashMap::new();
@@ -316,12 +373,12 @@ impl HistoryManager {
                             .trim_end_matches(".json")
                             .to_string();
 
-                        let mut dates_list = Vec::new();
-                        if let Some(data) = self.get_month_data(&m) {
-                            if let Some(d_arr) = data.get("dates").and_then(|d| d.as_array()) {
-                                dates_list = d_arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
-                            }
-                        }
+                        let dates_list = if let Some((_, dates, _)) = self.load_month_metadata(&m) {
+                            dates
+                        } else {
+                            Vec::new()
+                        };
+
                         months_dict.insert(m.clone(), dates_list);
                         sources_dict.insert(m, "local".to_string());
                     }
@@ -342,7 +399,7 @@ impl HistoryManager {
         (months_dict, sources_dict)
     }
 
-    /// Список локальних файлів історії з детальною аналітикою для Admin UI
+    /// Список файлів історії для Admin UI (легке зчитування метаданих без навантаження на RAM)
     pub fn list_files_summary(&self) -> Vec<HistoryFileInfo> {
         let mut list = Vec::new();
         let entries = match fs::read_dir(&self.history_dir) {
@@ -374,39 +431,39 @@ impl HistoryManager {
 
                 let mut targets_count = 0;
                 let mut days_set = HashSet::new();
+                let mut updated_at_str = String::new();
 
-                if let Some(month_data) = self.get_month_data(&month) {
-                    if let Some(targets) = month_data.get("targets").and_then(|t| t.as_object()) {
-                        targets_count = targets.len();
-                        for t in targets.values() {
-                            if let Some(first_seen) = t.get("first_seen").and_then(|f| f.as_i64()) {
-                                if let Some(dt) = chrono::DateTime::from_timestamp(first_seen, 0) {
-                                    days_set.insert(dt.day());
-                                }
+                if let Some((cnt, dates, updated_at)) = self.load_month_metadata(&month) {
+                    targets_count = cnt;
+                    updated_at_str = updated_at;
+                    for d in dates {
+                        if let Some(day_part) = d.split('-').nth(2) {
+                            if let Ok(day_num) = day_part.parse::<u32>() {
+                                days_set.insert(day_num);
                             }
                         }
                     }
                 }
 
+                let days_count = days_set.len();
                 let days_min = days_set.iter().min().copied();
                 let days_max = days_set.iter().max().copied();
+
                 let is_synced = self.gdrive_synced_months.read().contains(&month);
 
                 list.push(HistoryFileInfo {
-                    month: month.clone(),
+                    month,
                     filename: name.to_string(),
                     targets_count,
                     total_targets: targets_count,
                     last_modified_ts: last_mod_ts,
-                    updated_at: chrono::DateTime::from_timestamp(last_mod_ts, 0)
-                        .map(|dt| dt.to_rfc3339())
-                        .unwrap_or_default(),
+                    updated_at: updated_at_str,
                     is_synced,
                     on_gdrive: is_synced,
-                    days_count: days_set.len(),
+                    days_count,
                     days_min,
                     days_max,
-                    size_kb: (size_kb * 10.0).round() / 10.0,
+                    size_kb,
                     size_bytes,
                 });
             }
@@ -416,62 +473,7 @@ impl HistoryManager {
         list
     }
 
-    /// Синхронізація місяця в Google Drive через Webhook Apps Script
-    pub async fn sync_to_gdrive(&self, month: &str, webhook_url: &str, client: &reqwest::Client) -> Result<(usize, f64), String> {
-        if webhook_url.trim().is_empty() {
-            return Err("Google Apps Script Webhook URL не налаштовано!".to_string());
-        }
-
-        let month_data = self.get_month_data(month)
-            .ok_or_else(|| format!("Місяць {} не знайдено на диску", month))?;
-
-        let targets_count = month_data.get("total_targets").and_then(|t| t.as_u64()).unwrap_or(0) as usize;
-        let payload_str = serde_json::to_string(&month_data).map_err(|e| e.to_string())?;
-        let size_kb = (payload_str.len() as f64) / 1024.0;
-
-        let resp = client.post(webhook_url)
-            .json(&json!({
-                "action": "upload_month",
-                "month": month,
-                "data": month_data
-            }))
-            .send()
-            .await
-            .map_err(|e| format!("HTTP request to Google Apps Script failed: {}", e))?;
-
-        if !resp.status().is_success() {
-            return Err(format!("Google Apps Script returned HTTP {}", resp.status()));
-        }
-
-        self.gdrive_synced_months.write().insert(month.to_string());
-        Ok((targets_count, (size_kb * 10.0).round() / 10.0))
-    }
-
-    /// Отримання місяця з Google Drive, якщо він відсутній локально
-    pub async fn fetch_month_from_gdrive(&self, month: &str, webhook_url: &str, client: &reqwest::Client) -> Result<Value, String> {
-        let resp = client.post(webhook_url)
-            .json(&json!({
-                "action": "get_month",
-                "month": month
-            }))
-            .send()
-            .await
-            .map_err(|e| format!("HTTP request to Google Apps Script failed: {}", e))?;
-
-        let val: Value = resp.json().await.map_err(|e| format!("Invalid JSON from GDrive: {}", e))?;
-        if let Some(_targets) = val.get("targets").and_then(|t| t.as_object()) {
-            // Зберігаємо завантажений файл локально
-            let file_path = self.history_dir.join(format!("flight_history_{}.json", month));
-            if let Ok(json_str) = serde_json::to_string(&val) {
-                let _ = fs::write(&file_path, json_str);
-            }
-            Ok(val)
-        } else {
-            Err("Місяць не знайдено в Google Drive".to_string())
-        }
-    }
-
-    /// Імпорт зовнішньої історії (наприклад, із Python-бекапу або завантаженого JSON файлу)
+    /// Імпорт зовнішнього JSON (наприклад, архівні дані каналів)
     pub fn import_external_history(&self, raw_data: &Value) -> usize {
         let items: Vec<&Value> = if let Some(obj) = raw_data.get("targets").and_then(|t| t.as_object()) {
             obj.values().collect()
@@ -511,57 +513,43 @@ impl HistoryManager {
             let mut norm_path = Vec::new();
             if let Some(arr) = raw_path {
                 for p in arr {
-                    if let Some(sub) = p.as_array() {
-                        if sub.len() >= 3 {
-                            norm_path.push(json!([
-                                sub[0].as_i64().or_else(|| sub[0].as_f64().map(|v| v as i64)).unwrap_or(first_seen),
-                                sub[1].as_f64().unwrap_or(0.0),
-                                sub[2].as_f64().unwrap_or(0.0),
-                                sub.get(3).and_then(|v| v.as_f64()).unwrap_or(0.0),
-                                sub.get(4).and_then(|v| v.as_f64()).unwrap_or(185.0)
-                            ]));
-                        }
-                    } else if let Some(obj) = p.as_object() {
-                        norm_path.push(json!([
-                            obj.get("time").or_else(|| obj.get("ts")).and_then(|v| v.as_i64()).unwrap_or(first_seen),
-                            obj.get("lat").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                            obj.get("lon").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                            obj.get("heading").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                            obj.get("speed").and_then(|v| v.as_f64()).unwrap_or(185.0)
-                        ]));
+                    if let Some(pt_arr) = p.as_array() {
+                        norm_path.push(json!(pt_arr));
                     }
                 }
             }
 
             let entry = json!({
-                "id": tid.clone(),
-                "name_ua": name_ua,
+                "id": tid,
+                "name": name_ua,
                 "cat": cat,
-                "color_hex": color,
-                "first_seen": first_seen,
-                "last_seen": last_seen,
-                "path": norm_path,
-                "dates": [target_date],
-                "status": status
+                "color": color,
+                "date": target_date,
+                "start_time": first_seen,
+                "end_time": last_seen,
+                "status": status,
+                "path": norm_path
             });
 
-            let mut cache = self.cache.write();
-            let m_map = cache.entry(target_month.clone()).or_insert_with(|| {
-                self.load_month_from_disk(&target_month).unwrap_or_default()
-            });
-            m_map.insert(tid, entry);
+            {
+                let mut pending = self.pending_dirty.write();
+                pending.entry(target_month.clone()).or_default().insert(tid.clone(), entry);
+            }
+
+            if !dirty_to_mark.contains(&target_month) {
+                dirty_to_mark.push(target_month);
+            }
             imported_count += 1;
-            dirty_to_mark.push(target_month);
         }
 
-        let mut dirty = self.dirty_months.write();
-        for m in dirty_to_mark {
-            dirty.insert(m);
+        if !dirty_to_mark.is_empty() {
+            let mut dm = self.dirty_months.write();
+            for m in dirty_to_mark {
+                dm.insert(m);
+            }
         }
-        drop(dirty);
 
-        self.flush_dirty();
+        info!("Imported {} targets from external JSON payload", imported_count);
         imported_count
     }
 }
-

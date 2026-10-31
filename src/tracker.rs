@@ -55,6 +55,11 @@ pub struct TargetTrack {
     pub trajectory: Vec<TrajectoryPoint>,
 }
 
+fn heading_diff(a: f64, b: f64) -> f64 {
+    let diff = (a - b).abs() % 360.0;
+    if diff > 180.0 { 360.0 - diff } else { diff }
+}
+
 impl TargetTrack {
     pub fn new(
         id: String,
@@ -113,22 +118,50 @@ impl TargetTrack {
         if let Some(last_pt) = self.trajectory.last() {
             let dist_from_last = calculate_haversine_distance(last_pt.lat, last_pt.lon, lat, lon);
 
-            // Динамічний розрахунок істинного курсу при зміщенні > 0.2 км
-            if dist_from_last > 0.2 {
-                self.heading = calculate_bearing(last_pt.lat, last_pt.lon, lat, lon);
+            let calculated_heading = if dist_from_last > 0.2 {
+                calculate_bearing(last_pt.lat, last_pt.lon, lat, lon)
             } else if heading > 0.0 {
-                self.heading = heading;
+                heading
+            } else {
+                self.heading
+            };
+
+            // Dead Reckoning: додаємо нову точку лише при зміні курсу, швидкості, або чекпоінті 120с
+            if self.trajectory.len() < 2 {
+                if dist_from_last >= 0.3 {
+                    self.trajectory.push(TrajectoryPoint {
+                        lat,
+                        lon,
+                        ts: now as i64,
+                    });
+                }
+            } else {
+                let time_since_last = (now as i64) - last_pt.ts;
+                let is_turn = dist_from_last >= 0.4 && heading_diff(self.heading, calculated_heading) >= 4.0;
+                let is_speed_change = (speed - self.speed_kmh).abs() >= 25.0 && speed > 0.0 && self.speed_kmh > 0.0;
+                let is_heartbeat = time_since_last >= 120 && dist_from_last >= 0.3;
+
+                if is_turn || is_speed_change || is_heartbeat {
+                    self.trajectory.push(TrajectoryPoint {
+                        lat,
+                        lon,
+                        ts: now as i64,
+                    });
+                    // Захист від надмірного розростання понад 1000 точок
+                    if self.trajectory.len() > 1000 {
+                        self.trajectory.drain(0..100);
+                    }
+                } else if dist_from_last >= 0.2 {
+                    // Рух по прямій: оновлюємо верхівку траєкторії без роздування масиву
+                    if let Some(tip) = self.trajectory.last_mut() {
+                        tip.lat = lat;
+                        tip.lon = lon;
+                        tip.ts = now as i64;
+                    }
+                }
             }
 
-            // Додавання нової точки треку: зміщення > 0.3 км або минуло >= 10 сек
-            // Зберігаємо повну траєкторію польоту цілі до моменту її зникнення
-            if dist_from_last > 0.3 || (now as i64 - last_pt.ts) >= 10 {
-                self.trajectory.push(TrajectoryPoint {
-                    lat,
-                    lon,
-                    ts: now as i64,
-                });
-            }
+            self.heading = calculated_heading;
         }
 
         self.lat = lat;
@@ -275,6 +308,11 @@ impl TargetTracker {
     }
 
     /// Періодичне очищення застарілих цілей без оновлення від upstream
+    pub fn has_stale_or_expired(&self, now: f64) -> bool {
+        self.tracks.values().any(|trk| (now - trk.last_seen) > 180.0)
+            || self.recent_lost.values().any(|v| (now - v.lost_ts) > 120.0)
+    }
+
     pub fn cleanup_stale(&mut self, now: f64) {
         let expired_ids: Vec<String> = self.tracks.iter()
             .filter(|(_, trk)| (now - trk.last_seen) > 180.0)

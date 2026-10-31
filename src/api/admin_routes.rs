@@ -73,12 +73,19 @@ async fn handle_admin_ui(
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    let admin_file = state.config.static_dir.join("admin.html");
-    if let Ok(content) = fs::read_to_string(&admin_file) {
-        Html(content).into_response()
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, "admin.html not found").into_response()
-    }
+    static CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    let content = CACHE.get_or_init(|| {
+        let admin_file = state.config.static_dir.join("admin.html");
+        fs::read_to_string(&admin_file).unwrap_or_else(|_| "<h1>admin.html not found</h1>".to_string())
+    });
+
+    (
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (header::CACHE_CONTROL, "public, max-age=3600"),
+        ],
+        content.as_str()
+    ).into_response()
 }
 
 async fn handle_verify(

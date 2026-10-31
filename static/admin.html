@@ -1173,36 +1173,7 @@ ${resp.api_key}
       if (l) l.innerText = val + " км";
     }
 
-    async function saveUserSettings(apiKey) {
-      if (!apiKey || !currentAdminKey) return;
-      const radius = parseFloat(document.getElementById("dangerRadiusNum_" + apiKey).value) || 35;
-      const applyAll = document.getElementById("applyAllSlotsCheck_" + apiKey) ? document.getElementById("applyAllSlotsCheck_" + apiKey).checked : false;
-      const payload = {
-        danger_radius_km: radius,
-        apply_to_all_slots: applyAll,
-        alert_threat: document.getElementById("alertThreatCheck_" + apiKey).checked,
-        alert_siren: document.getElementById("alertSirenCheck_" + apiKey).checked,
-        alert_mig: document.getElementById("alertMigCheck_" + apiKey).checked,
-        alert_artillery: document.getElementById("alertArtilleryCheck_" + apiKey).checked
-      };
 
-      try {
-        const res = await fetch("/api/v1/admin/keys/" + encodeURIComponent(apiKey) + "/settings?admin_key=" + encodeURIComponent(currentAdminKey), {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        if (res.ok) {
-          alert("✅ Налаштування та фільтри сповіщень успішно збережено в базі!");
-          loadKeys();
-        } else {
-          const err = await res.json();
-          alert("❌ Помилка збереження налаштувань: " + (err.error || "Невідома помилка"));
-        }
-      } catch (e) {
-        alert("Помилка мережі: " + e);
-      }
-    }
 
     
     async function submitNewSlot(apiKey) {
@@ -1245,7 +1216,7 @@ ${resp.api_key}
             lon: lon,
             danger_radius_km: dangerRadius,
             type: slotType,
-            react_threat_types: react_threat_types,
+            react_threat_types: react_threat_types.length > 0 ? react_threat_types : undefined,
             alert_threat: alert_threat,
             alert_siren: alert_siren,
             alert_yellow: alert_yellow,
@@ -1761,8 +1732,17 @@ ${resp.api_key}
     function launchRadarWithSelectedUser() {
       const sel = document.getElementById("radarModalUserSelect");
       const key = sel ? sel.value : "";
-      const url = key ? `/map?token=${encodeURIComponent(key)}` : "/map";
-      window.open(url, "_blank");
+      if (!key) {
+        const manualKey = prompt("🔑 Для безпечного відкриття онлайн-радара введіть API-ключ (або оберіть користувача зі списку):", "");
+        if (manualKey && manualKey.trim()) {
+          window.open(`/map?token=${encodeURIComponent(manualKey.trim())}`, "_blank");
+          closeRadarUserModal();
+        } else {
+          alert("⚠️ Для перегляду мапи необхідно обрати користувача зі списку або ввести дійсний API-ключ.");
+        }
+        return;
+      }
+      window.open(`/map?token=${encodeURIComponent(key)}`, "_blank");
       closeRadarUserModal();
     }
 

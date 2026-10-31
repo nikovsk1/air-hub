@@ -849,6 +849,16 @@
       .closest-label, .closest-val {
         font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
+      .closest-popover {
+        min-width: 270px;
+        max-width: calc(100vw - 24px);
+        left: auto;
+        right: 0;
+      }
+      .slot-dropdown-popover {
+        min-width: 200px;
+        max-width: calc(100vw - 24px);
+      }
 
       /* Sidebar: Full vertical mobile drawer with Safe Area */
       .sidebar-panel {
@@ -1025,10 +1035,10 @@
         <!-- Custom Dropdown Menu with Checkboxes -->
         <div id="slotDropdownMenu" class="liquid-glass-card slot-dropdown-popover" style="display:none;" onclick="event.stopPropagation()">
           <div class="slot-drop-header">
-            <label class="slot-chk-item all-chk-item" onclick="toggleSelectAllSlots(event)">
-              <input type="checkbox" id="selectAllSlotsChk" class="custom-chk">
+            <div class="slot-chk-item all-chk-item" onclick="toggleSelectAllSlots(event)">
+              <input type="checkbox" id="selectAllSlotsChk" class="custom-chk" style="pointer-events:none;">
               <span class="slot-item-title" style="font-weight:700;">Всі точки</span>
-            </label>
+            </div>
           </div>
           <div class="slot-drop-divider"></div>
           <div id="slotDropdownItems" class="slot-drop-list">
@@ -1588,6 +1598,7 @@
     }
 
     const map = L.map('map', {
+      preferCanvas: true,
       center: [48.5, 31.5],
       zoom: 6,
       zoomControl: false,
@@ -2607,10 +2618,10 @@
           const isChecked = selectedSlotIds.has(id);
           const name = s.name || ('Точка ' + id);
           return `
-            <label class="slot-chk-item" onclick="toggleSlotSelection('${id}', event)">
-              <input type="checkbox" class="custom-chk" ${isChecked ? 'checked' : ''} onchange="toggleSlotSelection('${id}', event)">
+            <div class="slot-chk-item" onclick="toggleSlotSelection('${id}', event)">
+              <input type="checkbox" class="custom-chk" ${isChecked ? 'checked' : ''} style="pointer-events:none;">
               <span class="slot-item-title">${name}</span>
-            </label>
+            </div>
           `;
         }).join('');
       }
@@ -2730,10 +2741,7 @@
     }
 
     function toggleSlotSelection(slotId, e) {
-      if (e && e.target && e.target.tagName === 'INPUT') {
-        // Дозволяємо браузеру опрацювати нативний чекбокс
-      } else if (e) {
-        e.preventDefault();
+      if (e) {
         e.stopPropagation();
       }
       slotId = String(slotId);
@@ -3649,13 +3657,14 @@
       for (const id in slotMapLayers) {
         const s = currentSlots[id] || {};
         const isMonitored = s.active !== false;
-        const shouldDraw = visualConfig.showSlotCircles && isMonitored;
+        const isSelected = selectedSlotIds ? selectedSlotIds.has(id) : true;
+        const shouldDraw = visualConfig.showSlotCircles && isMonitored && isSelected;
         if (slotMapLayers[id] && slotMapLayers[id].circle) {
           slotMapLayers[id].circle.setStyle({
             color: s.danger_zone_active ? '#ef4444' : '#38bdf8',
             fillColor: s.danger_zone_active ? '#ef4444' : '#38bdf8',
-            fillOpacity: shouldDraw ? 0.08 : 0,
-            opacity: shouldDraw ? 0.55 : 0
+            fillOpacity: shouldDraw ? (s.danger_zone_active ? 0.12 : 0.04) : 0,
+            opacity: shouldDraw ? 0.6 : 0
           });
         }
       }
@@ -3681,6 +3690,7 @@
       const impactPoints = [];
       const curT = analyticsSimTime || analyticsMaxTime;
 
+      const isMobile = window.innerWidth <= 768;
       // 1. Попередній аналіз відфільтрованої вибірки цілей для адаптивного масштабування
       const activeSampleTracks = loadedAnalyticsTracks.filter(trk => {
         return analyticsCategoryFilters.has(trk.cat) && trk.start_time <= curT && trk.path && trk.path.length > 0;
@@ -3769,8 +3779,8 @@
       // 3. Теплова мапа коридорів (Холодний ціаново-неоновий спектр повітряних трас)
       if (showCorridorHeat && corridorPoints.length > 0 && typeof L.heatLayer === 'function') {
         corridorHeatLayer = L.heatLayer(corridorPoints, {
-          radius: totalTargets <= 8 ? 25 : 22,
-          blur: totalTargets <= 8 ? 20 : 18,
+          radius: isMobile ? 18 : (totalTargets <= 8 ? 25 : 22),
+          blur: isMobile ? 14 : (totalTargets <= 8 ? 20 : 18),
           maxZoom: 10,
           max: 1.0,
           gradient: {
@@ -3789,8 +3799,8 @@
       // 4. Теплова мапа прильотів / втрат (Гарячий вогненно-червоний спектр епіцентрів)
       if (showImpactHeat && impactPoints.length > 0 && typeof L.heatLayer === 'function') {
         impactHeatLayer = L.heatLayer(impactPoints, {
-          radius: completedImpactsCount <= 8 ? 22 : 18,
-          blur: completedImpactsCount <= 8 ? 16 : 14,
+          radius: isMobile ? 16 : (completedImpactsCount <= 8 ? 22 : 18),
+          blur: isMobile ? 12 : (completedImpactsCount <= 8 ? 16 : 14),
           maxZoom: 10,
           max: 1.0,
           gradient: {
@@ -3909,6 +3919,7 @@
       playbackSpeed = Number(val) || 120;
     }
 
+    let scrubRaf = null;
     function onSliderScrub(val) {
       pauseHistoryPlayback();
       if (loadedAnalyticsTracks.length === 0) return;
@@ -3916,7 +3927,12 @@
       document.getElementById('btnLivePill').classList.remove('active');
       clearLiveMapLayers();
       analyticsSimTime = analyticsMinTime + Number(val);
-      refreshMapVisuals();
+      if (!scrubRaf) {
+        scrubRaf = requestAnimationFrame(() => {
+          scrubRaf = null;
+          refreshMapVisuals();
+        });
+      }
     }
 
     function playbackStepLoop(nowMs) {

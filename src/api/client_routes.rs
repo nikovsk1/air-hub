@@ -30,6 +30,8 @@ pub struct ClientQuery {
     pub lon: Option<f64>,
     pub month: Option<String>,
     pub date: Option<String>,
+    pub full_regions: Option<bool>,
+    pub compact: Option<bool>,
 }
 
 pub fn client_routes() -> Router<AppState> {
@@ -469,6 +471,7 @@ pub fn build_user_snapshot(
     st: &crate::tracker::ThreatState,
     slot_id: &str,
     history_mgr: Option<&crate::history::HistoryManager>,
+    full_regions: bool,
 ) -> Value {
     let today_stats_val = if let Some(h) = history_mgr {
         let (tot, cats) = h.get_today_counts();
@@ -812,7 +815,11 @@ pub fn build_user_snapshot(
         "version": format!("{}_{}", st.update_seq, st.tracker.tracks.len()),
         "map_oblasts": st.oblast_alerts.values().collect::<Vec<_>>(),
         "oblasts": st.oblast_alerts.values().collect::<Vec<_>>(),
-        "raions": st.raion_alerts.values().collect::<Vec<_>>()
+        "raions": if full_regions {
+            st.raion_alerts.values().collect::<Vec<_>>()
+        } else {
+            st.raion_alerts.values().filter(|r| r.alert).collect::<Vec<_>>()
+        }
     })
 }
 
@@ -828,8 +835,13 @@ async fn handle_get_threats(
         None => return StatusCode::UNAUTHORIZED.into_response(),
     };
 
+    let selected_slot_id = query.slot.clone().or_else(|| query.slot_id.clone()).unwrap_or_else(|| "1".to_string());
+    let user_slot_status = user.slots.get(&selected_slot_id)
+        .map(|s| format!("{}_{:.1}", s.is_dynamic, s.danger_radius_km))
+        .unwrap_or_default();
+
     let st = state.threat_state.read().await;
-    let etag = st.get_etag();
+    let etag = format!(""seq{}_u{}_s{}_{}"", st.update_seq, user.version, selected_slot_id, user_slot_status);
 
     if let Some(client_etag) = headers.get(header::IF_NONE_MATCH).and_then(|h| h.to_str().ok()) {
         let clean_client = client_etag.trim().trim_start_matches("W/").trim_matches('"');
@@ -843,8 +855,8 @@ async fn handle_get_threats(
         }
     }
 
-    let selected_slot_id = query.slot.or(query.slot_id).unwrap_or_else(|| "1".to_string());
-    let resp_payload = build_user_snapshot(&user, &st, &selected_slot_id, Some(&state.history_mgr));
+    let full_reg = query.full_regions.unwrap_or(false);
+    let resp_payload = build_user_snapshot(&user, &st, &selected_slot_id, Some(&state.history_mgr), full_reg);
 
     (
         [
@@ -1029,7 +1041,7 @@ async fn handle_ws_client(
             let seq = st.update_seq;
             if seq != last_seq {
                 last_seq = seq;
-                let snapshot = build_user_snapshot(&current_user, &st, &selected_slot, Some(&state.history_mgr));
+                let snapshot = build_user_snapshot(&current_user, &st, &selected_slot, Some(&state.history_mgr), false);
                 (seq, Some(snapshot))
             } else {
                 (seq, None)
@@ -1136,21 +1148,35 @@ async fn handle_upload_history(
 async fn handle_radar_map_html(
     State(state): State<AppState>,
 ) -> Response {
-    let map_file = state.config.static_dir.join("radar_map.html");
-    if let Ok(content) = fs::read_to_string(&map_file) {
-        Html(content).into_response()
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, "radar_map.html not found").into_response()
-    }
+    static CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    let content = CACHE.get_or_init(|| {
+        let map_file = state.config.static_dir.join("radar_map.html");
+        fs::read_to_string(&map_file).unwrap_or_else(|_| "<h1>radar_map.html not found</h1>".to_string())
+    });
+
+    (
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (header::CACHE_CONTROL, "public, max-age=3600"),
+        ],
+        content.as_str()
+    ).into_response()
 }
 
 async fn handle_timeline_map_html(
     State(state): State<AppState>,
 ) -> Response {
-    let map_file = state.config.static_dir.join("radar_map.html");
-    if let Ok(content) = fs::read_to_string(&map_file) {
-        Html(content).into_response()
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, "radar_map.html not found").into_response()
-    }
+    static CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    let content = CACHE.get_or_init(|| {
+        let map_file = state.config.static_dir.join("radar_map.html");
+        fs::read_to_string(&map_file).unwrap_or_else(|_| "<h1>radar_map.html not found</h1>".to_string())
+    });
+
+    (
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (header::CACHE_CONTROL, "public, max-age=3600"),
+        ],
+        content.as_str()
+    ).into_response()
 }
