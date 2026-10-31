@@ -7,17 +7,35 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-push:
-    name: Build & Push to Docker Hub
+  # =========================================================================
+  # Phase 1: Parallel multi-platform build across independent runners
+  # =========================================================================
+  build:
+    name: Build ${{ matrix.arch }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            jobs: 2
+          - arch: arm64
+            platform: linux/arm64
+            jobs: 2
+          - arch: armv7
+            platform: linux/arm/v7
+            jobs: 1
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up QEMU (Multi-Arch Emulation for ARM)
+      - name: Set up QEMU (for ARM emulation)
+        if: matrix.platform != 'linux/amd64'
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: 'arm,arm64'
+          platforms: ${{ matrix.platform }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -28,24 +46,55 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract Docker metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/air-alert-hub-rs
-          tags: |
-            type=raw,value=latest
-            type=semver,pattern={{version}}
-
-      - name: Build and Push Image (iHost ARMv7, ARM64, x86_64)
+      - name: Build and Push Architecture Image (${{ matrix.arch }})
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/arm/v7,linux/arm64,linux/amd64
+          platforms: ${{ matrix.platform }}
           push: true
           provenance: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: |
+            CARGO_BUILD_JOBS=${{ matrix.jobs }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/air-alert-hub-rs:${{ matrix.arch }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+
+  # =========================================================================
+  # Phase 2: Merge single-architecture images into unified Multi-Arch Manifest
+  # =========================================================================
+  merge:
+    name: Create & Push Multi-Arch Manifest
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create Multi-Arch Manifest List
+        run: |
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/air-alert-hub-rs"
+          
+          # Base latest multi-arch manifest
+          TAGS="-t ${IMAGE}:latest"
+          
+          # If triggered by a Git tag (e.g. v1.0.0), also add version tag
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAGS="${TAGS} -t ${IMAGE}:${{ github.ref_name }}"
+          fi
+
+          echo "Creating multi-arch manifest with tags: ${TAGS}"
+          docker buildx imagetools create ${TAGS} \
+            ${IMAGE}:amd64 \
+            ${IMAGE}:arm64 \
+            ${IMAGE}:armv7
+
+      - name: Verify Manifest
+        run: |
+          docker buildx imagetools inspect ${{ secrets.DOCKERHUB_USERNAME }}/air-alert-hub-rs:latest
