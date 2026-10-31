@@ -1,48 +1,51 @@
-# Multi-stage Dockerfile for air-alert-hub-rs
+# syntax=docker/dockerfile:1
+# High-Performance Multi-Arch Dockerfile for Air Alert Hub (Rust Edition)
+# Native Cross-Compilation via tonistiigi/xx (no slow QEMU emulation during compilation!)
 # Targets: linux/arm/v7 (SONOFF iHost 32-bit), linux/arm64, linux/amd64
 
-# ================= Stage 1: Build =================
-FROM rust:1-slim-bookworm AS builder
+# ================= Stage 0: tonistiigi/xx cross-compilation tools =================
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.5.0 AS xx
+
+# ================= Stage 1: Native Builder ($BUILDPLATFORM) =================
+FROM --platform=$BUILDPLATFORM rust:1-slim-bookworm AS builder
+COPY --from=xx / /
+
+ARG TARGETPLATFORM
+
+# Install host compiler tools (Clang/LLD) and target-specific libraries via xx-apt
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends clang lld pkg-config git ca-certificates && \
+    xx-apt-get install -y --no-install-recommends \
+        libssl-dev \
+        libc6-dev \
+        xx-c-essentials && \
+    rustup target add $(xx-cargo --print-target-triple)
 
 WORKDIR /usr/src/app
 
-# Install all necessary build tools and libraries
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    pkg-config \
-    libssl-dev \
-    ca-certificates \
-    perl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Configurable build concurrency (1 for ARMv7 under QEMU, 2 for native x86_64/ARM64)
-ARG CARGO_BUILD_JOBS=1
-ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} \
-    RUST_BACKTRACE=1
-
-# 1. Cache external dependencies: copy ONLY Cargo manifests first
+# 1. Dependency caching: copy Cargo manifests first
 COPY Cargo.toml Cargo.lock* ./
 
-# 2. Pre-compile ONLY external dependency crates (cached in Docker layer)
-#    This layer is reused on every code change and takes 0 seconds on rebuilds!
+# 2. Pre-compile dependencies using xx-cargo for TARGETPLATFORM (cached in Docker layer)
 RUN mkdir -p src && \
     echo "fn main() {}" > src/main.rs && \
-    cargo build --release && \
-    rm -rf src target/release/deps/air_alert_hub_rs* target/release/air-alert-hub-rs*
+    xx-cargo build --release && \
+    rm -rf src target/$(xx-cargo --print-target-triple)/release/deps/air_alert_hub_rs* target/$(xx-cargo --print-target-triple)/release/air-alert-hub-rs*
 
-# 3. Copy application source code and assets
+# 3. Copy application source code and static assets
 COPY src ./src
 COPY static ./static
 COPY data_defaults ./data_defaults
 
-# 4. Build application binary (takes seconds since all 212 dependencies are pre-compiled)
-RUN touch src/main.rs && cargo build --release
+# 4. Compile the final release binary natively and verify the target ELF architecture
+RUN touch src/main.rs && \
+    xx-cargo build --release && \
+    xx-verify target/$(xx-cargo --print-target-triple)/release/air-alert-hub-rs && \
+    cp target/$(xx-cargo --print-target-triple)/release/air-alert-hub-rs /usr/local/bin/air-alert-hub-rs
 
-# ================= Stage 2: Minimal Runtime =================
+# ================= Stage 2: Minimal Target Runtime ($TARGETPLATFORM) =================
 FROM debian:bookworm-slim AS runner
 
-# Install timezone data, root certificates and SSL runtime libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
@@ -51,14 +54,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /usr/src/app/target/release/air-alert-hub-rs /app/air-alert-hub-rs
+# Copy compiled binary from builder
+COPY --from=builder /usr/local/bin/air-alert-hub-rs /app/air-alert-hub-rs
 
-# Copy static assets and data defaults
+# Copy static web assets and default geographic contours
 COPY --from=builder /usr/src/app/static /app/static
 COPY --from=builder /usr/src/app/data_defaults /app/data_defaults
 
-# Setup persistent volume directory
 VOLUME ["/app/data"]
 
 ENV PORT=8088 \
