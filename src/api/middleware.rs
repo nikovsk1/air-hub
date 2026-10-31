@@ -19,12 +19,19 @@ pub fn is_private_ip(ip: IpAddr) -> bool {
 
 /// Перевірка чи запит надійшов із зовнішньої мережі або через Cloudflare
 pub fn is_external_request<B>(headers: &HeaderMap, peer_ip: Option<IpAddr>) -> bool {
-    // 1. Якщо присутні заголовки Cloudflare -> зовнішній запит
+    // 1. Пряма перевірка сокета: якщо фізичний peer_ip публічний -> це безумовно зовнішній запит
+    if let Some(ip) = peer_ip {
+        if !is_private_ip(ip) {
+            return true;
+        }
+    }
+
+    // 2. Якщо присутні заголовки Cloudflare -> зовнішній запит через тунель/проксі
     if headers.contains_key("cf-connecting-ip") || headers.contains_key("cf-ray") {
         return true;
     }
 
-    // 2. Перевірка X-Forwarded-For
+    // 3. Перевірка X-Forwarded-For від довіреного локального проксі (Home Assistant / Nginx)
     if let Some(xff) = headers.get("x-forwarded-for").and_then(|h| h.to_str().ok()) {
         for ip_str in xff.split(',') {
             let clean = ip_str.trim();
@@ -38,20 +45,13 @@ pub fn is_external_request<B>(headers: &HeaderMap, peer_ip: Option<IpAddr>) -> b
         }
     }
 
-    // 3. Перевірка X-Real-IP
+    // 4. Перевірка X-Real-IP
     if let Some(x_real) = headers.get("x-real-ip").and_then(|h| h.to_str().ok()) {
         if let Ok(ip) = x_real.trim().parse::<IpAddr>() {
             if !is_private_ip(ip) {
                 return true;
             }
         } else {
-            return true;
-        }
-    }
-
-    // 4. Перевірка прямої IP-адреси сокета
-    if let Some(ip) = peer_ip {
-        if !is_private_ip(ip) {
             return true;
         }
     }

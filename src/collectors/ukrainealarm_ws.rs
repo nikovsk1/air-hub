@@ -1,4 +1,4 @@
-use std::sync::Arc;
+﻿use std::sync::Arc;
 use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use regex::Regex;
@@ -163,6 +163,7 @@ pub async fn run_ukrainealarm_collector(
                     if !client_id.is_empty() {
                         let sub_res = http_client
                             .post(&sub_ep)
+                            .timeout(Duration::from_secs(6))
                             .header(USER_AGENT, BROWSER_UA)
                             .header(ORIGIN, "https://map.ukrainealarm.com")
                             .header(REFERER, "https://map.ukrainealarm.com/")

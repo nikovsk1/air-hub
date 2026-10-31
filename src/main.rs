@@ -119,6 +119,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // 9.1 Фонова задача очищення застарілих цілей без оновлень (кожні 5 сек)
+    {
+        let t_state = threat_state.clone();
+        tokio::spawn(async move {
+            loop {
+                sleep(Duration::from_secs(5)).await;
+                let mut st = t_state.write().await;
+                let now = crate::tracker::now_sec();
+                st.tracker.cleanup_stale(now);
+            }
+        });
+    }
+
     // 10. Фонова задача синхронізації з Google Drive
     {
         let hist = history_mgr.clone();
@@ -151,7 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_state = AppState {
         config: config.clone(),
         storage,
-        history_mgr,
+        history_mgr: history_mgr.clone(),
         exchange_mgr,
         detector,
         http_client,
@@ -165,7 +178,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Air Alert Hub listening on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    let hist_shutdown = history_mgr.clone();
+
+    let server = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .with_graceful_shutdown(async move {
+            let ctrl_c = async {
+                tokio::signal::ctrl_c()
+                    .await
+                    .expect("failed to install Ctrl+C handler");
+            };
+
+            #[cfg(unix)]
+            let terminate = async {
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    .expect("failed to install SIGTERM signal handler")
+                    .recv()
+                    .await;
+            };
+
+            #[cfg(not(unix))]
+            let terminate = std::future::pending::<()>();
+
+            tokio::select! {
+                _ = ctrl_c => {},
+                _ = terminate => {},
+            }
+
+            info!("Shutdown signal received. Flushing history buffer to disk...");
+            hist_shutdown.flush_dirty();
+        });
+
+    server.await?;
+    history_mgr.flush_dirty();
+    info!("Air Alert Hub shut down cleanly.");
 
     Ok(())
 }

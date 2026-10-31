@@ -1,4 +1,4 @@
-use std::fs;
+﻿use std::fs;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use axum::extract::{ConnectInfo, Path as AxumPath, Query, State};
@@ -61,6 +61,7 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/api/v1/admin/exchange_log", get(handle_get_exchange_log))
         .route("/api/v1/admin/exchange_log/download", get(handle_download_exchange_log))
         .route("/api/v1/admin/exchange_log/clear", post(handle_clear_exchange_log))
+        .layer(axum::extract::DefaultBodyLimit::max(15 * 1024 * 1024))
 }
 
 async fn handle_admin_ui(
@@ -446,7 +447,12 @@ async fn handle_restore_backup(
         return status.into_response();
     }
     match state.storage.restore_users(&payload) {
-        Ok(count) => Json(json!({"status": "restored", "count": count})).into_response(),
+        Ok(count) => Json(json!({
+            "status": "success",
+            "message": "restored",
+            "count": count,
+            "users_count": count
+        })).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"status": "error", "message": e}))).into_response(),
     }
 }

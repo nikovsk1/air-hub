@@ -56,7 +56,7 @@ pub fn format_eta_ua(eta_minutes: Option<f64>) -> String {
     if total_seconds < 3600 {
         let mins = total_seconds / 60;
         let secs = total_seconds % 60;
-        format!("{:02}.{:02} хв", mins, secs)
+        format!("{:02}:{:02} хв", mins, secs)
     } else {
         let hours = total_seconds / 3600;
         let rem_mins = (total_seconds % 3600) / 60;

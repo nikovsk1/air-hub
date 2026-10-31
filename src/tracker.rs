@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
@@ -272,6 +272,36 @@ impl TargetTracker {
         // Автоматичне очищення міток втрачених цілей, старших за 120 секунд (2 хв)
         self.recent_lost.retain(|_, v| (now - v.lost_ts) <= 120.0);
         lost_tracks
+    }
+
+    /// Періодичне очищення застарілих цілей без оновлення від upstream
+    pub fn cleanup_stale(&mut self, now: f64) {
+        let expired_ids: Vec<String> = self.tracks.iter()
+            .filter(|(_, trk)| (now - trk.last_seen) > 180.0)
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        for tid in expired_ids {
+            if let Some(trk) = self.tracks.remove(&tid) {
+                self.recent_lost.insert(
+                    tid.clone(),
+                    LostTargetRecord {
+                        id: tid,
+                        type_ua: trk.type_ua.clone(),
+                        category: trk.category.clone(),
+                        color_hex: trk.color_hex.clone(),
+                        lat: trk.lat,
+                        lon: trk.lon,
+                        heading: trk.heading,
+                        status: "lost".to_string(),
+                        lost_ts: now,
+                        first_seen: trk.first_seen,
+                        trajectory: trk.trajectory.clone(),
+                    },
+                );
+            }
+        }
+        self.recent_lost.retain(|_, v| (now - v.lost_ts) <= 120.0);
     }
 }
 

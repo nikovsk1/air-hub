@@ -106,14 +106,23 @@ async fn handle_health(
     State(state): State<AppState>,
 ) -> Response {
     let st = state.threat_state.read().await;
+    let obl_count = st.official_alerts.values().filter(|a| a.alert && a.level == "State").count();
+    let raion_count = st.official_alerts.values().filter(|a| a.alert && a.level != "State").count();
+    let total_sirens = st.official_alerts.values().filter(|a| a.alert).count();
+    let active_threats = st.tracker.tracks.len();
+
     Json(json!({
         "status": "online",
         "app": "Air Alert Radar Hub (Rust)",
         "version": "1.0.0",
         "upstream_provider": st.upstream_provider,
-        "active_threats": st.tracker.tracks.len(),
+        "active_threats": active_threats,
+        "active_threats_count": active_threats,
+        "active_oblasts_count": obl_count,
+        "active_raions_count": raion_count,
+        "official_sirens_count": total_sirens,
+        "total_official_sirens": total_sirens,
         "recent_lost_2min": st.tracker.recent_lost.len(),
-        "total_official_sirens": st.official_alerts.len(),
         "mig31k_active": st.mig_active,
         "last_update_ts": st.last_update_ts,
         "update_seq": st.update_seq,
@@ -590,7 +599,9 @@ async fn handle_get_threats(
     let etag = st.get_etag();
 
     if let Some(client_etag) = headers.get(header::IF_NONE_MATCH).and_then(|h| h.to_str().ok()) {
-        if client_etag.trim() == etag.trim() {
+        let clean_client = client_etag.trim().trim_start_matches("W/").trim_matches('"');
+        let clean_server = etag.trim().trim_start_matches("W/").trim_matches('"');
+        if clean_client == clean_server {
             return (
                 StatusCode::NOT_MODIFIED,
                 [(header::ETAG, etag.clone())],

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+﻿use std::sync::Arc;
 use std::time::Duration;
 use serde_json::Value;
 use tokio::sync::RwLock;
@@ -173,6 +173,12 @@ pub async fn run_failover_neptun_collector(
                         let color = item.get("color").and_then(|c| c.as_str()).unwrap_or("red").to_string();
 
                         if !reg_id.is_empty() {
+                            let level = if crate::oblast_detector::get_canonical_raion_to_oblast().contains_key(reg_id.as_str()) {
+                                "Raion".to_string()
+                            } else {
+                                "State".to_string()
+                            };
+
                             state.official_alerts.insert(
                                 reg_id.clone(),
                                 OfficialAlert {
@@ -181,7 +187,7 @@ pub async fn run_failover_neptun_collector(
                                     alert,
                                     alert_type,
                                     color,
-                                    level: "State".to_string(),
+                                    level,
                                     updated_at: chrono::Utc::now().to_rfc3339(),
                                 },
                             );

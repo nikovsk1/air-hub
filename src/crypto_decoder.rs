@@ -215,6 +215,9 @@ pub fn decode_payload_native(payload_str: &str) -> Result<Value, String> {
                 if alen == 0 {
                     return Ok(json!([]));
                 }
+                if alen > 10_000 || alen > raw.len() {
+                    return Err("Array length exceeds bounds".to_string());
+                }
                 let mut arr = vec![Value::Null; alen];
                 let start_offset = (val_rng.next() as usize) % alen;
                 let is_reverse = (val_rng.next() & 1) != 0;
@@ -395,10 +398,13 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
         if t.len() < 3 {
             continue;
         }
+        if t[0] < 0.0 || t[1] < 0.0 || t[2] < 0.0 || t[0].is_nan() || t[1].is_nan() || t[2].is_nan() {
+            continue;
+        }
         let uuid_idx = t[0] as usize;
         let c_idx = t[1] as usize;
         let typ_idx = t[2] as usize;
-        let heading = if t.len() > 3 { t[3] } else { 0.0 };
+        let heading = if t.len() > 3 && !t[3].is_nan() { t[3] } else { 0.0 };
 
         let uid = if let Some(ref uuids) = found_uuids {
             if uuid_idx < uuids.len() {

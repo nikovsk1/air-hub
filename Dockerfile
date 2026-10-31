@@ -16,18 +16,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     perl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy project files directly
-COPY Cargo.toml ./
+# Configurable build concurrency (1 for ARMv7 under QEMU, 2 for native x86_64/ARM64)
+ARG CARGO_BUILD_JOBS=1
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} \
+    RUST_BACKTRACE=1
+
+# 1. Cache external dependencies: copy ONLY Cargo manifests first
+COPY Cargo.toml Cargo.lock* ./
+
+# 2. Pre-compile ONLY external dependency crates (cached in Docker layer)
+#    This layer is reused on every code change and takes 0 seconds on rebuilds!
+RUN mkdir -p src && \
+    echo "fn main() {}" > src/main.rs && \
+    cargo build --release && \
+    rm -rf src target/release/deps/air_alert_hub_rs* target/release/air-alert-hub-rs*
+
+# 3. Copy application source code and assets
 COPY src ./src
 COPY static ./static
 COPY data_defaults ./data_defaults
 
-# Environment flags for robust multi-arch compilation under QEMU
-ENV CARGO_BUILD_JOBS=2 \
-    RUST_BACKTRACE=1
-
-# Build optimized release binary
-RUN cargo build --release
+# 4. Build application binary (takes seconds since all 212 dependencies are pre-compiled)
+RUN touch src/main.rs && cargo build --release
 
 # ================= Stage 2: Minimal Runtime =================
 FROM debian:bookworm-slim AS runner

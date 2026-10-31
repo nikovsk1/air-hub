@@ -573,15 +573,26 @@
       showLoginScreen();
     }
 
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     async function updateTelemetry() {
       try {
         const hRes = await fetch("/api/v1/health");
         if (!hRes.ok) return;
         const hData = await hRes.json();
 
-        document.getElementById("statThreats").innerText = hData.active_threats_count ?? "--";
+        document.getElementById("statThreats").innerText = hData.active_threats_count ?? hData.active_threats ?? "--";
         const oblCount = hData.active_oblasts_count ?? 0;
-        const raionCount = hData.active_raions_count ?? Math.max(0, (hData.official_sirens_count || 0) - oblCount);
+        const totalSirens = hData.official_sirens_count ?? hData.total_official_sirens ?? 0;
+        const raionCount = hData.active_raions_count ?? Math.max(0, totalSirens - oblCount);
         if (oblCount > 0 && raionCount > 0) {
           document.getElementById("statSirens").innerText = `${oblCount} обл. ${raionCount} районів`;
         } else if (oblCount > 0) {
@@ -1108,7 +1119,7 @@ ${resp.api_key}
               <a href="/map?token=${encodeURIComponent(apiKey)}" target="_blank" class="h-7 px-3 bg-orange-600/80 hover:bg-orange-500 text-white rounded text-xs font-semibold inline-flex items-center gap-1 shadow transition">
                 <span>⚙️ Налаштувати на мапі</span>
               </a>
-              <button onclick="deleteSlot('${apiKey}', '${slotId}', '${safeName}')" class="h-7 w-7 text-red-400 hover:text-red-200 hover:bg-red-950/80 rounded transition text-xs font-bold flex items-center justify-center" title="Видалити цю точку">
+              <button onclick="deleteSlot('${encodeURIComponent(apiKey)}', '${encodeURIComponent(slotId)}', '${encodeURIComponent(s.name || ('Точка #' + slotId))}')" class="h-7 w-7 text-red-400 hover:text-red-200 hover:bg-red-950/80 rounded transition text-xs font-bold flex items-center justify-center" title="Видалити цю точку">
                 🗑️
               </button>
             </div>
@@ -1324,8 +1335,11 @@ ${resp.api_key}
       }
     }
 
-    async function deleteSlot(apiKey, slotId, slotName) {
+    async function deleteSlot(apiKeyEnc, slotIdEnc, slotNameEnc) {
       if (!currentAdminKey) return showLoginScreen();
+      const apiKey = decodeURIComponent(apiKeyEnc);
+      const slotId = decodeURIComponent(slotIdEnc);
+      const slotName = slotNameEnc ? decodeURIComponent(slotNameEnc) : ('#' + slotId);
       if (!confirm("Ви дійсно бажаєте видалити точку #" + slotId + " («" + slotName + "»)?")) return;
 
       try {
@@ -1659,11 +1673,12 @@ ${resp.api_key}
           body: JSON.stringify(json)
         });
         const resp = await res.json();
-        if (resp.status === "success") {
-          alert("✅ Бекап успішно відновлено! Завантажено ключів: " + resp.users_count);
+        if (resp.status === "success" || resp.status === "restored") {
+          const count = resp.users_count !== undefined ? resp.users_count : (resp.count !== undefined ? resp.count : 0);
+          alert("✅ Бекап успішно відновлено! Завантажено ключів: " + count);
           loadKeys();
         } else {
-          alert("❌ Помилка відновлення: " + (resp.error || "Невідома помилка"));
+          alert("❌ Помилка відновлення: " + (resp.error || resp.message || "Невідома помилка"));
         }
       } catch (e) {
         alert("Помилка читання файлу: " + e);
@@ -1704,10 +1719,10 @@ ${resp.api_key}
         tbody.innerHTML = data.recent_entries.map(e => `
           <tr class="hover:bg-gray-800/40 transition border-b border-gray-800">
             <td class="p-2.5 text-gray-400 whitespace-nowrap">${e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString() : '--'}</td>
-            <td class="p-2.5 text-gray-300 font-semibold">${e.source || 'upstream'}</td>
-            <td class="p-2.5 text-amber-400 font-semibold">${e.category || '--'}</td>
-            <td class="p-2.5 text-white bg-gray-950/80 rounded px-2 py-1 select-all font-mono">${(e.raw_value || '').replace(/</g, '&lt;')}</td>
-            <td class="p-2.5 text-gray-400 font-sans">${(e.details || '').replace(/</g, '&lt;')}</td>
+            <td class="p-2.5 text-gray-300 font-semibold">${escapeHtml(e.source || 'upstream')}</td>
+            <td class="p-2.5 text-amber-400 font-semibold">${escapeHtml(e.category || '--')}</td>
+            <td class="p-2.5 text-white bg-gray-950/80 rounded px-2 py-1 select-all font-mono">${escapeHtml(e.raw_value)}</td>
+            <td class="p-2.5 text-gray-400 font-sans">${escapeHtml(e.details)}</td>
           </tr>
         `).join("");
       } catch (e) {
