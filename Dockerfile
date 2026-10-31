@@ -10,7 +10,7 @@ FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.5.0 AS xx
 FROM --platform=$BUILDPLATFORM rust:1-slim-bookworm AS builder
 COPY --from=xx / /
 
-ARG TARGETPLATFORM=linux/amd64
+ARG TARGETPLATFORM
 ARG CARGO_BUILD_JOBS=2
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 
