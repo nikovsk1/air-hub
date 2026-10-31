@@ -10,7 +10,9 @@ FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.5.0 AS xx
 FROM --platform=$BUILDPLATFORM rust:1-slim-bookworm AS builder
 COPY --from=xx / /
 
-ARG TARGETPLATFORM
+ARG TARGETPLATFORM=linux/amd64
+ARG CARGO_BUILD_JOBS=2
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 
 # Install host compiler tools and target C runtime for standard libc linking
 RUN apt-get update && \
@@ -20,6 +22,7 @@ RUN apt-get update && \
         pkg-config \
         git \
         ca-certificates && \
+    xx-apt-get update && \
     xx-apt-get install -y --no-install-recommends \
         libc6-dev \
         xx-c-essentials && \
@@ -34,7 +37,10 @@ COPY Cargo.toml Cargo.lock* ./
 RUN mkdir -p src && \
     echo "fn main() {}" > src/main.rs && \
     xx-cargo build --release && \
-    rm -rf src target/$(xx-cargo --print-target-triple)/release/deps/air_alert_hub_rs* target/$(xx-cargo --print-target-triple)/release/air-alert-hub-rs*
+    rm -rf src \
+        target/$(xx-cargo --print-target-triple)/release/deps/air_alert_hub_rs* \
+        target/$(xx-cargo --print-target-triple)/release/.fingerprint/air_alert_hub_rs* \
+        target/$(xx-cargo --print-target-triple)/release/air-alert-hub-rs*
 
 # 3. Copy application source code and static assets
 COPY src ./src

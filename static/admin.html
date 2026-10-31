@@ -2,7 +2,7 @@
 <html lang="uk" class="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
   <title>Air Alert Radar Hub — Центр керування</title>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -29,6 +29,8 @@
     }
   </script>
   <style>
+    :root { color-scheme: dark; }
+    select option { background-color: #0f172a; color: #f8fafc; }
     /* Custom scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #0b0f17; }
@@ -63,6 +65,11 @@
       box-shadow: 0 10px 32px 0 rgba(0, 0, 0, 0.55), inset 0 1px 1px 0 rgba(255, 255, 255, 0.16) !important;
     }
 
+      @media (max-width: 768px) {
+      input, select, textarea {
+        font-size: 16px !important;
+      }
+    }
   </style>
 </head>
 <body class="bg-[#08090c] text-gray-100 min-h-screen font-sans antialiased selection:bg-orange-500/30 selection:text-orange-300">
@@ -259,15 +266,15 @@
         </div>
       </div>
 
-      <!-- ТАБЛИЦЯ КОРИСТУВАЧІВ -->
-      <div class="overflow-x-auto">
+      <!-- ТАБЛИЦЯ КОРИСТУВАЧІВ (ДЕСКТОП) -->
+      <div class="overflow-x-auto hidden md:block">
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-950 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
             <tr>
               <th class="p-3 w-40">Власник</th>
               <th class="p-3 w-52">API Ключ</th>
               <th class="p-3 w-28">Статус</th>
-              <th class="p-3 min-w-[240px]">Опасна зона / Точки</th>
+              <th class="p-3 w-40">Кількість точок</th>
               <th class="p-3 w-32">Був у мережі</th>
               <th class="p-3 text-right w-52">Дії</th>
             </tr>
@@ -276,6 +283,11 @@
             <tr><td colspan="6" class="p-8 text-center text-gray-500">Завантаження даних...</td></tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- МОБІЛЬНИЙ КАРТКОВИЙ СПИСОК (MD:HIDDEN) -->
+      <div id="keysMobileList" class="block md:hidden p-3 space-y-3">
+        <div class="p-8 text-center text-gray-500">Завантаження даних...</div>
       </div>
     </div>
 
@@ -733,27 +745,36 @@ ${resp.api_key}
     function renderKeysTable(users) {
       cachedUsers = {};
       const tbody = document.getElementById("keysTableBody");
-      tbody.innerHTML = "";
+      const mobList = document.getElementById("keysMobileList");
+      if (tbody) tbody.innerHTML = "";
+      if (mobList) mobList.innerHTML = "";
 
       if (!users || users.length === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="6" class="p-8 text-center text-gray-400">
-              <div class="text-3xl mb-2">📭</div>
-              <div class="font-semibold text-white text-base">Немає створених API-ключів</div>
-              <p class="text-xs text-gray-500 mt-1 max-w-md mx-auto">
-                База даних порожня. Натисніть кнопку <span class="text-orange-400 font-semibold">«+ Створити ключ»</span> вище, щоб додати перший API-ключ для Home Assistant або ESP32.
-              </p>
-            </td>
-          </tr>
+        const emptyHtml = `
+          <div class="p-8 text-center text-gray-400">
+            <div class="text-3xl mb-2">📭</div>
+            <div class="font-semibold text-white text-base">Немає створених API-ключів</div>
+            <p class="text-xs text-gray-500 mt-1 max-w-md mx-auto">
+              База даних порожня. Натисніть кнопку <span class="text-orange-400 font-semibold">«+ Створити ключ»</span> вище, щоб додати перший API-ключ для Home Assistant або ESP32.
+            </p>
+          </div>
         `;
+        if (tbody) tbody.innerHTML = `<tr><td colspan="6">${emptyHtml}</td></tr>`;
+        if (mobList) mobList.innerHTML = emptyHtml;
         return;
       }
 
       users.forEach(u => {
         cachedUsers[u.api_key] = u;
-        const lastSeen = u.last_used_at ? new Date(u.last_used_at * 1000).toLocaleTimeString() : "Ніколи";
-        const s = u.settings || { danger_radius_km: 35, alert_threat: true, alert_siren: true, alert_mig: false, alert_artillery: false };
+        const lastTs = u.last_seen_ts || u.last_used_at;
+      const lastSeen = lastTs ? new Date(lastTs * 1000).toLocaleTimeString('uk-UA') : "Ніколи";
+        const s = {
+        danger_radius_km: u.default_danger_zone ?? 35,
+        alert_threat: u.target_alert_threat ?? true,
+        alert_siren: u.alert_siren ?? true,
+        alert_mig: u.alert_mig ?? false,
+        alert_artillery: u.alert_artillery ?? false
+      };
 
         const slotsObj = u.slots || {};
         const slotsCount = Object.keys(slotsObj).length;
@@ -772,7 +793,12 @@ ${resp.api_key}
         tr.id = "row_" + u.api_key;
         tr.className = "hover:bg-gray-800/40 transition border-b border-gray-800";
         tr.innerHTML = `
-          <td class="p-3 font-semibold text-white">${u.owner}</td>
+          <td class="p-3 font-semibold text-white cursor-pointer hover:text-orange-400 select-none transition" onclick="toggleUserDrawer('${u.api_key}')" title="Клікніть, щоб переглянути список точок">
+            <div class="flex items-center gap-1.5">
+              <span>${u.owner}</span>
+              <span id="chevron_owner_${u.api_key}" class="text-xs text-gray-500">▾</span>
+            </div>
+          </td>
           <td class="p-3 font-mono text-xs">
             <span onclick="copyToClipboard('${u.api_key}')" class="bg-gray-950 hover:bg-gray-900 border border-gray-800 hover:border-gray-700 px-2.5 py-1 rounded select-all text-sky-400 cursor-pointer inline-flex items-center gap-1 transition" title="Клікніть, щоб скопіювати ключ">
               <span>${u.api_key}</span>
@@ -785,20 +811,14 @@ ${resp.api_key}
             </span>
           </td>
           <td class="p-3">
-            <div class="flex flex-wrap gap-1 mb-1.5">
-              ${slotsCount > 0 ? slotsBadges : '<span class="text-xs text-gray-500 italic">Точки не додані (0/5)</span>'}
-            </div>
-            <div class="text-[11px] text-gray-400 flex flex-wrap gap-1">
-              ${s.alert_threat ? '<span class="bg-red-950/80 text-red-400 border border-red-900/60 px-1.5 py-0.5 rounded">🎯 Цілі</span>' : '<span class="bg-gray-900 text-gray-600 line-through px-1.5 py-0.5 rounded">🎯 Цілі</span>'}
-              ${s.alert_siren ? '<span class="bg-yellow-950/80 text-yellow-400 border border-yellow-900/60 px-1.5 py-0.5 rounded">📢 Сирена</span>' : '<span class="bg-gray-900 text-gray-600 line-through px-1.5 py-0.5 rounded">📢 Сирена</span>'}
-              ${s.alert_mig ? '<span class="bg-cyan-950/80 text-cyan-400 border border-cyan-900/60 px-1.5 py-0.5 rounded">✈️ МіГ</span>' : ''}
-              ${s.alert_artillery ? '<span class="bg-amber-950/80 text-amber-400 border border-amber-900/60 px-1.5 py-0.5 rounded">💥 Арта</span>' : ''}
-            </div>
+            <span class="px-2.5 py-1 text-xs rounded-full font-mono font-bold ${slotsCount >= 5 ? 'bg-amber-950 text-amber-400 border border-amber-800' : 'bg-blue-950 text-blue-400 border border-blue-800'}">
+              ${slotsCount} / 5
+            </span>
           </td>
           <td class="p-3 text-xs text-gray-400 whitespace-nowrap">${lastSeen}</td>
           <td class="p-3 text-right">
             <div class="flex items-center justify-end gap-1.5 whitespace-nowrap">
-              <button onclick="toggleUserDrawer('${u.api_key}')" class="h-8 px-3 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow" title="Розгорнути налаштування точок та алерів">
+              <button onclick="toggleUserDrawer('${u.api_key}')" class="h-8 px-3 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow" title="Розгорнути список точок">
                 <span>⚙️ Налаштувати</span>
                 <span id="chevron_${u.api_key}">▾</span>
               </button>
@@ -813,260 +833,173 @@ ${resp.api_key}
         `;
         tbody.appendChild(tr);
 
+        // Мобільна картка користувача (без горизонтального скролу)
+        if (mobList) {
+          const card = document.createElement("div");
+          card.id = "card_" + u.api_key;
+          card.className = "liquid-glass-card rounded-xl p-4 space-y-3";
+          card.innerHTML = `
+            <div class="flex items-center justify-between">
+              <div class="font-bold text-white text-base">${u.owner}</div>
+              <span class="px-2.5 py-1 text-xs rounded-full font-semibold ${u.enabled ? 'bg-orange-950 text-orange-400 border border-orange-800' : 'bg-red-950 text-red-400 border border-red-800'}">
+                ${u.enabled ? 'Активний' : 'Вимкнено'}
+              </span>
+            </div>
+
+            <div onclick="copyToClipboard('${u.api_key}')" class="bg-gray-950 hover:bg-gray-900 border border-gray-800 px-3 py-2 rounded-lg flex items-center justify-between text-xs font-mono text-sky-400 cursor-pointer" title="Натисніть для копіювання">
+              <span class="truncate">${u.api_key}</span>
+              <span class="text-gray-400 text-sm shrink-0 ml-2">📋</span>
+            </div>
+
+            <div class="flex items-center justify-between text-xs pt-1">
+              <span class="text-gray-400 font-medium">Кількість точок:</span>
+              <span class="px-2.5 py-0.5 rounded-full font-mono font-bold ${slotsCount >= 5 ? 'bg-amber-950 text-amber-400 border border-amber-800' : 'bg-blue-950 text-blue-400 border border-blue-800'}">
+                ${slotsCount} / 5
+              </span>
+            </div>
+
+            <div class="grid grid-cols-4 gap-2 pt-2 border-t border-gray-800">
+              <button onclick="toggleUserDrawer('${u.api_key}')" class="col-span-2 h-9 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 shadow">
+                <span>⚙️ Точки</span>
+                <span id="chevron_mob_${u.api_key}">▾</span>
+              </button>
+              <button onclick="toggleKey('${u.api_key}', ${!u.enabled})" class="h-9 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded-lg text-xs font-medium">
+                ${u.enabled ? 'Вимк' : 'Увімк'}
+              </button>
+              <button onclick="deleteKey('${u.api_key}')" class="h-9 bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 rounded-lg text-xs font-medium flex items-center justify-center">
+                🗑️
+              </button>
+            </div>
+
+            <div id="drawer_mob_${u.api_key}" class="hidden mt-4 pt-4 border-t border-emerald-900/60 space-y-4"></div>
+          `;
+          mobList.appendChild(card);
+        }
+
         // 2. ВБУДОВАНИЙ РОЗШИРЮВАНИЙ СУБ-РЯДОК (DRAWER) ДЛЯ ЦЬОГО КОРИСТУВАЧА
         const drawerTr = document.createElement("tr");
         drawerTr.id = "drawer_" + u.api_key;
         drawerTr.className = "hidden bg-gray-950/95 border-b-2 border-emerald-900/60 transition-all";
         drawerTr.innerHTML = `
           <td colspan="6" class="p-4 md:p-6">
-            <div class="space-y-6">
+            <div class="space-y-4">
 
-              <!-- Заголовок розгорнутого суб-фрейму -->
+              <!-- Заголовок розгорнутого суб-фрейму точок -->
               <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-800">
                 <div class="flex items-center gap-2.5">
-                  <span class="text-xl">⚙️</span>
+                  <span class="text-xl">📍</span>
                   <div>
                     <h3 class="text-base font-bold text-white flex items-center gap-2">
-                      <span>Параметри об'єкта:</span>
+                      <span>Точки об'єкта:</span>
                       <span class="text-orange-400 font-mono">${u.owner}</span>
                     </h3>
-                    <p class="text-xs text-gray-400">Налаштування локацій (слоти 1..5), персональних радіусів ураження та звукових фільтрів сирени</p>
+                    <p class="text-xs text-gray-400">Перелік точок спостереження, їх радіуси та обрані сповіщення</p>
                   </div>
                 </div>
-                <button onclick="toggleUserDrawer('${u.api_key}', false)" class="h-7 px-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded text-xs flex items-center gap-1 transition">
-                  ✕ Згорнути
-                </button>
+
+                <div class="flex items-center gap-2">
+                  <span class="text-xs px-2.5 py-1 rounded-full font-mono font-bold ${slotsCount >= 5 ? 'bg-amber-950 text-amber-400 border border-amber-800' : 'bg-blue-950 text-blue-400 border border-blue-800'}">
+                    ${slotsCount} / 5 слотів
+                  </span>
+                  ${slotsCount < 5 ? `
+                    <button onclick="toggleAddSlotDrawer('${u.api_key}')" class="h-8 px-3 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow">
+                      <span>➕ Додати точку</span>
+                    </button>
+                  ` : `
+                    <span class="text-[11px] text-amber-400 font-medium px-2 py-1 bg-amber-950/60 border border-amber-800 rounded">⚠️ Ліміт вичерпано</span>
+                  `}
+                  <button onclick="toggleUserDrawer('${u.api_key}', false)" class="h-8 px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded-lg text-xs flex items-center gap-1 transition">
+                    ✕ Згорнути
+                  </button>
+                </div>
               </div>
 
-              <!-- Дві секції: 1) Точки спостереження, 2) Зона небезпеки та сповіщення -->
-              <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <!-- Інлайн-форма додавання нової точки -->
+              <div id="addSlotBox_${u.api_key}" class="hidden p-4 bg-gray-900 border border-orange-800/80 rounded-xl space-y-3 shadow-lg">
+                <div class="flex items-center justify-between pb-2 border-b border-gray-800">
+                  <span class="text-xs font-bold text-orange-400">➕ Нова точка спостереження</span>
+                  <button onclick="toggleAddSlotDrawer('${u.api_key}', false)" class="text-gray-400 hover:text-white text-xs">✕</button>
+                </div>
 
-                <!-- ЛІВА КОЛОНКА (7/12): СЛОТИ ТОЧОК СПОСТЕРЕЖЕННЯ -->
-                <div class="lg:col-span-7 space-y-4">
-                  <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label class="block text-[11px] font-semibold text-gray-400 mb-1">Назва точки:</label>
+                    <input id="newSlotName_${u.api_key}" type="text" placeholder="Дім, Офіс, Склад..." class="h-8 w-full bg-gray-950 border border-gray-700 px-2.5 rounded text-xs text-white focus:border-orange-500 focus:outline-none">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-semibold text-gray-400 mb-1">Широта (Lat):</label>
+                    <input id="newSlotLat_${u.api_key}" type="number" step="0.0001" placeholder="50.4501" class="h-8 w-full bg-gray-950 border border-gray-700 px-2.5 rounded text-xs text-white font-mono focus:border-orange-500 focus:outline-none">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-semibold text-gray-400 mb-1">Довгота (Lon):</label>
+                    <input id="newSlotLon_${u.api_key}" type="number" step="0.0001" placeholder="30.5234" class="h-8 w-full bg-gray-950 border border-gray-700 px-2.5 rounded text-xs text-white font-mono focus:border-orange-500 focus:outline-none">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-800">
+                  <div>
+                    <div class="flex justify-between items-center text-[11px] text-gray-300 mb-1">
+                      <span class="font-semibold">🚨 Радіус небезпеки точки:</span>
+                      <span class="font-mono text-orange-400 font-bold" id="newSlotDangerVal_${u.api_key}">35 км</span>
+                    </div>
                     <div class="flex items-center gap-2">
-                      <h4 class="text-sm font-bold text-white flex items-center gap-1.5">
-                        <span>📍 Точки спостереження</span>
-                      </h4>
-                      <span id="slotCountPill_${u.api_key}" class="text-xs px-2 py-0.5 rounded-full font-mono font-bold ${slotsCount >= 5 ? 'bg-amber-950 text-amber-400 border border-amber-800' : 'bg-blue-950 text-blue-400 border border-blue-800'}">
-                        ${slotsCount} / 5 слотів
-                      </span>
-                    </div>
-
-                    ${slotsCount < 5 ? `
-                      <button onclick="toggleAddSlotDrawer('${u.api_key}')" class="h-7 px-3 bg-orange-600 hover:bg-orange-500 text-white rounded text-xs font-semibold flex items-center gap-1 transition shadow">
-                        <span>➕ Додати точку</span>
-                      </button>
-                    ` : `
-                      <span class="text-[11px] text-amber-400 font-medium">⚠️ Ліміт 5 слотів вичерпано</span>
-                    `}
-                  </div>
-
-                  <!-- Інлайн-форма додавання нової точки -->
-                  <div id="addSlotBox_${u.api_key}" class="hidden p-4 bg-gray-900 border border-orange-800/80 rounded-xl space-y-3 shadow-lg">
-                    <div class="flex items-center justify-between pb-2 border-b border-gray-800">
-                      <span class="text-xs font-bold text-orange-400">➕ Нова точка спостереження (Слот)</span>
-                      <button onclick="toggleAddSlotDrawer('${u.api_key}', false)" class="text-gray-400 hover:text-white text-xs">✕</button>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      <div>
-                        <label class="block text-[11px] font-semibold text-gray-400 mb-1">Назва точки:</label>
-                        <input id="newSlotName_${u.api_key}" type="text" placeholder="Дім, Офіс, Дача..." class="h-8 w-full bg-gray-950 border border-gray-700 px-2.5 rounded text-xs text-white focus:border-orange-500 focus:outline-none">
-                      </div>
-                      <div>
-                        <label class="block text-[11px] font-semibold text-gray-400 mb-1">Широта (Lat):</label>
-                        <input id="newSlotLat_${u.api_key}" type="number" step="0.0001" placeholder="50.4501" class="h-8 w-full bg-gray-950 border border-gray-700 px-2.5 rounded text-xs text-white font-mono focus:border-orange-500 focus:outline-none">
-                      </div>
-                      <div>
-                        <label class="block text-[11px] font-semibold text-gray-400 mb-1">Довгота (Lon):</label>
-                        <input id="newSlotLon_${u.api_key}" type="number" step="0.0001" placeholder="30.5234" class="h-8 w-full bg-gray-950 border border-gray-700 px-2.5 rounded text-xs text-white font-mono focus:border-orange-500 focus:outline-none">
-                      </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-800">
-                      <div>
-                        <div class="flex justify-between items-center text-[11px] text-gray-300 mb-1">
-                          <span class="font-semibold">🚨 Радіус небезпеки (Danger Zone):</span>
-                          <span class="font-mono text-orange-400 font-bold" id="newSlotDangerVal_${u.api_key}">35 км</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                          <input type="range" min="5" max="150" step="5" value="35" id="newSlotDangerRange_${u.api_key}" class="w-full accent-orange-500 cursor-pointer" oninput="syncNewSlotDanger('${u.api_key}', this.value)">
-                          <input type="number" min="1" max="500" value="35" id="newSlotDangerNum_${u.api_key}" class="w-16 h-7 bg-gray-950 border border-gray-700 px-1 rounded text-xs text-white font-mono text-center" oninput="syncNewSlotDanger('${u.api_key}', this.value)">
-                          <span class="text-[10px] text-gray-400">км</span>
-                        </div>
-                      </div>
-                      <div>
-                        <label class="block text-[11px] font-semibold text-gray-400 mb-1">Тип локації:</label>
-                        <select id="newSlotType_${u.api_key}" class="h-8 w-full bg-gray-950 border border-gray-700 px-2 rounded text-xs text-white focus:border-orange-500 focus:outline-none">
-                          <option value="static">Статична (постійні координати)</option>
-                          <option value="dynamic">Динамічна (GPS зі смартфона / HA)</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <!-- Фільтри загроз для нової точки -->
-                    <div class="space-y-1.5 pt-1 border-t border-gray-800">
-                      <div class="flex items-center justify-between text-[11px] font-semibold text-gray-300">
-                        <span>🎯 Реагувати на фізичні загрози в радіусі точки:</span>
-                        <span class="text-[10px] text-gray-500 font-normal">довідник цілей</span>
-                      </div>
-                      <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
-                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
-                          <input type="checkbox" id="newSlotThreat_missile_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
-                          <span class="text-gray-300">🚀 Ракета</span>
-                        </label>
-                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
-                          <input type="checkbox" id="newSlotThreat_ballistic_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
-                          <span class="text-gray-300">☄️ Балістика</span>
-                        </label>
-                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
-                          <input type="checkbox" id="newSlotThreat_shahed_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
-                          <span class="text-gray-300">🛸 Шахед</span>
-                        </label>
-                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
-                          <input type="checkbox" id="newSlotThreat_shahed_jet_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
-                          <span class="text-gray-300">⚡ Реактивний</span>
-                        </label>
-                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
-                          <input type="checkbox" id="newSlotThreat_kab_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
-                          <span class="text-gray-300">💣 КАБ</span>
-                        </label>
-                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
-                          <input type="checkbox" id="newSlotThreat_lancet_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
-                          <span class="text-gray-300">🎯 Ланцет</span>
-                        </label>
-                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
-                          <input type="checkbox" id="newSlotThreat_unknown_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
-                          <span class="text-gray-300">❓ Невідома</span>
-                        </label>
-                        <label class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded cursor-pointer select-none text-[11px] border border-gray-800">
-                          <input type="checkbox" id="newSlotThreat_recon_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5">
-                          <span class="text-gray-300">👁️ Розвідник</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <!-- Фільтри сповіщень для нової точки -->
-                    <div class="space-y-1.5 pt-1">
-                      <div class="flex items-center justify-between text-[11px] font-semibold text-gray-300">
-                        <span>🔔 Сповіщення для цієї точки:</span>
-                        <span class="text-[10px] text-gray-500 font-normal">довідник тривог</span>
-                      </div>
-                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
-                        <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px]">
-                          <input type="checkbox" id="newSlotAlertThreat_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
-                          <span class="text-white">🎯 Ціль у зоні точки</span>
-                        </label>
-                        <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px]">
-                          <input type="checkbox" id="newSlotAlertSiren_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
-                          <span class="text-white">📢 Офіційна сирена (район/обл)</span>
-                        </label>
-                        <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px]">
-                          <input type="checkbox" id="newSlotAlertYellow_${u.api_key}" class="rounded accent-yellow-500 w-3.5 h-3.5">
-                          <span class="text-yellow-400">⚠️ Жовта тривога</span>
-                        </label>
-                        <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px]">
-                          <input type="checkbox" id="newSlotAlertArtillery_${u.api_key}" class="rounded accent-amber-500 w-3.5 h-3.5">
-                          <span class="text-amber-400">💥 Артобстріл / РСЗВ</span>
-                        </label>
-                        <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px] sm:col-span-2">
-                          <input type="checkbox" id="newSlotAlertMig_${u.api_key}" class="rounded accent-cyan-500 w-3.5 h-3.5">
-                          <span class="text-cyan-400">✈️ Зліт МіГ-31К (загальна балістика)</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div class="flex justify-end items-center gap-2 pt-2">
-                      <button onclick="toggleAddSlotDrawer('${u.api_key}', false)" class="h-7 px-3 text-xs text-gray-400 hover:text-white">Скасувати</button>
-                      <button onclick="submitNewSlot('${u.api_key}')" class="h-7 px-4 bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded text-xs flex items-center gap-1 transition shadow">
-                        💾 Додати точку
-                      </button>
+                      <input type="range" min="5" max="150" step="5" value="35" id="newSlotDangerRange_${u.api_key}" class="w-full accent-orange-500 cursor-pointer" oninput="syncNewSlotDanger('${u.api_key}', this.value)">
+                      <input type="number" min="1" max="500" value="35" id="newSlotDangerNum_${u.api_key}" class="w-16 h-7 bg-gray-950 border border-gray-700 px-1 rounded text-xs text-white font-mono text-center" oninput="syncNewSlotDanger('${u.api_key}', this.value)">
+                      <span class="text-[10px] text-gray-400">км</span>
                     </div>
                   </div>
-
-                  <!-- Список карток існуючих точок -->
-                  <div class="space-y-3" id="slotsList_${u.api_key}">
-                    ${renderSlotCardsHtml(u.api_key, slotsObj)}
+                  <div>
+                    <label class="block text-[11px] font-semibold text-gray-400 mb-1">Тип точки:</label>
+                    <select id="newSlotType_${u.api_key}" class="h-8 w-full bg-gray-950 border border-gray-700 px-2 rounded text-xs text-white focus:border-orange-500 focus:outline-none">
+                      <option value="static">Статична (постійні координати)</option>
+                      <option value="dynamic">Динамічна (GPS зі смартфона / трекера)</option>
+                    </select>
                   </div>
                 </div>
 
-                <!-- ПРАВА КОЛОНКА (5/12): ЗОНА ЗА ЗАМОВЧУВАННЯМ ТА ФІЛЬТРИ АЛЕРТІВ -->
-                <div class="lg:col-span-5 bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-5 space-y-5 flex flex-col justify-between">
-                  <div class="space-y-4">
-                    <div>
-                      <h4 class="text-sm font-bold text-white flex items-center gap-1.5 mb-1">
-                        <span>🚨 Загальний радіус небезпеки</span>
-                      </h4>
-                      <p class="text-xs text-gray-400">Базовий радіус перехоплення цілей навколо об'єкта</p>
-                    </div>
-
-                    <!-- Слайдер радіусу -->
-                    <div class="bg-gray-950 border border-gray-800 p-3 rounded-lg space-y-2">
-                      <div class="flex justify-between items-center text-xs">
-                        <span class="text-gray-300 font-medium">Радіус поразки (за замовчуванням):</span>
-                        <span class="font-mono text-orange-400 font-bold text-sm" id="dangerRadiusVal_${u.api_key}">${s.danger_radius_km || 35} км</span>
-                      </div>
-                      <div class="flex items-center gap-3">
-                        <input type="range" min="5" max="150" step="5" value="${s.danger_radius_km || 35}" id="dangerRadiusRange_${u.api_key}" class="w-full accent-orange-500 cursor-pointer" oninput="syncDangerRadius('${u.api_key}', this.value)">
-                        <input type="number" min="1" max="500" value="${s.danger_radius_km || 35}" id="dangerRadiusNum_${u.api_key}" class="w-16 h-8 bg-gray-900 border border-gray-700 px-1 rounded text-xs text-white font-mono text-center focus:border-orange-500" oninput="syncDangerRadius('${u.api_key}', this.value)">
-                        <span class="text-xs text-gray-400">км</span>
-                      </div>
-                      <label class="flex items-center gap-2 cursor-pointer pt-1 text-xs text-gray-400 hover:text-gray-300 select-none">
-                        <input type="checkbox" id="applyAllSlotsCheck_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5 cursor-pointer">
-                        <span>Призначити цей радіус одразу до всіх ${slotsCount} слотів</span>
-                      </label>
-                    </div>
-
-                    <!-- Чекбокси типів сповіщень -->
-                    <div class="space-y-2">
-                      <label class="block text-xs font-semibold text-gray-300">Фільтри звукових сигналів (ESP32 / Home Assistant):</label>
-
-                      <div class="space-y-2 bg-gray-950 border border-gray-800 p-3 rounded-lg text-xs">
-                        <label class="flex items-start gap-2.5 cursor-pointer select-none">
-                          <input type="checkbox" id="alertThreatCheck_${u.api_key}" class="mt-0.5 rounded accent-orange-500 w-4 h-4 cursor-pointer" ${s.alert_threat !== false ? 'checked' : ''}>
-                          <div>
-                            <span class="font-semibold text-white">🎯 Фізична ціль у зоні небезпеки</span>
-                            <p class="text-[11px] text-gray-400">Сирена при наближенні реального Шахеда/ракети в радіус обраної точки</p>
-                          </div>
-                        </label>
-
-                        <label class="flex items-start gap-2.5 cursor-pointer select-none pt-2 border-t border-gray-900">
-                          <input type="checkbox" id="alertSirenCheck_${u.api_key}" class="mt-0.5 rounded accent-orange-500 w-4 h-4 cursor-pointer" ${s.alert_siren !== false ? 'checked' : ''}>
-                          <div>
-                            <span class="font-semibold text-white">📢 Офіційна тривога в області слота</span>
-                            <p class="text-[11px] text-gray-400">Звук при увімкненні офіційної сирени, навіть якщо цілей на радарі ще немає</p>
-                          </div>
-                        </label>
-
-                        <label class="flex items-start gap-2.5 cursor-pointer select-none pt-2 border-t border-gray-900">
-                          <input type="checkbox" id="alertMigCheck_${u.api_key}" class="mt-0.5 rounded accent-orange-500 w-4 h-4 cursor-pointer" ${s.alert_mig ? 'checked' : ''}>
-                          <div>
-                            <span class="font-semibold text-white">✈️ Зліт МіГ-31К / Балістична загроза</span>
-                            <p class="text-[11px] text-gray-400">Загальноукраїнська тривога по гіперзвуковим ракетам «Кинджал»</p>
-                          </div>
-                        </label>
-
-                        <label class="flex items-start gap-2.5 cursor-pointer select-none pt-2 border-t border-gray-900">
-                          <input type="checkbox" id="alertArtilleryCheck_${u.api_key}" class="mt-0.5 rounded accent-orange-500 w-4 h-4 cursor-pointer" ${s.alert_artillery ? 'checked' : ''}>
-                          <div>
-                            <span class="font-semibold text-white">💥 Загроза артобстрілу / РСЗВ</span>
-                            <p class="text-[11px] text-gray-400">Тривоги артилерійського обстрілу в прифронтових районах</p>
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Кнопка збереження суб-фрейму -->
-                  <div class="pt-3 border-t border-gray-800 flex justify-end items-center gap-2">
-                    <button onclick="toggleUserDrawer('${u.api_key}', false)" class="h-9 px-3 text-xs text-gray-400 hover:text-white transition">Згорнути</button>
-                    <button onclick="saveUserSettings('${u.api_key}')" class="h-9 px-5 bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 transition shadow-lg">
-                      <span>💾</span><span>Зберегти налаштування та алерти</span>
-                    </button>
+                <!-- Фільтри сповіщень для нової точки -->
+                <div class="space-y-1.5 pt-1">
+                  <div class="text-[11px] font-semibold text-gray-300">🔔 Сповіщення для цієї точки:</div>
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-xs">
+                    <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px]">
+                      <input type="checkbox" id="newSlotAlertThreat_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
+                      <span class="text-white">🎯 Ціль у зоні точки</span>
+                    </label>
+                    <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px]">
+                      <input type="checkbox" id="newSlotAlertSiren_${u.api_key}" class="rounded accent-orange-500 w-3.5 h-3.5" checked>
+                      <span class="text-white">📢 Офіційна сирена за місцем</span>
+                    </label>
+                    <label class="flex items-center gap-2 bg-gray-950 border border-gray-800 px-2 py-1.5 rounded cursor-pointer select-none text-[11px]">
+                      <input type="checkbox" id="newSlotAlertMig_${u.api_key}" class="rounded accent-cyan-500 w-3.5 h-3.5">
+                      <span class="text-cyan-400">✈️ Зліт МіГ-31К</span>
+                    </label>
                   </div>
                 </div>
 
+                <div class="flex justify-end items-center gap-2 pt-2">
+                  <button onclick="toggleAddSlotDrawer('${u.api_key}', false)" class="h-7 px-3 text-xs text-gray-400 hover:text-white">Скасувати</button>
+                  <button onclick="submitNewSlot('${u.api_key}')" class="h-7 px-4 bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded text-xs flex items-center gap-1 transition shadow">
+                    💾 Додати точку
+                  </button>
+                </div>
+              </div>
+
+              <!-- Таблиця переліку точок -->
+              <div class="overflow-x-auto rounded-xl border border-gray-800 bg-gray-900/60">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-gray-950 text-gray-400 uppercase tracking-wider border-b border-gray-800 text-[11px]">
+                    <tr>
+                      <th class="p-3 w-48">Назва</th>
+                      <th class="p-3 w-36">Тип</th>
+                      <th class="p-3 w-28">Радіус</th>
+                      <th class="p-3 min-w-[220px]">Обрані сповіщення</th>
+                      <th class="p-3 text-right w-52">Дії</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-800" id="slotsList_${u.api_key}">
+                    ${renderSlotRowsHtml(u.api_key, slotsObj)}
+                  </tbody>
+                </table>
               </div>
 
             </div>
@@ -1083,18 +1016,16 @@ ${resp.api_key}
       }
     }
 
-    function renderSlotCardsHtml(apiKey, slotsObj) {
+    function renderSlotRowsHtml(apiKey, slotsObj) {
       if (!slotsObj || typeof slotsObj !== "object") return "";
       const keys = Object.keys(slotsObj).sort();
       if (keys.length === 0) {
         return `
-          <div class="liquid-glass p-6 rounded-xl text-center">
-            <div class="text-2xl mb-1">📍</div>
-            <div class="text-white font-semibold text-xs">Точки ще не додані (0 / 5)</div>
-            <p class="text-[11px] text-gray-500 mt-1 max-w-sm mx-auto">
-              Натисніть «+ Додати точку» вище, або налаштуйте точки безпосередньо у меню «Опції» тактичної мапи.
-            </p>
-          </div>
+          <tr>
+            <td colspan="5" class="p-6 text-center text-gray-500 text-xs">
+              Точки ще не додані (0 / 5). Натисніть «➕ Додати точку», щоб створити першу точку спостереження.
+            </td>
+          </tr>
         `;
       }
 
@@ -1103,54 +1034,107 @@ ${resp.api_key}
         const isDyn = s.type === "dynamic" || s.is_dynamic;
         const dangerRad = s.danger_radius_km ?? s.danger_zone ?? 35;
         const safeName = (s.name || ('Точка #' + slotId)).replace(/'/g, "\'");
-        const oblast = s.cached_oblast || s.oblast || 'Локація визначається';
+        const oblast = s.cached_oblast || s.oblast || s.raion || '';
+
+        const alertBadges = [];
+        if (s.alert_threat !== false) {
+          alertBadges.push(`<span class="bg-red-950/80 text-red-400 border border-red-900/60 px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1 font-medium">🎯 Цілі</span>`);
+        }
+        if (s.alert_siren) {
+          alertBadges.push(`<span class="bg-yellow-950/80 text-yellow-400 border border-yellow-900/60 px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1 font-medium">📢 Сирена</span>`);
+        }
+        if (s.alert_mig) {
+          alertBadges.push(`<span class="bg-cyan-950/80 text-cyan-400 border border-cyan-900/60 px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1 font-medium">✈️ МіГ-31К</span>`);
+        }
+        if (s.alert_artillery) {
+          alertBadges.push(`<span class="bg-amber-950/80 text-amber-400 border border-amber-900/60 px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1 font-medium">💥 Арта</span>`);
+        }
+        const badgesHtml = alertBadges.length > 0
+          ? alertBadges.join(' ')
+          : `<span class="text-gray-500 italic text-[11px]">Сповіщення вимкнені</span>`;
 
         return `
-          <div class="liquid-glass p-3.5 rounded-xl flex flex-wrap items-center justify-between gap-3 shadow">
-            <div class="flex items-center gap-2.5 flex-wrap">
-              <span class="w-6 h-6 rounded-full bg-orange-950 text-orange-400 border border-orange-800 flex items-center justify-center text-xs font-bold font-mono">#${slotId}</span>
-              <span class="text-sm font-bold text-white">${s.name || ('Точка #' + slotId)}</span>
+          <tr class="hover:bg-gray-800/40 transition">
+            <td class="p-3">
+              <div class="flex items-center gap-2">
+                <span class="w-5 h-5 rounded-full bg-orange-950 text-orange-400 border border-orange-800 flex items-center justify-center text-[10px] font-bold font-mono shrink-0">#${slotId}</span>
+                <div>
+                  <div class="font-bold text-white text-xs">${s.name || ('Точка #' + slotId)}</div>
+                  ${oblast ? `<div class="text-[10px] text-gray-400">📍 ${oblast}</div>` : ''}
+                </div>
+              </div>
+            </td>
+            <td class="p-3">
               <span class="text-[10px] px-2 py-0.5 rounded font-mono font-medium ${isDyn ? 'bg-purple-950 text-purple-300 border border-purple-800' : 'bg-blue-950 text-blue-300 border border-blue-800'}">
-                ${isDyn ? 'GPS ДИНАМІЧНИЙ' : 'СТАТИЧНИЙ'}
+                ${isDyn ? 'Динамічний (GPS)' : 'Статичний'}
               </span>
-              <span class="text-[11px] px-2 py-0.5 rounded bg-gray-900 text-gray-300 border border-gray-800 font-medium inline-flex items-center gap-1">
-                📍 ${oblast} • Радіус: ${dangerRad} км
-              </span>
-            </div>
-            <div class="flex items-center gap-2">
-              <a href="/map?token=${encodeURIComponent(apiKey)}" target="_blank" class="h-7 px-3 bg-orange-600/80 hover:bg-orange-500 text-white rounded text-xs font-semibold inline-flex items-center gap-1 shadow transition">
-                <span>⚙️ Налаштувати на мапі</span>
-              </a>
-              <button onclick="deleteSlot('${encodeURIComponent(apiKey)}', '${encodeURIComponent(slotId)}', '${encodeURIComponent(s.name || ('Точка #' + slotId))}')" class="h-7 w-7 text-red-400 hover:text-red-200 hover:bg-red-950/80 rounded transition text-xs font-bold flex items-center justify-center" title="Видалити цю точку">
-                🗑️
-              </button>
-            </div>
-          </div>
+            </td>
+            <td class="p-3">
+              <span class="font-mono text-orange-400 font-bold text-xs">${dangerRad} км</span>
+            </td>
+            <td class="p-3">
+              <div class="flex flex-wrap gap-1">
+                ${badgesHtml}
+              </div>
+            </td>
+            <td class="p-3 text-right">
+              <div class="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                <a href="/map?token=${encodeURIComponent(apiKey)}&slot=${encodeURIComponent(slotId)}" target="_blank" class="h-7 px-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1 shadow transition">
+                  <span>⚙️ Налаштувати на мапі</span>
+                </a>
+                <button onclick="deleteSlot('${encodeURIComponent(apiKey)}', '${encodeURIComponent(slotId)}', '${encodeURIComponent(safeName)}')" class="h-7 px-2.5 bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 rounded-lg text-xs font-medium inline-flex items-center gap-1 transition" title="Видалити точку">
+                  <span>🗑️ Видалити</span>
+                </button>
+              </div>
+            </td>
+          </tr>
         `;
       }).join('');
     }
 
     function toggleUserDrawer(apiKey, forceState) {
-      const drawer = document.getElementById("drawer_" + apiKey);
-      const chevron = document.getElementById("chevron_" + apiKey);
-      if (!drawer) return;
+      const drawerDesk = document.getElementById("drawer_" + apiKey);
+      const drawerMob = document.getElementById("drawer_mob_" + apiKey);
+      const chevDesk = document.getElementById("chevron_" + apiKey);
+      const chevMob = document.getElementById("chevron_mob_" + apiKey);
 
-      const shouldOpen = forceState !== undefined ? forceState : drawer.classList.contains("hidden");
+      const isMobile = window.innerWidth < 768;
+      const targetDrawer = isMobile ? drawerMob : drawerDesk;
+      if (!targetDrawer && !drawerDesk) return;
+
+      // Reparent inner content between desktop and mobile to avoid duplicate IDs in the DOM
+      const deskTd = drawerDesk ? drawerDesk.querySelector("td") : null;
+      let innerContent = (deskTd && deskTd.querySelector("div.space-y-4")) || (drawerMob && drawerMob.querySelector("div.space-y-4"));
+
+      if (innerContent) {
+        if (isMobile && drawerMob && innerContent.parentElement !== drawerMob) {
+          drawerMob.appendChild(innerContent);
+        } else if (!isMobile && deskTd && innerContent.parentElement !== deskTd) {
+          deskTd.appendChild(innerContent);
+        }
+      }
+
+      const activeDrawer = targetDrawer || drawerDesk;
+      const shouldOpen = forceState !== undefined ? forceState : activeDrawer.classList.contains("hidden");
 
       if (shouldOpen) {
-        // Закриваємо попередньо відкритий суб-фрейм іншого користувача для охайності
         if (currentOpenDrawerKey && currentOpenDrawerKey !== apiKey) {
-          const prevDrawer = document.getElementById("drawer_" + currentOpenDrawerKey);
-          const prevChev = document.getElementById("chevron_" + currentOpenDrawerKey);
-          if (prevDrawer) prevDrawer.classList.add("hidden");
-          if (prevChev) prevChev.innerText = "▾";
+          toggleUserDrawer(currentOpenDrawerKey, false);
         }
-        drawer.classList.remove("hidden");
-        if (chevron) chevron.innerText = "▴";
+        if (drawerDesk) drawerDesk.classList.remove("hidden");
+        if (drawerMob) drawerMob.classList.remove("hidden");
+        if (chevDesk) chevDesk.innerText = "▴";
+        if (chevMob) chevMob.innerText = "▴";
+        const chO = document.getElementById("chevron_owner_" + apiKey);
+        if (chO) chO.innerText = "▴";
         currentOpenDrawerKey = apiKey;
       } else {
-        drawer.classList.add("hidden");
-        if (chevron) chevron.innerText = "▾";
+        if (drawerDesk) drawerDesk.classList.add("hidden");
+        if (drawerMob) drawerMob.classList.add("hidden");
+        if (chevDesk) chevDesk.innerText = "▾";
+        if (chevMob) chevMob.innerText = "▾";
+        const chO = document.getElementById("chevron_owner_" + apiKey);
+        if (chO) chO.innerText = "▾";
         if (currentOpenDrawerKey === apiKey) currentOpenDrawerKey = "";
       }
     }
@@ -1178,13 +1162,6 @@ ${resp.api_key}
       if (r) r.value = val;
       if (n) n.value = val;
       if (l) l.innerText = val + " км";
-    }
-
-    function syncSlotDanger(apiKey, slotId, val) {
-      const r = document.getElementById("slotDangerRange_" + apiKey + "_" + slotId);
-      const n = document.getElementById("slotDangerNum_" + apiKey + "_" + slotId);
-      if (r) r.value = val;
-      if (n) n.value = val;
     }
 
     function syncDangerRadius(apiKey, val) {
@@ -1227,56 +1204,7 @@ ${resp.api_key}
       }
     }
 
-    async function saveSlot(apiKey, slotId) {
-      if (!currentAdminKey) return showLoginScreen();
-      const name = document.getElementById("slotName_" + apiKey + "_" + slotId).value;
-      const lat = parseFloat(document.getElementById("slotLat_" + apiKey + "_" + slotId).value);
-      const lon = parseFloat(document.getElementById("slotLon_" + apiKey + "_" + slotId).value);
-      const danger_radius_km = parseFloat(document.getElementById("slotDangerNum_" + apiKey + "_" + slotId).value) || 35.0;
-
-      // Збір типів цілей, на які реагує точка
-      const react_threat_types = [];
-      ['missile', 'ballistic', 'shahed', 'shahed_jet', 'kab', 'lancet', 'recon', 'unknown'].forEach(t => {
-        const el = document.getElementById("slotThreat_" + t + "_" + apiKey + "_" + slotId);
-        if (el && el.checked) react_threat_types.push(t);
-      });
-
-      // Збір тривог, на які реагує точка
-      const alert_threat = document.getElementById("slotAlertThreat_" + apiKey + "_" + slotId)?.checked ?? true;
-      const alert_siren = document.getElementById("slotAlertSiren_" + apiKey + "_" + slotId)?.checked ?? true;
-      const alert_yellow = document.getElementById("slotAlertYellow_" + apiKey + "_" + slotId)?.checked ?? false;
-      const alert_artillery = document.getElementById("slotAlertArtillery_" + apiKey + "_" + slotId)?.checked ?? false;
-      const alert_mig = document.getElementById("slotAlertMig_" + apiKey + "_" + slotId)?.checked ?? false;
-
-      try {
-        const res = await fetch("/api/v1/slots/" + slotId + "?token=" + encodeURIComponent(apiKey) + "&admin_key=" + encodeURIComponent(currentAdminKey), {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name,
-            lat,
-            lon,
-            danger_radius_km,
-            react_threat_types,
-            alert_threat,
-            alert_siren,
-            alert_yellow,
-            alert_artillery,
-            alert_mig
-          })
-        });
-        if (res.ok) {
-          alert("✅ Точка #" + slotId + " («" + name + "») успішно налаштована та збережена!");
-          loadKeys();
-        } else {
-          const err = await res.json();
-          alert("Помилка збереження точки: " + (err.error || "Невідома помилка"));
-        }
-      } catch (e) {
-        alert("Помилка мережі: " + e);
-      }
-    }
-
+    
     async function submitNewSlot(apiKey) {
       if (!apiKey || !currentAdminKey) return;
       const name = document.getElementById("newSlotName_" + apiKey).value.trim();
@@ -1326,7 +1254,7 @@ ${resp.api_key}
           })
         });
         const resp = await res.json();
-        if (res.ok && resp.status === "success") {
+        if (res.ok && (resp.status === "created" || resp.status === "success" || resp.slot)) {
           alert("✅ Точку «" + (resp.slot.name || ("#" + resp.slot.id)) + "» успішно додано!");
           loadKeys();
         } else {
@@ -1871,8 +1799,10 @@ ${resp.api_key}
       if (modal) modal.classList.add("hidden");
     }
 
-    function copyToClipboard(text, btn) {
+    function copyApiCommandToClipboard(text, btn) {
+      if (!navigator.clipboard) return;
       navigator.clipboard.writeText(text).then(() => {
+        if (!btn) return;
         const oldHtml = btn.innerHTML;
         btn.innerHTML = "<span>✅ Скопійовано!</span>";
         btn.classList.add("text-emerald-400");
@@ -1894,10 +1824,26 @@ ${resp.api_key}
         {
           method: "GET",
           badgeColor: "bg-emerald-950 text-emerald-400 border-emerald-800",
-          path: `/api/v1/radar/live?token=${token}`,
+          path: `/api/v1/radar?token=${token}`,
           title: "Головна радарна телеметрія (Home Assistant & ESP32)",
-          desc: "Повертає статус загрози (danger: true/false), найближчу ціль, дистанцію в км, азимут, розрахований час підльоту (ETA), сирени для обраного користувача.",
-          sample: `curl "${origin}/api/v1/radar/live?token=${token}"`
+          desc: "Повертає статус загрози (danger: true/false), найближчу ціль, дистанцію в км, азимут, розрахований час підльоту (ETA), сирени для обраного користувача. Підтримує вибір точки: ?slot=1 або ?slot=2. (Також доступний аліас /api/v1/radar/live).",
+          sample: `curl "${origin}/api/v1/radar?token=${token}"`
+        },
+        {
+          method: "GET",
+          badgeColor: "bg-emerald-950 text-emerald-400 border-emerald-800",
+          path: `/api/v1/location?token=${token}`,
+          title: "Список точок спостереження (статичні та динамічні)",
+          desc: "Повертає перелік усіх ваших слотів із зазначенням типу (static / dynamic), координат, радіусів та активного динамічного слота.",
+          sample: `curl "${origin}/api/v1/location?token=${token}"`
+        },
+        {
+          method: "POST",
+          badgeColor: "bg-amber-950 text-amber-400 border-amber-800",
+          path: `/api/v1/location`,
+          title: "Оновлення GPS-координат динамічної точки (Смартфон / Авто)",
+          desc: "Приймає координати від Home Assistant Companion App або Tasker. Якщо 'slot' не передано, автоматично оновлює динамічний слот.",
+          sample: `curl -X POST "${origin}/api/v1/location" -H "Content-Type: application/json" -d '{"token": "${token}", "lat": 50.4501, "lon": 30.5234}'`
         },
         {
           method: "GET",
@@ -1906,14 +1852,6 @@ ${resp.api_key}
           title: "Список усіх активних повітряних цілей",
           desc: "Повертає масив активних БПЛА ('Шахедів'), крилатих та балістичних ракет з їх поточними координатами (lat/lon), курсом та швидкістю.",
           sample: `curl "${origin}/api/v1/threats?token=${token}"`
-        },
-        {
-          method: "POST",
-          badgeColor: "bg-amber-950 text-amber-400 border-amber-800",
-          path: `/api/v1/location`,
-          title: "Оновлення GPS-координат динамічного слота",
-          desc: "Використовується для передачі координат вашого смартфона в реальному часі (з автоматизацій Home Assistant Companion App або Tasker).",
-          sample: `curl -X POST "${origin}/api/v1/location" -H "Content-Type: application/json" -d '{"token": "${token}", "slot": "1", "lat": 50.4501, "lon": 30.5234}'`
         },
         {
           method: "GET",
@@ -1950,7 +1888,7 @@ ${resp.api_key}
                 <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${ep.badgeColor}">${ep.method}</span>
                 <span class="font-mono font-semibold text-white text-xs select-all">${ep.path}</span>
               </div>
-              <button onclick="copyToClipboard('${ep.sample.replace(/'/g, "\'")}', this)" class="px-2 py-1 bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-700 rounded text-[11px] font-medium flex items-center gap-1 transition cursor-pointer">
+              <button onclick="copyApiCommandToClipboard('${ep.sample.replace(/'/g, "\'")}', this)" class="px-2 py-1 bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-700 rounded text-[11px] font-medium flex items-center gap-1 transition cursor-pointer">
                 <span>📋</span><span>Скопіювати команду</span>
               </button>
             </div>

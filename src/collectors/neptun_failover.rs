@@ -1,4 +1,4 @@
-﻿use std::sync::Arc;
+use std::sync::Arc;
 use std::time::Duration;
 use reqwest::header::USER_AGENT;
 use serde_json::Value;
@@ -37,6 +37,7 @@ pub async fn run_failover_neptun_collector(
         // 1. Резервний збір повітряних цілей
         let threats_url = "https://neptun.in.ua/api/v1/threats";
         if let Ok(resp) = http_client.get(threats_url)
+            .header(USER_AGENT, BROWSER_UA)
             .header(reqwest::header::REFERER, "https://neptun.in.ua/")
             .timeout(Duration::from_secs(8))
             .send()
@@ -113,6 +114,7 @@ pub async fn run_failover_neptun_collector(
         // 2. Резервний збір офіційних сирен
         let alerts_url = "https://neptun.in.ua/api/v1/alerts";
         if let Ok(resp) = http_client.get(alerts_url)
+            .header(USER_AGENT, BROWSER_UA)
             .header(reqwest::header::REFERER, "https://neptun.in.ua/")
             .timeout(Duration::from_secs(8))
             .send()

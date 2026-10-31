@@ -28,7 +28,9 @@ use tracker::ThreatState;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 0. Реєстрація крипто-провайдера rustls ring для WSS та HTTPS
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    if let Err(_) = rustls::crypto::ring::default_provider().install_default() {
+        tracing::debug!("Rustls ring crypto provider already registered");
+    }
 
     // 1. Ініціалізація логування
     tracing_subscriber::registry()

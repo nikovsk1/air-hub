@@ -82,32 +82,16 @@ impl HistoryManager {
             ])
         }).collect();
 
-        let traj_json: Vec<Value> = trk.trajectory.iter().map(|p| {
-            json!({
-                "lat": p.lat,
-                "lon": p.lon,
-                "ts": p.ts
-            })
-        }).collect();
-
         let date_str = Utc::now().format("%Y-%m-%d").to_string();
 
         let item = json!({
             "id": trk.id,
             "cat": trk.category,
-            "name_ua": trk.type_ua,
-            "raw_type": trk.raw_code,
-            "type": trk.type_ua,
-            "category": trk.category,
-            "color_hex": trk.color_hex,
             "date": date_str,
             "start_time": trk.first_seen as i64,
             "end_time": trk.last_seen as i64,
-            "first_seen": trk.first_seen as i64,
-            "last_seen": trk.last_seen as i64,
             "status": status,
-            "path": path_json,
-            "trajectory": traj_json
+            "path": path_json
         });
 
         {
@@ -195,6 +179,51 @@ impl HistoryManager {
             res.insert(k.clone(), v.clone());
         }
         Some(res)
+    }
+
+    /// Швидке отримання підсумкової кількості цілей за поточну добу для live-снапшоту
+    pub fn get_today_counts(&self) -> (usize, HashMap<String, usize>) {
+        let now = Utc::now();
+        let month = format!("{:04}-{:02}", now.year(), now.month());
+        let today_str = now.format("%Y-%m-%d").to_string();
+
+        let targets = {
+            let cache_guard = self.cache.read();
+            if let Some(t) = cache_guard.get(&month) {
+                Some(t.clone())
+            } else {
+                None
+            }
+        };
+
+        let targets = match targets {
+            Some(t) => t,
+            None => {
+                if let Some(disk_targets) = self.load_month_from_disk(&month) {
+                    let mut write_guard = self.cache.write();
+                    write_guard.insert(month.clone(), disk_targets.clone());
+                    disk_targets
+                } else {
+                    return (0, HashMap::new());
+                }
+            }
+        };
+
+        let mut counts = HashMap::new();
+        let mut total = 0;
+        for t in targets.values() {
+            if let Some(d) = t.get("date").and_then(|v| v.as_str()) {
+                if d == today_str {
+                    let cat = t.get("cat")
+                        .or_else(|| t.get("category"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+                    *counts.entry(cat.to_string()).or_insert(0) += 1;
+                    total += 1;
+                }
+            }
+        }
+        (total, counts)
     }
 
     pub fn get_month_data(&self, month: &str) -> Option<Value> {

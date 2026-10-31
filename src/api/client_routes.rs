@@ -42,10 +42,12 @@ pub fn client_routes() -> Router<AppState> {
         .route("/api/v1/regions/geojson", get(handle_regions_geojson))
         .route("/api/v1/slots", get(handle_get_slots).post(handle_create_slot))
         .route("/api/v1/slots/:slot_id", put(handle_update_slot).delete(handle_delete_slot))
+        .route("/api/v1/location", post(handle_dynamic_location).get(handle_get_location_slots))
         .route("/api/v1/locations/dynamic", post(handle_dynamic_location))
         .route("/api/v1/settings", get(handle_get_settings).put(handle_update_settings).post(handle_update_settings))
         .route("/api/v1/threats", get(handle_get_threats))
         .route("/api/v1/radar", get(handle_get_radar))
+        .route("/api/v1/radar/live", get(handle_get_radar))
         .route("/api/v1/map", get(handle_get_map))
         .route("/api/v1/stream", get(handle_ws_stream))
         .route("/api/v1/history/months", get(handle_history_months))
@@ -194,10 +196,20 @@ async fn handle_get_slots(
 
 #[derive(Deserialize)]
 pub struct CreateSlotPayload {
-    pub name: String,
+    pub name: Option<String>,
     pub lat: f64,
     pub lon: f64,
+    #[serde(alias = "danger_radius_km")]
     pub danger_zone: Option<f64>,
+    #[serde(alias = "type")]
+    pub slot_type: Option<String>,
+    pub is_dynamic: Option<bool>,
+    pub alert_threat: Option<bool>,
+    #[serde(alias = "react_threat_types")]
+    pub react_threats: Option<Vec<String>>,
+    pub alert_siren: Option<bool>,
+    pub alert_mig: Option<bool>,
+    pub alert_artillery: Option<bool>,
 }
 
 async fn handle_create_slot(
@@ -212,7 +224,24 @@ async fn handle_create_slot(
         None => return StatusCode::UNAUTHORIZED.into_response(),
     };
 
-    match state.storage.create_slot(&user.api_key, &payload.name, payload.lat, payload.lon, payload.danger_zone, &state.detector) {
+    let is_dyn = payload.is_dynamic.unwrap_or_else(|| {
+        payload.slot_type.as_deref().map(|t| t == "dynamic").unwrap_or(false)
+    });
+
+    match state.storage.create_slot(
+        &user.api_key,
+        payload.name,
+        payload.lat,
+        payload.lon,
+        payload.danger_zone,
+        Some(is_dyn),
+        payload.alert_threat,
+        payload.react_threats,
+        payload.alert_siren,
+        payload.alert_mig,
+        payload.alert_artillery,
+        &state.detector,
+    ) {
         Ok(slot) => (StatusCode::CREATED, Json(json!({"status": "created", "slot": slot}))).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"error": e}))).into_response(),
     }
@@ -232,6 +261,9 @@ pub struct UpdateSlotPayload {
     pub alert_siren: Option<bool>,
     pub alert_mig: Option<bool>,
     pub alert_artillery: Option<bool>,
+    #[serde(alias = "type")]
+    pub slot_type: Option<String>,
+    pub is_dynamic: Option<bool>,
 }
 
 async fn handle_update_slot(
@@ -247,10 +279,14 @@ async fn handle_update_slot(
         None => return StatusCode::UNAUTHORIZED.into_response(),
     };
 
+    let is_dyn = payload.is_dynamic.or_else(|| {
+        payload.slot_type.as_deref().map(|t| t == "dynamic")
+    });
+
     match state.storage.update_slot(
         &user.api_key, &slot_id, payload.name, payload.lat, payload.lon, payload.active,
         payload.danger_zone, payload.alert_threat, payload.react_threats, payload.alert_siren,
-        payload.alert_mig, payload.alert_artillery, &state.detector,
+        payload.alert_mig, payload.alert_artillery, is_dyn, &state.detector,
     ) {
         Ok(slot) => Json(json!({"status": "updated", "slot": slot})).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"error": e}))).into_response(),
@@ -278,6 +314,9 @@ async fn handle_delete_slot(
 
 #[derive(Deserialize)]
 pub struct DynamicLocationPayload {
+    pub slot_id: Option<String>,
+    #[serde(alias = "slot")]
+    pub slot: Option<String>,
     pub lat: Option<f64>,
     pub latitude: Option<f64>,
     pub lon: Option<f64>,
@@ -301,11 +340,68 @@ async fn handle_dynamic_location(
     let lat = payload.lat.or(payload.latitude).unwrap_or(0.0);
     let lon = payload.lon.or(payload.longitude).unwrap_or(0.0);
     let acc = payload.accuracy_m.or(payload.accuracy);
+    let target_slot = payload.slot_id.as_deref()
+        .or(payload.slot.as_deref())
+        .or(query.slot.as_deref());
 
-    match state.storage.update_dynamic_location(&user.api_key, lat, lon, acc, &state.detector) {
-        Ok(slot) => Json(json!({"status": "updated", "slot": slot})).into_response(),
+    match state.storage.update_dynamic_location(&user.api_key, target_slot, lat, lon, acc, &state.detector) {
+        Ok(slot) => Json(json!({
+            "status": "updated",
+            "slot_id": slot.id,
+            "name": slot.name,
+            "is_dynamic": slot.is_dynamic,
+            "lat": slot.lat,
+            "lon": slot.lon,
+            "oblast": slot.oblast,
+            "raion": slot.raion,
+            "slot": slot
+        })).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"error": e}))).into_response(),
     }
+}
+
+async fn handle_get_location_slots(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ClientQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Response {
+    let user = match authenticate_user(&headers, &query, &state, Some(addr)).await {
+        Some(u) => u,
+        None => return StatusCode::UNAUTHORIZED.into_response(),
+    };
+
+    let mut slots_list = Vec::new();
+    let mut active_dyn_id: Option<String> = None;
+    let mut sorted_keys: Vec<_> = user.slots.keys().collect();
+    sorted_keys.sort();
+
+    for k in sorted_keys {
+        if let Some(s) = user.slots.get(k) {
+            if s.is_dynamic && active_dyn_id.is_none() {
+                active_dyn_id = Some(k.clone());
+            }
+            slots_list.push(json!({
+                "slot_id": k,
+                "name": s.name,
+                "type": if s.is_dynamic { "dynamic" } else { "static" },
+                "is_dynamic": s.is_dynamic,
+                "lat": s.lat,
+                "lon": s.lon,
+                "active": s.active,
+                "danger_radius_km": s.danger_zone,
+                "oblast": s.oblast,
+                "raion": s.raion
+            }));
+        }
+    }
+
+    Json(json!({
+        "status": "ok",
+        "slots": slots_list,
+        "active_dynamic_slot": active_dyn_id.unwrap_or_else(|| "1".to_string()),
+        "total": slots_list.len()
+    })).into_response()
 }
 
 async fn handle_get_settings(
@@ -368,45 +464,134 @@ async fn handle_update_settings(
     }
 }
 
-pub fn build_user_snapshot(user: &User, st: &crate::tracker::ThreatState, slot_id: &str) -> Value {
-    let selected_slot = user.slots.get(slot_id);
-
-    let (center_lat, center_lon, eff_danger_km, slot_name, slot_active, slot_alert_threat, slot_alert_siren, slot_alert_mig) = match selected_slot {
-        Some(s) => (s.lat, s.lon, s.danger_zone, s.name.clone(), s.active, s.alert_threat, s.alert_siren, s.alert_mig),
-        None => (50.4501, 30.5234, user.default_danger_zone, "Точка".to_string(), true, user.target_alert_threat, user.alert_siren, user.alert_mig),
+pub fn build_user_snapshot(
+    user: &User,
+    st: &crate::tracker::ThreatState,
+    slot_id: &str,
+    history_mgr: Option<&crate::history::HistoryManager>,
+) -> Value {
+    let today_stats_val = if let Some(h) = history_mgr {
+        let (tot, cats) = h.get_today_counts();
+        serde_json::json!({
+            "total": tot,
+            "categories": cats
+        })
+    } else {
+        serde_json::json!({
+            "total": 0,
+            "categories": {}
+        })
     };
-    let allowed_categories: Vec<String> = selected_slot
-        .map(|s| s.react_threats.clone())
-        .unwrap_or_else(|| user.target_react_threats.clone());
+    // Підтримка вибору декількох точок ("1", "1,2", "all")
+    let target_slots: Vec<&crate::storage::Slot> = if slot_id == "all" {
+        user.slots.values().collect()
+    } else if slot_id.contains(',') {
+        let mut list = Vec::new();
+        for id in slot_id.split(',') {
+            let clean = id.trim();
+            if let Some(s) = user.slots.get(clean) {
+                list.push(s);
+            }
+        }
+        if list.is_empty() {
+            user.slots.values().take(1).collect()
+        } else {
+            list
+        }
+    } else if let Some(s) = user.slots.get(slot_id) {
+        vec![s]
+    } else {
+        user.slots.values().take(1).collect()
+    };
+
+    let (center_lat, center_lon, eff_danger_km, slot_name, slot_active, slot_alert_threat, slot_alert_siren, slot_alert_mig) = if target_slots.is_empty() {
+        (50.4501, 30.5234, user.default_danger_zone, "Точка".to_string(), true, user.target_alert_threat, user.alert_siren, user.alert_mig)
+    } else if target_slots.len() == 1 {
+        let s = target_slots[0];
+        (s.lat, s.lon, s.danger_zone, s.name.clone(), s.active, s.alert_threat, s.alert_siren, s.alert_mig)
+    } else {
+        let avg_lat = target_slots.iter().map(|s| s.lat).sum::<f64>() / target_slots.len() as f64;
+        let avg_lon = target_slots.iter().map(|s| s.lon).sum::<f64>() / target_slots.len() as f64;
+        let max_dz = target_slots.iter().map(|s| s.danger_zone).fold(0.0f64, f64::max);
+        let any_act = target_slots.iter().any(|s| s.active);
+        let any_thr = target_slots.iter().any(|s| s.alert_threat);
+        let any_sir = target_slots.iter().any(|s| s.alert_siren);
+        let any_mig = target_slots.iter().any(|s| s.alert_mig);
+        (avg_lat, avg_lon, max_dz, format!("Обрано точок: {}", target_slots.len()), any_act, any_thr, any_sir, any_mig)
+    };
+
+    let mut allowed_categories: Vec<String> = Vec::new();
+    for s in &target_slots {
+        for cat in &s.react_threats {
+            if !allowed_categories.contains(cat) {
+                allowed_categories.push(cat.clone());
+            }
+        }
+    }
+    if allowed_categories.is_empty() {
+        allowed_categories = user.target_react_threats.clone();
+    }
 
     let mut processed_threats = Vec::new();
     let mut closest_threat_obj: Option<Value> = None;
     let mut min_distance = f64::INFINITY;
+    let mut closest_threat_slot_id: Option<String> = None;
+    let mut closest_threat_slot_name: Option<String> = None;
 
     for trk in st.tracker.tracks.values() {
-        let dist = calculate_haversine_distance(center_lat, center_lon, trk.lat, trk.lon);
-        let bearing = calculate_bearing(center_lat, center_lon, trk.lat, trk.lon);
-        let app_angle = approach_angle(trk.lat, trk.lon, trk.heading, center_lat, center_lon);
-        let in_danger = dist <= eff_danger_km;
+        let mut min_trk_dist = f64::INFINITY;
+        let mut best_bearing = 0.0;
+        let mut best_app_angle = 180.0;
+        let mut trk_in_danger = false;
+        let mut best_eta = None;
+        let mut trk_closest_slot_id = "".to_string();
+        let mut trk_closest_slot_name = "".to_string();
 
-        let eta_minutes = if (app_angle <= 85.0 || in_danger) && trk.speed_kmh > 10.0 {
-            Some((dist / trk.speed_kmh) * 60.0)
+        if target_slots.is_empty() {
+            let d = calculate_haversine_distance(center_lat, center_lon, trk.lat, trk.lon);
+            min_trk_dist = d;
+            best_bearing = calculate_bearing(center_lat, center_lon, trk.lat, trk.lon);
+            best_app_angle = approach_angle(trk.lat, trk.lon, trk.heading, center_lat, center_lon);
+            trk_in_danger = d <= eff_danger_km;
+            best_eta = if (best_app_angle <= 85.0 || trk_in_danger) && trk.speed_kmh > 10.0 {
+                Some((d / trk.speed_kmh) * 60.0)
+            } else {
+                None
+            };
         } else {
-            None
-        };
+            for s in &target_slots {
+                let d = calculate_haversine_distance(s.lat, s.lon, trk.lat, trk.lon);
+                let in_d = s.active && s.alert_threat && d <= s.danger_zone;
+                if in_d {
+                    trk_in_danger = true;
+                }
+                if d < min_trk_dist {
+                    min_trk_dist = d;
+                    best_bearing = calculate_bearing(s.lat, s.lon, trk.lat, trk.lon);
+                    best_app_angle = approach_angle(trk.lat, trk.lon, trk.heading, s.lat, s.lon);
+                    best_eta = if (best_app_angle <= 85.0 || in_d) && trk.speed_kmh > 10.0 {
+                        Some((d / trk.speed_kmh) * 60.0)
+                    } else {
+                        None
+                    };
+                    trk_closest_slot_id = s.id.clone();
+                    trk_closest_slot_name = s.name.clone();
+                }
+            }
+        }
 
-        let compass = bearing_to_compass(bearing);
-        let approach_status = if app_angle <= 45.0 {
+        let compass = bearing_to_compass(best_bearing);
+        let approach_status = if best_app_angle <= 45.0 {
             "direct"
-        } else if app_angle <= 85.0 {
+        } else if best_app_angle <= 85.0 {
             "approaching"
         } else {
             "passing"
         };
 
-        let approach_desc = if app_angle <= 45.0 {
+        let approach_desc = if best_app_angle <= 45.0 {
             "Прямий курс на точку"
-        } else if app_angle <= 85.0 {
+        } else if best_app_angle <= 85.0 {
             "Наближається"
         } else {
             "Рухається повз / віддаляється"
@@ -431,25 +616,29 @@ pub fn build_user_snapshot(user: &User, st: &crate::tracker::ThreatState, slot_i
             "speed_kmh": trk.speed_kmh,
             "oblast": trk.oblast,
             "oblast_id": trk.oblast_id,
-            "distance_km": (dist * 10.0).round() / 10.0,
-            "bearing_deg": (bearing * 10.0).round() / 10.0,
+            "distance_km": (min_trk_dist * 10.0).round() / 10.0,
+            "bearing_deg": (best_bearing * 10.0).round() / 10.0,
             "compass": compass,
             "bearing_sector": compass,
-            "approach_angle": (app_angle * 10.0).round() / 10.0,
+            "approach_angle": (best_app_angle * 10.0).round() / 10.0,
             "approach_status": approach_status,
             "approach_desc": approach_desc,
-            "eta_minutes": eta_minutes.map(|v| (v * 10.0).round() / 10.0),
-            "eta_formatted": format_eta_ua(eta_minutes),
-            "in_danger_zone": in_danger,
+            "eta_minutes": best_eta.map(|v| (v * 10.0).round() / 10.0),
+            "eta_formatted": format_eta_ua(best_eta),
+            "in_danger_zone": trk_in_danger,
+            "closest_slot_id": trk_closest_slot_id,
+            "closest_slot_name": trk_closest_slot_name,
             "trajectory": trk.trajectory,
             "extrapolated": corridor,
             "extrapolated_path": corridor
         });
 
         if allowed_categories.contains(&trk.category) {
-            if dist < min_distance {
-                min_distance = dist;
+            if min_trk_dist < min_distance {
+                min_distance = min_trk_dist;
                 closest_threat_obj = Some(threat_val.clone());
+                closest_threat_slot_id = Some(trk_closest_slot_id);
+                closest_threat_slot_name = Some(trk_closest_slot_name);
             }
         }
 
@@ -488,21 +677,40 @@ pub fn build_user_snapshot(user: &User, st: &crate::tracker::ThreatState, slot_i
             None => (None, None, None, "--".to_string()),
         };
 
+        let is_siren = if s.active && s.alert_siren {
+            if let Some(rid) = s.raion_id.as_deref().filter(|id| !id.is_empty() && *id != "0") {
+                st.raion_alerts.get(rid).map(|r| r.alert).unwrap_or(false)
+            } else if let Some(oid) = s.oblast_id.as_deref().filter(|id| !id.is_empty() && *id != "0") {
+                st.oblast_alerts.get(oid).map(|o| o.alert).unwrap_or(false)
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
         slots_stats.insert(s_id.clone(), json!({
             "slot_id": s_id,
             "name": s.name,
             "lat": s.lat,
             "lon": s.lon,
             "active": s.active,
+            "is_dynamic": s.is_dynamic,
             "danger_zone": s.danger_zone,
             "danger_radius_km": s.danger_zone,
             "danger_zone_active": is_danger,
+            "alert_threat": s.alert_threat,
+            "alert_siren": s.alert_siren,
+            "alert_mig": s.alert_mig,
+            "alert_artillery": s.alert_artillery,
+            "oblast": s.oblast,
+            "raion": s.raion,
             "closest_target_id": c_id,
             "closest_distance_km": if s_min_dist.is_finite() { Some((s_min_dist * 10.0).round() / 10.0) } else { None },
             "closest_type": c_type,
             "closest_eta_minutes": c_eta,
             "closest_eta_formatted": c_eta_f,
-            "siren_active": s.active && s.alert_siren && st.oblast_alerts.get(s.oblast_id.as_deref().unwrap_or("0")).map(|o| o.alert).unwrap_or(false)
+            "siren_active": is_siren
         }));
     }
 
@@ -513,6 +721,23 @@ pub fn build_user_snapshot(user: &User, st: &crate::tracker::ThreatState, slot_i
     let closest_eta_min = closest_threat.as_ref().and_then(|t| t.get("eta_minutes")).and_then(|v| v.as_f64());
     let closest_eta_fmt = closest_threat.as_ref().and_then(|t| t.get("eta_formatted")).and_then(|v| v.as_str()).unwrap_or("--");
 
+    let selected_slot = target_slots.first().copied();
+    let selected_slot_siren_active = if let Some(s) = selected_slot {
+        if s.active && s.alert_siren {
+            if let Some(rid) = s.raion_id.as_deref().filter(|id| !id.is_empty() && *id != "0") {
+                st.raion_alerts.get(rid).map(|r| r.alert).unwrap_or(false)
+            } else if let Some(oid) = s.oblast_id.as_deref().filter(|id| !id.is_empty() && *id != "0") {
+                st.oblast_alerts.get(oid).map(|o| o.alert).unwrap_or(false)
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
     // Fallback if user has no slots configured yet: ensure at least Slot 1 is present in slots_stats
     if slots_stats.is_empty() {
         slots_stats.insert("1".to_string(), json!({
@@ -521,15 +746,20 @@ pub fn build_user_snapshot(user: &User, st: &crate::tracker::ThreatState, slot_i
             "lat": center_lat,
             "lon": center_lon,
             "active": slot_active,
+            "is_dynamic": false,
             "danger_zone": eff_danger_km,
             "danger_radius_km": eff_danger_km,
             "danger_zone_active": slot_active && slot_alert_threat && min_distance <= eff_danger_km,
+            "alert_threat": slot_alert_threat,
+            "alert_siren": slot_alert_siren,
+            "alert_mig": slot_alert_mig,
+            "alert_artillery": true,
             "closest_target_id": closest_target_id,
             "closest_distance_km": if min_distance.is_finite() { Some((min_distance * 10.0).round() / 10.0) } else { None },
             "closest_type": closest_type,
             "closest_eta_minutes": closest_eta_min,
             "closest_eta_formatted": closest_eta_fmt,
-            "siren_active": slot_active && slot_alert_siren
+            "siren_active": slot_active && slot_alert_siren && selected_slot_siren_active
         }));
     }
 
@@ -560,7 +790,7 @@ pub fn build_user_snapshot(user: &User, st: &crate::tracker::ThreatState, slot_i
             "alert_mig": user.alert_mig,
             "alert_artillery": user.alert_artillery
         },
-        "audio_alert_active": slot_active && ((slot_alert_siren && min_distance <= eff_danger_km) || (slot_alert_mig && st.mig_active)),
+        "audio_alert_active": slot_active && ((slot_alert_threat && min_distance <= eff_danger_km) || (slot_alert_siren && selected_slot_siren_active) || (slot_alert_mig && st.mig_active)),
         "audio_alert_reasons": st.alert_reasons,
         "danger_zone": {
             "active": slot_active && slot_alert_threat && min_distance <= eff_danger_km,
@@ -570,9 +800,12 @@ pub fn build_user_snapshot(user: &User, st: &crate::tracker::ThreatState, slot_i
             "closest_distance_km": closest_dist_km,
             "closest_type": closest_type,
             "closest_eta_minutes": closest_eta_min,
-            "closest_eta_formatted": closest_eta_fmt
+            "closest_eta_formatted": closest_eta_fmt,
+            "closest_slot_id": closest_threat_slot_id,
+            "closest_slot_name": closest_threat_slot_name
         },
         "closest_threat": closest_threat,
+        "today_stats": today_stats_val,
         "slots": slots_stats,
         "threats": processed_threats,
         "recent_lost": st.tracker.recent_lost.values().collect::<Vec<_>>(),
@@ -611,7 +844,7 @@ async fn handle_get_threats(
     }
 
     let selected_slot_id = query.slot.or(query.slot_id).unwrap_or_else(|| "1".to_string());
-    let resp_payload = build_user_snapshot(&user, &st, &selected_slot_id);
+    let resp_payload = build_user_snapshot(&user, &st, &selected_slot_id, Some(&state.history_mgr));
 
     (
         [
@@ -638,9 +871,9 @@ async fn handle_get_radar(
     let selected_slot_id = query.slot.or(query.slot_id).unwrap_or_else(|| "1".to_string());
     let selected_slot = user.slots.get(&selected_slot_id);
 
-    let (center_lat, center_lon, eff_danger_km, loc_name) = match selected_slot {
-        Some(s) => (s.lat, s.lon, s.danger_zone, s.name.clone()),
-        None => (query.lat.unwrap_or(50.4501), query.lon.unwrap_or(30.5234), user.default_danger_zone, "Radar".to_string()),
+    let (center_lat, center_lon, eff_danger_km, loc_name, slot_active, slot_alert_threat, slot_alert_siren, slot_alert_mig) = match selected_slot {
+        Some(s) => (s.lat, s.lon, s.danger_zone, s.name.clone(), s.active, s.alert_threat, s.alert_siren, s.alert_mig),
+        None => (query.lat.unwrap_or(50.4501), query.lon.unwrap_or(30.5234), user.default_danger_zone, "Radar".to_string(), true, user.target_alert_threat, user.alert_siren, user.alert_mig),
     };
 
     let radius_km = query.radius.or(query.radius_km).unwrap_or(100.0);
@@ -703,6 +936,22 @@ async fn handle_get_radar(
 
     let danger_circle_px = ((eff_danger_km / radius_km).min(1.0) * max_px).round() as i32;
 
+    let slot_siren_active = if slot_active && slot_alert_siren {
+        if let Some(s) = selected_slot {
+            if let Some(rid) = s.raion_id.as_deref().filter(|id| !id.is_empty() && *id != "0") {
+                st.raion_alerts.get(rid).map(|r| r.alert).unwrap_or(false)
+            } else if let Some(oid) = s.oblast_id.as_deref().filter(|id| !id.is_empty() && *id != "0") {
+                st.oblast_alerts.get(oid).map(|o| o.alert).unwrap_or(false)
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
     Json(json!({
         "timestamp": (st.last_update_ts * 1000.0) as i64,
         "owner": user.owner,
@@ -712,13 +961,13 @@ async fn handle_get_radar(
         "danger_radius_km": eff_danger_km,
         "danger_circle_px": danger_circle_px,
         "threats_count": radar_targets.len(),
-        "siren_active": st.oblast_alerts.values().any(|o| o.alert),
+        "siren_active": slot_siren_active,
         "mig_active": st.mig_active,
         "closest_km": if min_dist.is_finite() { Some((min_dist * 10.0).round() / 10.0) } else { None },
         "closest_eta": closest_eta.map(|v| (v * 10.0).round() / 10.0),
         "closest_eta_formatted": closest_eta_f,
-        "danger_active": min_dist <= eff_danger_km,
-        "audio_alert_active": min_dist <= eff_danger_km || st.mig_active,
+        "danger_active": slot_active && slot_alert_threat && min_dist <= eff_danger_km,
+        "audio_alert_active": slot_active && ((slot_alert_threat && min_dist <= eff_danger_km) || (slot_alert_siren && slot_siren_active) || (slot_alert_mig && st.mig_active)),
         "audio_alert_reasons": st.alert_reasons,
         "targets": radar_targets
     })).into_response()
@@ -780,7 +1029,7 @@ async fn handle_ws_client(
             let seq = st.update_seq;
             if seq != last_seq {
                 last_seq = seq;
-                let snapshot = build_user_snapshot(&current_user, &st, &selected_slot);
+                let snapshot = build_user_snapshot(&current_user, &st, &selected_slot, Some(&state.history_mgr));
                 (seq, Some(snapshot))
             } else {
                 (seq, None)

@@ -412,10 +412,16 @@ impl StorageManager {
     pub fn create_slot(
         &self,
         key: &str,
-        name: &str,
+        name: Option<String>,
         lat: f64,
         lon: f64,
         danger_zone: Option<f64>,
+        is_dynamic: Option<bool>,
+        alert_threat: Option<bool>,
+        react_threats: Option<Vec<String>>,
+        alert_siren: Option<bool>,
+        alert_mig: Option<bool>,
+        alert_artillery: Option<bool>,
         detector: &OblastDetector,
     ) -> Result<Slot, String> {
         let mut guard = self.data.write();
@@ -438,20 +444,21 @@ impl StorageManager {
 
         let loc = detector.find_location_info(lat, lon);
         let eff_danger = danger_zone.unwrap_or(user.default_danger_zone);
+        let slot_name = name.filter(|n| !n.trim().is_empty()).unwrap_or_else(|| format!("Точка {}", slot_id));
 
         let new_slot = Slot {
             id: slot_id.clone(),
-            name: name.to_string(),
+            name: slot_name,
             lat,
             lon,
             active: true,
             danger_zone: eff_danger,
-            alert_threat: true,
-            react_threats: user.target_react_threats.clone(),
-            alert_siren: user.alert_siren,
-            alert_mig: user.alert_mig,
-            alert_artillery: user.alert_artillery,
-            is_dynamic: false,
+            alert_threat: alert_threat.unwrap_or(true),
+            react_threats: react_threats.unwrap_or_else(|| user.target_react_threats.clone()),
+            alert_siren: alert_siren.unwrap_or(user.alert_siren),
+            alert_mig: alert_mig.unwrap_or(user.alert_mig),
+            alert_artillery: alert_artillery.unwrap_or(user.alert_artillery),
+            is_dynamic: is_dynamic.unwrap_or(false),
             oblast: Some(loc.oblast),
             oblast_id: Some(loc.oblast_id),
             raion: Some(loc.raion),
@@ -479,6 +486,7 @@ impl StorageManager {
         alert_siren: Option<bool>,
         alert_mig: Option<bool>,
         alert_artillery: Option<bool>,
+        is_dynamic: Option<bool>,
         detector: &OblastDetector,
     ) -> Result<Slot, String> {
         let mut guard = self.data.write();
@@ -493,6 +501,7 @@ impl StorageManager {
         if let Some(as_) = alert_siren { slot.alert_siren = as_; }
         if let Some(am) = alert_mig { slot.alert_mig = am; }
         if let Some(aa) = alert_artillery { slot.alert_artillery = aa; }
+        if let Some(dyn_flag) = is_dynamic { slot.is_dynamic = dyn_flag; }
 
         let coord_changed = match (lat, lon) {
             (Some(new_lat), Some(new_lon)) => {
@@ -540,6 +549,7 @@ impl StorageManager {
     pub fn update_dynamic_location(
         &self,
         key: &str,
+        target_slot_id: Option<&str>,
         lat: f64,
         lon: f64,
         accuracy_m: Option<f64>,
@@ -548,11 +558,21 @@ impl StorageManager {
         let mut guard = self.data.write();
         let user = guard.users.get_mut(key).ok_or_else(|| "User not found".to_string())?;
 
-        // Шукаємо існуючий динамічний слот або слот ID "5" за замовчуванням
-        let dynamic_slot_id = user.slots.iter()
-            .find(|(_, s)| s.is_dynamic)
-            .map(|(k, _)| k.clone())
-            .unwrap_or_else(|| "5".to_string());
+        let dynamic_slot_id = if let Some(sid) = target_slot_id.filter(|s| !s.is_empty()) {
+            sid.to_string()
+        } else if let Some((sid, _)) = user.slots.iter().find(|(_, s)| s.is_dynamic) {
+            sid.clone()
+        } else {
+            let mut free_id = None;
+            for i in 1..=5 {
+                let id_s = i.to_string();
+                if !user.slots.contains_key(&id_s) {
+                    free_id = Some(id_s);
+                    break;
+                }
+            }
+            free_id.unwrap_or_else(|| "1".to_string())
+        };
 
         let (old_lat, old_lon, existed) = match user.slots.get(&dynamic_slot_id) {
             Some(s) => (s.lat, s.lon, true),
