@@ -82,10 +82,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     default_headers.insert(
         "sec-ch-ua",
-        reqwest::header::HeaderValue::from_static(""Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126""),
+        reqwest::header::HeaderValue::from_static(r#""Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126""#),
     );
     default_headers.insert("sec-ch-ua-mobile", reqwest::header::HeaderValue::from_static("?0"));
-    default_headers.insert("sec-ch-ua-platform", reqwest::header::HeaderValue::from_static(""Windows""));
+    default_headers.insert("sec-ch-ua-platform", reqwest::header::HeaderValue::from_static(r#""Windows""#));
     default_headers.insert("Sec-Fetch-Site", reqwest::header::HeaderValue::from_static("same-origin"));
     default_headers.insert("Sec-Fetch-Mode", reqwest::header::HeaderValue::from_static("cors"));
     default_headers.insert("Sec-Fetch-Dest", reqwest::header::HeaderValue::from_static("empty"));
