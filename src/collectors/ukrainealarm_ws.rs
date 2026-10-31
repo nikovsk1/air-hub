@@ -166,7 +166,8 @@ pub async fn run_ukrainealarm_collector(
                             .timeout(Duration::from_secs(6))
                             .header(USER_AGENT, BROWSER_UA)
                             .header(ORIGIN, "https://map.ukrainealarm.com")
-                            .header(REFERER, "https://map.ukrainealarm.com/")
+                            .header(REFERER, "https://map.ukrainealarm.com/onlyMap")
+                            .header("X-Requested-With", "XMLHttpRequest")
                             .json(&json!({
                                 "client": client_id,
                                 "channels": [channel]
@@ -174,34 +175,44 @@ pub async fn run_ukrainealarm_collector(
                             .send()
                             .await;
 
-                        if let Ok(resp) = sub_res {
-                            if let Ok(sub_data) = resp.json::<Value>().await {
-                                let mut stoken = None;
-                                if let Some(chs) = sub_data.get("channels").and_then(|c| c.as_array()) {
-                                    for ch in chs {
-                                        if ch.get("channel").and_then(|s| s.as_str()) == Some(&channel) {
-                                            stoken = ch.get("token").and_then(|t| t.as_str()).map(|s| s.to_string());
+                        match sub_res {
+                            Ok(resp) => {
+                                let status = resp.status();
+                                if !status.is_success() {
+                                    warn!("Centrifugo subscription rejected on {}: HTTP {}", sub_ep, status);
+                                } else if let Ok(sub_data) = resp.json::<Value>().await {
+                                    let mut stoken = None;
+                                    if let Some(chs) = sub_data.get("channels").and_then(|c| c.as_array()) {
+                                        for ch in chs {
+                                            if ch.get("channel").and_then(|s| s.as_str()) == Some(&channel) {
+                                                stoken = ch.get("token").and_then(|t| t.as_str()).map(|s| s.to_string());
+                                            }
                                         }
                                     }
-                                }
-                                if stoken.is_none() {
-                                    if let Some(ch_obj) = sub_data.get(&channel).and_then(|o| o.as_object()) {
-                                        stoken = ch_obj.get("token").and_then(|t| t.as_str()).map(|s| s.to_string());
+                                    if stoken.is_none() {
+                                        if let Some(ch_obj) = sub_data.get(&channel).and_then(|o| o.as_object()) {
+                                            stoken = ch_obj.get("token").and_then(|t| t.as_str()).map(|s| s.to_string());
+                                        }
+                                    }
+
+                                    if let Some(token) = stoken {
+                                        let sub_frame = json!({
+                                            "method": 1,
+                                            "params": {
+                                                "channel": channel,
+                                                "token": token
+                                            },
+                                            "id": 4
+                                        });
+                                        let _ = write.send(Message::Text(sub_frame.to_string())).await;
+                                        info!("Successfully subscribed to Centrifugo channel: {}", channel);
+                                    } else {
+                                        warn!("Could not extract subscription token from response: {:?}", sub_data);
                                     }
                                 }
-
-                                if let Some(token) = stoken {
-                                    let sub_frame = json!({
-                                        "method": 1,
-                                        "params": {
-                                            "channel": channel,
-                                            "token": token
-                                        },
-                                        "id": 4
-                                    });
-                                    let _ = write.send(Message::Text(sub_frame.to_string())).await;
-                                    info!("Subscribed to channel {}", channel);
-                                }
+                            }
+                            Err(e) => {
+                                warn!("HTTP error during Centrifugo subscription: {}", e);
                             }
                         }
                     }

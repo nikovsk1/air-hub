@@ -27,6 +27,9 @@ use tracker::ThreatState;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 0. Реєстрація крипто-провайдера rustls ring для WSS та HTTPS
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     // 1. Ініціалізація логування
     tracing_subscriber::registry()
         .with(
@@ -67,8 +70,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 6. Ініціалізація глобального стану загроз
     let threat_state = Arc::new(RwLock::new(ThreatState::default()));
 
-    // 7. Створення HTTP-клієнта (з опціональним SOCKS5/HTTP проксі)
+    // 7. Створення HTTP-клієнта (з cookie store, HTTP/2 та повним пулом браузерних заголовків)
+    let mut default_headers = reqwest::header::HeaderMap::new();
+    default_headers.insert(
+        reqwest::header::ACCEPT,
+        reqwest::header::HeaderValue::from_static("application/json, text/plain, */*"),
+    );
+    default_headers.insert(
+        reqwest::header::ACCEPT_LANGUAGE,
+        reqwest::header::HeaderValue::from_static("uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7"),
+    );
+    default_headers.insert(
+        "sec-ch-ua",
+        reqwest::header::HeaderValue::from_static(""Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126""),
+    );
+    default_headers.insert("sec-ch-ua-mobile", reqwest::header::HeaderValue::from_static("?0"));
+    default_headers.insert("sec-ch-ua-platform", reqwest::header::HeaderValue::from_static(""Windows""));
+    default_headers.insert("Sec-Fetch-Site", reqwest::header::HeaderValue::from_static("same-origin"));
+    default_headers.insert("Sec-Fetch-Mode", reqwest::header::HeaderValue::from_static("cors"));
+    default_headers.insert("Sec-Fetch-Dest", reqwest::header::HeaderValue::from_static("empty"));
+
     let mut client_builder = reqwest::Client::builder()
+        .cookie_store(true)
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+        .default_headers(default_headers)
         .timeout(Duration::from_secs(15));
 
     if let Some(ref proxy_url) = config.upstream_proxy {
@@ -102,9 +127,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let t_state = threat_state.clone();
         let det = detector.clone();
+        let hist = history_mgr.clone();
         let client = http_client.clone();
         tokio::spawn(async move {
-            collectors::neptun_failover::run_failover_neptun_collector(t_state, det, client).await;
+            collectors::neptun_failover::run_failover_neptun_collector(t_state, det, hist, client).await;
         });
     }
 

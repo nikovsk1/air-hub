@@ -898,10 +898,10 @@ async fn handle_radar_map_html(
 async fn handle_timeline_map_html(
     State(state): State<AppState>,
 ) -> Response {
-    let timeline_file = state.config.static_dir.join("timeline_map.html");
-    if let Ok(content) = fs::read_to_string(&timeline_file) {
+    let map_file = state.config.static_dir.join("radar_map.html");
+    if let Ok(content) = fs::read_to_string(&map_file) {
         Html(content).into_response()
     } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, "timeline_map.html not found").into_response()
+        (StatusCode::INTERNAL_SERVER_ERROR, "radar_map.html not found").into_response()
     }
 }

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # High-Performance Multi-Arch Dockerfile for Air Alert Hub (Rust Edition)
-# Native Cross-Compilation via tonistiigi/xx (no slow QEMU emulation during compilation!)
+# Native Cross-Compilation via tonistiigi/xx + 100% Pure Rustls (Zero C/OpenSSL dependencies!)
 # Targets: linux/arm/v7 (SONOFF iHost 32-bit), linux/arm64, linux/amd64
 
 # ================= Stage 0: tonistiigi/xx cross-compilation tools =================
@@ -12,11 +12,15 @@ COPY --from=xx / /
 
 ARG TARGETPLATFORM
 
-# Install host compiler tools (Clang/LLD) and target-specific libraries via xx-apt
+# Install host compiler tools and target C runtime for standard libc linking
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends clang lld pkg-config git ca-certificates && \
+    apt-get install -y --no-install-recommends \
+        clang \
+        lld \
+        pkg-config \
+        git \
+        ca-certificates && \
     xx-apt-get install -y --no-install-recommends \
-        libssl-dev \
         libc6-dev \
         xx-c-essentials && \
     rustup target add $(xx-cargo --print-target-triple)
@@ -26,7 +30,7 @@ WORKDIR /usr/src/app
 # 1. Dependency caching: copy Cargo manifests first
 COPY Cargo.toml Cargo.lock* ./
 
-# 2. Pre-compile dependencies using xx-cargo for TARGETPLATFORM (cached in Docker layer)
+# 2. Pre-compile pure Rust dependencies using xx-cargo for TARGETPLATFORM (cached in Docker layer)
 RUN mkdir -p src && \
     echo "fn main() {}" > src/main.rs && \
     xx-cargo build --release && \
@@ -49,12 +53,11 @@ FROM debian:bookworm-slim AS runner
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
-    libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy compiled binary from builder
+# Copy statically compiled binary from builder (pure Rust, no external libssl3 needed!)
 COPY --from=builder /usr/local/bin/air-alert-hub-rs /app/air-alert-hub-rs
 
 # Copy static web assets and default geographic contours

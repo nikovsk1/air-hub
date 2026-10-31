@@ -146,25 +146,21 @@
           <span>⚙️</span>
           <span>Адмін-панель</span>
         </a>
-        <a href="/map" target="_blank" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-300 hover:text-white hover:bg-gray-800 border border-gray-700/60 flex items-center gap-1.5 transition">
+        <button onclick="openRadarSelectorModal()" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-300 hover:text-white hover:bg-gray-800 border border-gray-700/60 flex items-center gap-1.5 transition cursor-pointer" title="Відкрити онлайн-радар із вибором API-ключа користувача">
           <span>🎯</span>
           <span>Онлайн-радар</span>
           <span class="text-[10px] text-orange-400 bg-orange-950/60 px-1.5 py-0.5 rounded border border-orange-800">Live</span>
-        </a>
-        <a href="/replay" target="_blank" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-300 hover:text-white hover:bg-gray-800 border border-gray-700/60 flex items-center gap-1.5 transition">
-          <span>⏱️</span>
-          <span>Плеєр історії</span>
-        </a>
-        <a href="/api/v1/directory" target="_blank" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-300 hover:text-white hover:bg-gray-800 border border-gray-700/60 flex items-center gap-1.5 transition">
+        </button>
+        <button onclick="openApiDocsModal()" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-300 hover:text-white hover:bg-gray-800 border border-gray-700/60 flex items-center gap-1.5 transition cursor-pointer" title="Довідник команд API для Home Assistant, ESP32 та cURL">
           <span>📖</span>
           <span>Довідник API</span>
-        </a>
+        </button>
       </div>
       <div class="hidden sm:flex items-center gap-2 text-[11px] text-gray-400">
         <span>Швидко:</span>
-        <a href="#usersSection" class="hover:text-orange-400 transition">Користувачі</a> •
-        <a href="#historySection" class="hover:text-orange-400 transition">Архів історії</a> •
-        <a href="#exchangeLogSection" class="hover:text-orange-400 transition">Лог обміну</a>
+        <a href="javascript:void(0)" onclick="scrollToFrame('usersFrame')" class="hover:text-orange-400 transition cursor-pointer">Користувачі</a> •
+        <a href="javascript:void(0)" onclick="scrollToFrame('historyFrame')" class="hover:text-orange-400 transition cursor-pointer">Архів історії</a> •
+        <a href="javascript:void(0)" onclick="scrollToFrame('directoryFrame')" class="hover:text-orange-400 transition cursor-pointer">Лог обміну</a>
       </div>
     </nav>
 
@@ -602,23 +598,29 @@
         } else {
           document.getElementById("statSirens").innerText = "Спокійно";
         }
-        document.getElementById("statMig").innerText = hData.mig31k_active ? "АКТИВНА" : "НЕМАТЄ";
-        document.getElementById("statMig").className = "text-2xl font-bold mt-1 " + (hData.mig31k_active ? "text-red-400 animate-pulse" : "text-cyan-400");
+        document.getElementById("statMig").innerText = hData.mig31k_active ? "АКТИВНА" : "НЕМАЄ";
+        document.getElementById("statMig").className = "text-2xl font-bold mt-1 " + (hData.mig31k_active ? "text-red-400 animate-pulse" : "text-emerald-400");
 
         // Upstream provider
         const upName = document.getElementById("upstreamName");
         const upDot = document.getElementById("upstreamDot");
         const upBadge = document.getElementById("upstreamBadge");
-        if (hData.upstream_provider === "ukrainealarm") {
+        const upStr = (hData.upstream_provider || "").toLowerCase();
+        if (upStr.includes("centrifugo") || upStr.includes("ukrainealarm")) {
           upName.innerText = "Основний потік (WebSocket map.ukrainealarm.com)";
-          upDot.className = "w-3.5 h-3.5 rounded-full bg-orange-500 animate-pulse shrink-0";
+          upDot.className = "w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse shrink-0";
           upBadge.innerText = "ОСНОВНИЙ";
-          upBadge.className = "bg-orange-950 text-orange-400 border border-orange-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
-        } else if (hData.upstream_provider === "neptun_failover") {
+          upBadge.className = "bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+        } else if (upStr.includes("neptun")) {
           upName.innerText = "Резервний потік (REST neptun.in.ua)";
           upDot.className = "w-3.5 h-3.5 rounded-full bg-amber-500 animate-pulse shrink-0";
           upBadge.innerText = "FAILOVER";
           upBadge.className = "bg-amber-950 text-amber-400 border border-amber-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+        } else if (hData.upstream_provider && hData.upstream_provider !== "none" && hData.upstream_provider !== "") {
+          upName.innerText = hData.upstream_provider;
+          upDot.className = "w-3.5 h-3.5 rounded-full bg-emerald-500 shrink-0";
+          upBadge.innerText = "ACTIVE";
+          upBadge.className = "bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
         } else {
           upName.innerText = "Очікування підключення...";
           upDot.className = "w-3.5 h-3.5 rounded-full bg-gray-500 shrink-0";
@@ -1571,8 +1573,8 @@ ${resp.api_key}
               <button onclick="uploadToGoogleDrive('${f.month}', this)" class="h-7 px-2.5 bg-sky-700 hover:bg-sky-600 text-white rounded text-xs font-medium flex items-center gap-1 transition" title="Відправити цей архів на Google Drive">
                 <span>☁️</span><span>На Drive</span>
               </button>
-              <a href="/replay?month=${f.month}" target="_blank" class="h-7 px-2.5 bg-emerald-800 hover:bg-orange-700 text-emerald-100 rounded text-xs font-medium flex items-center gap-1 transition text-decoration-none" title="Відкрити мапу відтворення історії у новій вкладці">
-                <span>▶</span><span>Відтворити</span>
+              <a href="/map?month=${f.month}" target="_blank" class="h-7 px-2.5 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 rounded text-xs font-medium flex items-center gap-1 transition text-decoration-none" title="Відкрити онлайн-радар із траєкторіями за ${f.month}">
+                <span>▶</span><span>На мапі</span>
               </a>
               <button onclick="downloadHistoryFile('${f.month}')" class="h-7 px-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded text-xs font-medium flex items-center gap-1 transition" title="Завантажити JSON файл на свій ПК">
                 <span>📥</span><span>Скачати</span>
@@ -1750,8 +1752,302 @@ ${resp.api_key}
       }
     }
 
+    // ==========================================
+    // ПЛАВНА НАВІГАЦІЯ ПО БЛОКАХ
+    // ==========================================
+    function scrollToFrame(frameId) {
+      const el = document.getElementById(frameId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    // ==========================================
+    // ДІАЛОГ ВИБОРУ КОРИСТУВАЧА ДЛЯ ОНЛАЙН-РАДАРА
+    // ==========================================
+    function openRadarSelectorModal() {
+      const modal = document.getElementById("radarUserModal");
+      const sel = document.getElementById("radarModalUserSelect");
+      if (!modal || !sel) return;
+
+      sel.innerHTML = "";
+      const users = Object.values(cachedUsers || {});
+      if (users.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.text = "🌐 Загальний перегляд (Без прив'язки до користувача)";
+        sel.appendChild(opt);
+      } else {
+        users.forEach(u => {
+          const opt = document.createElement("option");
+          opt.value = u.api_key;
+          const slotsCount = Object.keys(u.slots || {}).length;
+          opt.text = `👤 ${u.owner} — ${slotsCount} точок (Токен: ${u.api_key.substring(0, 10)}...)`;
+          sel.appendChild(opt);
+        });
+        const optAdmin = document.createElement("option");
+        optAdmin.value = "";
+        optAdmin.text = "🌐 Загальний перегляд (Без прив'язки до слотів)";
+        sel.appendChild(optAdmin);
+      }
+
+      updateRadarModalUserPreview();
+      modal.classList.remove("hidden");
+    }
+
+    function closeRadarUserModal() {
+      const modal = document.getElementById("radarUserModal");
+      if (modal) modal.classList.add("hidden");
+    }
+
+    function updateRadarModalUserPreview() {
+      const sel = document.getElementById("radarModalUserSelect");
+      const prev = document.getElementById("radarModalSlotsPreview");
+      if (!sel || !prev) return;
+
+      const key = sel.value;
+      if (!key) {
+        prev.innerHTML = `<span class="text-gray-400">Відображатимуться всі повітряні цілі та сирени України без розрахунку персональної небезпеки до вашого дому.</span>`;
+        return;
+      }
+      const u = cachedUsers[key];
+      if (!u) return;
+
+      const slots = Object.values(u.slots || {});
+      if (slots.length === 0) {
+        prev.innerHTML = `<span class="text-amber-400">У цього користувача ще немає налаштованих слотів.</span>`;
+        return;
+      }
+
+      let html = `<div class="font-semibold text-gray-300 mb-1">Точки спостереження (${slots.length}):</div><div class="space-y-1">`;
+      slots.forEach(s => {
+        html += `<div class="flex items-center justify-between text-[11px] text-gray-300 bg-gray-900/60 px-2 py-1 rounded border border-gray-800">
+          <span>📍 <strong>${s.name || 'Точка'}</strong> <span class="text-gray-500">(${s.lat.toFixed(4)}, ${s.lon.toFixed(4)})</span></span>
+          <span class="text-orange-400 font-mono font-bold">${s.danger_zone || s.danger_radius_km || 35} км</span>
+        </div>`;
+      });
+      html += `</div>`;
+      prev.innerHTML = html;
+    }
+
+    function launchRadarWithSelectedUser() {
+      const sel = document.getElementById("radarModalUserSelect");
+      const key = sel ? sel.value : "";
+      const url = key ? `/map?token=${encodeURIComponent(key)}` : "/map";
+      window.open(url, "_blank");
+      closeRadarUserModal();
+    }
+
+    // ==========================================
+    // ДІАЛОГ ДОВІДНИКА API ТА КОМАНД
+    // ==========================================
+    function openApiDocsModal() {
+      const modal = document.getElementById("apiDocsModal");
+      const sel = document.getElementById("apiDocsUserSelect");
+      if (!modal || !sel) return;
+
+      sel.innerHTML = "";
+      const users = Object.values(cachedUsers || {});
+      if (users.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "ak_ваш_токен";
+        opt.text = "Приклад: ak_ваш_токен";
+        sel.appendChild(opt);
+      } else {
+        users.forEach(u => {
+          const opt = document.createElement("option");
+          opt.value = u.api_key;
+          opt.text = `👤 ${u.owner} (${u.api_key.substring(0, 10)}...)`;
+          sel.appendChild(opt);
+        });
+      }
+
+      renderApiDocsEndpoints();
+      modal.classList.remove("hidden");
+    }
+
+    function closeApiDocsModal() {
+      const modal = document.getElementById("apiDocsModal");
+      if (modal) modal.classList.add("hidden");
+    }
+
+    function copyToClipboard(text, btn) {
+      navigator.clipboard.writeText(text).then(() => {
+        const oldHtml = btn.innerHTML;
+        btn.innerHTML = "<span>✅ Скопійовано!</span>";
+        btn.classList.add("text-emerald-400");
+        setTimeout(() => {
+          btn.innerHTML = oldHtml;
+          btn.classList.remove("text-emerald-400");
+        }, 1500);
+      });
+    }
+
+    function renderApiDocsEndpoints() {
+      const sel = document.getElementById("apiDocsUserSelect");
+      const token = sel ? sel.value : "ak_ваш_токен";
+      const origin = window.location.origin;
+      const container = document.getElementById("apiDocsEndpointsList");
+      if (!container) return;
+
+      const endpoints = [
+        {
+          method: "GET",
+          badgeColor: "bg-emerald-950 text-emerald-400 border-emerald-800",
+          path: `/api/v1/radar/live?token=${token}`,
+          title: "Головна радарна телеметрія (Home Assistant & ESP32)",
+          desc: "Повертає статус загрози (danger: true/false), найближчу ціль, дистанцію в км, азимут, розрахований час підльоту (ETA), сирени для обраного користувача.",
+          sample: `curl "${origin}/api/v1/radar/live?token=${token}"`
+        },
+        {
+          method: "GET",
+          badgeColor: "bg-emerald-950 text-emerald-400 border-emerald-800",
+          path: `/api/v1/threats?token=${token}`,
+          title: "Список усіх активних повітряних цілей",
+          desc: "Повертає масив активних БПЛА ('Шахедів'), крилатих та балістичних ракет з їх поточними координатами (lat/lon), курсом та швидкістю.",
+          sample: `curl "${origin}/api/v1/threats?token=${token}"`
+        },
+        {
+          method: "POST",
+          badgeColor: "bg-amber-950 text-amber-400 border-amber-800",
+          path: `/api/v1/location`,
+          title: "Оновлення GPS-координат динамічного слота",
+          desc: "Використовується для передачі координат вашого смартфона в реальному часі (з автоматизацій Home Assistant Companion App або Tasker).",
+          sample: `curl -X POST "${origin}/api/v1/location" -H "Content-Type: application/json" -d '{"token": "${token}", "slot": "1", "lat": 50.4501, "lon": 30.5234}'`
+        },
+        {
+          method: "GET",
+          badgeColor: "bg-emerald-950 text-emerald-400 border-emerald-800",
+          path: `/map?token=${token}`,
+          title: "Інтерактивна онлайн-мапа радар",
+          desc: "Повноцінна веб-мапа з кругами небезпеки для ваших слотів, треками польоту цілей та таймлайном історії.",
+          sample: `${origin}/map?token=${token}`
+        },
+        {
+          method: "GET",
+          badgeColor: "bg-blue-950 text-blue-400 border-blue-800",
+          path: `/api/v1/health`,
+          title: "Системний статус та телеметрія сервера",
+          desc: "Повертає загальну кількість фізичних цілей у повітрі, кількість областей із сиренами, статус апстріму та стан проксі.",
+          sample: `curl "${origin}/api/v1/health"`
+        },
+        {
+          method: "GET",
+          badgeColor: "bg-sky-950 text-sky-400 border-sky-800",
+          path: `/api/v1/directory`,
+          title: "Довідник класифікатора загроз (JSON)",
+          desc: "Повертає типи загроз, коди іконок, стандартні швидкості та кольори відображення.",
+          sample: `curl "${origin}/api/v1/directory"`
+        }
+      ];
+
+      let html = "";
+      endpoints.forEach((ep) => {
+        html += `
+          <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${ep.badgeColor}">${ep.method}</span>
+                <span class="font-mono font-semibold text-white text-xs select-all">${ep.path}</span>
+              </div>
+              <button onclick="copyToClipboard('${ep.sample.replace(/'/g, "\'")}', this)" class="px-2 py-1 bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-700 rounded text-[11px] font-medium flex items-center gap-1 transition cursor-pointer">
+                <span>📋</span><span>Скопіювати команду</span>
+              </button>
+            </div>
+            <div class="text-xs text-gray-300 font-medium">${ep.title}</div>
+            <p class="text-[11px] text-gray-400">${ep.desc}</p>
+            <div class="bg-gray-900 p-2 rounded border border-gray-800 font-mono text-[11px] text-amber-300/90 select-all overflow-x-auto">
+              ${ep.sample}
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
     // Ініціалізація авторизації при завантаженні сторінки
     initAuth();
   </script>
+
+  <!-- МОДАЛЬНЕ ВІКНО: ВИБІР ВЛАСНИКА API-КЛЮЧА ДЛЯ ОНЛАЙН-РАДАРА -->
+  <div id="radarUserModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl p-5 max-w-md w-full shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="text-xl">🎯</span>
+          <div>
+            <h3 class="font-bold text-white text-sm">Відкрити Онлайн-радар</h3>
+            <p class="text-[11px] text-gray-400">Оберіть користувача для відображення індивідуальних точок та радіусів</p>
+          </div>
+        </div>
+        <button onclick="closeRadarUserModal()" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-gray-300 font-semibold mb-1">Оберіть власника API-ключа:</label>
+          <select id="radarModalUserSelect" onchange="updateRadarModalUserPreview()" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2.5 text-white focus:border-orange-500 focus:outline-none">
+            <!-- options dynamically added -->
+          </select>
+        </div>
+
+        <div id="radarModalSlotsPreview" class="p-3 bg-gray-950 border border-gray-800 rounded-lg space-y-1.5 text-gray-400">
+          <!-- Preview of slots for selected user -->
+        </div>
+
+        <div class="text-[11px] text-gray-500 flex items-center gap-1.5">
+          <span>ℹ️</span>
+          <span>На мапі будуть позначені всі налаштовані слоти та круги небезпеки обраного власника.</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-gray-800">
+        <button onclick="closeRadarUserModal()" class="px-3.5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-semibold transition">
+          Скасувати
+        </button>
+        <button onclick="launchRadarWithSelectedUser()" class="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow">
+          <span>🎯</span><span>Відкрити радар</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНЕ ВІКНО: ДОВІДНИК КОМАНД ТА API -->
+  <div id="apiDocsModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl max-w-3xl w-full shadow-2xl max-h-[90vh] flex flex-col">
+      <div class="p-4 border-b border-gray-800 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-2.5">
+          <span class="text-xl">📖</span>
+          <div>
+            <h3 class="font-bold text-white text-sm">Довідник API та команд Air Alert Hub</h3>
+            <p class="text-[11px] text-gray-400">Повний перелік ендпоінтів та команд для Home Assistant, ESP32, cURL та віджетів</p>
+          </div>
+        </div>
+        <button onclick="closeApiDocsModal()" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition">✕</button>
+      </div>
+
+      <div class="p-4 overflow-y-auto space-y-4 text-xs">
+        <div class="bg-gray-950 p-3 rounded-lg border border-gray-800 flex flex-wrap items-center justify-between gap-2">
+          <span class="text-gray-300 font-medium">Підставити токен користувача в команди:</span>
+          <select id="apiDocsUserSelect" onchange="renderApiDocsEndpoints()" class="bg-gray-900 border border-gray-700 rounded px-2.5 py-1 text-xs text-white focus:border-orange-500 focus:outline-none">
+            <!-- options -->
+          </select>
+        </div>
+
+        <div id="apiDocsEndpointsList" class="space-y-3">
+          <!-- Will render endpoints dynamically -->
+        </div>
+      </div>
+
+      <div class="p-3 bg-gray-950 border-t border-gray-800 flex items-center justify-between shrink-0">
+        <a href="/api/v1/directory" target="_blank" class="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1 transition">
+          <span>Класифікатор загроз (JSON) ↗</span>
+        </a>
+        <button onclick="closeApiDocsModal()" class="px-4 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-semibold transition">
+          Закрити
+        </button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

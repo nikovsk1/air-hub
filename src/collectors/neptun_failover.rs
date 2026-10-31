@@ -1,18 +1,23 @@
 ﻿use std::sync::Arc;
 use std::time::Duration;
+use reqwest::header::USER_AGENT;
 use serde_json::Value;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::crypto_decoder::RawExtractedTarget;
 use crate::geo_math::calculate_bearing;
+use crate::history::HistoryManager;
 use crate::oblast_detector::OblastDetector;
 use crate::tracker::{now_sec, OfficialAlert, ThreatState};
+
+const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 pub async fn run_failover_neptun_collector(
     threat_state: Arc<RwLock<ThreatState>>,
     detector: Arc<OblastDetector>,
+    history_mgr: Arc<HistoryManager>,
     http_client: reqwest::Client,
 ) {
     loop {
@@ -31,7 +36,12 @@ pub async fn run_failover_neptun_collector(
 
         // 1. Резервний збір повітряних цілей
         let threats_url = "https://neptun.in.ua/api/v1/threats";
-        if let Ok(resp) = http_client.get(threats_url).timeout(Duration::from_secs(8)).send().await {
+        if let Ok(resp) = http_client.get(threats_url)
+            .header(reqwest::header::REFERER, "https://neptun.in.ua/")
+            .timeout(Duration::from_secs(8))
+            .send()
+            .await
+        {
             if let Ok(val) = resp.json::<Value>().await {
                 if let Some(threats_raw) = val.get("threats").and_then(|t| t.as_array()) {
                     let mut extracted = Vec::new();
@@ -81,19 +91,33 @@ pub async fn run_failover_neptun_collector(
                         });
                     }
 
+                    let extracted_count = extracted.len();
                     let mut state = threat_state.write().await;
                     state.tracker.update_batch(&extracted, &detector);
+                    state.recompute_oblast_alerts(&detector);
                     state.last_targets_update_ts = now_sec();
                     state.last_update_ts = now_sec();
                     state.update_seq += 1;
                     state.upstream_provider = "Neptun Failover REST API".to_string();
+
+                    for trk in state.tracker.tracks.values() {
+                        history_mgr.record_track(trk, "active");
+                    }
+                    if extracted_count > 0 {
+                        info!("Neptun failover: updated {} active targets from backup feed", extracted_count);
+                    }
                 }
             }
         }
 
         // 2. Резервний збір офіційних сирен
         let alerts_url = "https://neptun.in.ua/api/v1/alerts";
-        if let Ok(resp) = http_client.get(alerts_url).timeout(Duration::from_secs(8)).send().await {
+        if let Ok(resp) = http_client.get(alerts_url)
+            .header(reqwest::header::REFERER, "https://neptun.in.ua/")
+            .timeout(Duration::from_secs(8))
+            .send()
+            .await
+        {
             if let Ok(val) = resp.json::<Value>().await {
                 let mut state = threat_state.write().await;
                 let mut updated_any = false;

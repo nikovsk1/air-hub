@@ -10,8 +10,9 @@ tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["ws", "macros", "multipart"] }
 tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "socks", "native-tls", "default-tls"] }
-tokio-tungstenite = { version = "0.23", features = ["native-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "socks", "rustls-tls", "http2"] }
+tokio-tungstenite = { version = "0.23", default-features = false, features = ["rustls-tls-webpki-roots", "handshake"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 futures-util = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
