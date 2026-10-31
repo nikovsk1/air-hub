@@ -552,4 +552,110 @@ impl HistoryManager {
         info!("Imported {} targets from external JSON payload", imported_count);
         imported_count
     }
+
+    /// Синхронізація (вивантаження) місячного архіву на Google Drive через Apps Script Webhook
+    pub async fn sync_to_gdrive(
+        &self,
+        month: &str,
+        webhook_url: &str,
+        http_client: &reqwest::Client,
+    ) -> Result<(usize, f64), String> {
+        if webhook_url.trim().is_empty() {
+            return Err("Google Apps Script Webhook URL не налаштовано!".to_string());
+        }
+
+        self.flush_dirty();
+
+        let month_data = self.get_month_data(month)
+            .ok_or_else(|| format!("Архів за місяць {} не знайдено на диску", month))?;
+
+        let targets_count = month_data.get("total_targets")
+            .and_then(|v| v.as_u64())
+            .map(|u| u as usize)
+            .or_else(|| month_data.get("targets").and_then(|t| t.as_object()).map(|o| o.len()))
+            .unwrap_or(0);
+
+        let payload = json!({
+            "filename": format!("flight_history_{}.json", month),
+            "month": month,
+            "total_targets": targets_count,
+            "content": month_data
+        });
+
+        let json_bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let size_kb = (json_bytes.len() as f64 / 1024.0 * 10.0).round() / 10.0;
+
+        let resp = http_client.post(webhook_url)
+            .header("Content-Type", "application/json")
+            .header("User-Agent", "AirAlertHub/1.0")
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| format!("Помилка надсилання на Webhook: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let err_body = resp.text().await.unwrap_or_default();
+            return Err(format!("Webhook повернув помилку {}: {}", status, err_body));
+        }
+
+        self.gdrive_synced_months.write().insert(month.to_string());
+        info!("Successfully synced month {} to Google Drive ({} targets, {} KB)", month, targets_count, size_kb);
+
+        Ok((targets_count, size_kb))
+    }
+
+    /// Завантаження (відновлення) місячного архіву з Google Drive через Apps Script Webhook
+    pub async fn fetch_month_from_gdrive(
+        &self,
+        month: &str,
+        webhook_url: &str,
+        http_client: &reqwest::Client,
+    ) -> Result<Value, String> {
+        if webhook_url.trim().is_empty() {
+            return Err("Google Apps Script Webhook URL не налаштовано!".to_string());
+        }
+
+        let resp = http_client.get(webhook_url)
+            .header("User-Agent", "AirAlertHub/1.0")
+            .query(&[("action", "get"), ("month", month)])
+            .send()
+            .await
+            .map_err(|e| format!("Помилка звернення до Webhook: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let err_body = resp.text().await.unwrap_or_default();
+            return Err(format!("Webhook повернув статус {}: {}", status, err_body));
+        }
+
+        let data: Value = resp.json().await
+            .map_err(|e| format!("Некоректний JSON від Google Drive Webhook: {}", e))?;
+
+        if let Some(err_status) = data.get("status").and_then(|s| s.as_str()) {
+            if err_status == "error" {
+                let msg = data.get("message").and_then(|m| m.as_str()).unwrap_or("Невідома помилка");
+                return Err(format!("Google Drive помилка: {}", msg));
+            }
+        }
+
+        if data.get("targets").is_some() || data.get("dates").is_some() {
+            let file_path = self.history_dir.join(format!("flight_history_{}.json", month));
+            let tmp_path = self.history_dir.join(format!("flight_history_{}.json.tmp", month));
+
+            let serialized = serde_json::to_string(&data).map_err(|e| e.to_string())?;
+            fs::write(&tmp_path, serialized.as_bytes()).map_err(|e| e.to_string())?;
+            let _ = fs::rename(&tmp_path, &file_path);
+
+            self.read_cache.write().insert(month.to_string(), data.clone());
+            self.gdrive_synced_months.write().insert(month.to_string());
+
+            let targets_count = data.get("targets").and_then(|t| t.as_object()).map(|o| o.len()).unwrap_or(0);
+            info!("Successfully restored month {} from Google Drive ({} targets)", month, targets_count);
+
+            Ok(data)
+        } else {
+            Err(format!("Отримані дані за місяць {} не містять цілей", month))
+        }
+    }
 }

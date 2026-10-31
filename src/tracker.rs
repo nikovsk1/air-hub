@@ -408,6 +408,7 @@ impl Default for ThreatState {
 }
 
 impl ThreatState {
+    #[allow(dead_code)]
     pub fn get_etag(&self) -> String {
         format!("W/\"seq-{}\"", self.update_seq)
     }

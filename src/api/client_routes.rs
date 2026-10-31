@@ -5,7 +5,7 @@ use std::time::Duration;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, Path as AxumPath, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
-use axum::response::{Html, IntoResponse, Redirect, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::Deserialize;
@@ -31,6 +31,7 @@ pub struct ClientQuery {
     pub month: Option<String>,
     pub date: Option<String>,
     pub full_regions: Option<bool>,
+    #[allow(dead_code)]
     pub compact: Option<bool>,
 }
 
@@ -837,11 +838,11 @@ async fn handle_get_threats(
 
     let selected_slot_id = query.slot.clone().or_else(|| query.slot_id.clone()).unwrap_or_else(|| "1".to_string());
     let user_slot_status = user.slots.get(&selected_slot_id)
-        .map(|s| format!("{}_{:.1}", s.is_dynamic, s.danger_radius_km))
+        .map(|s| format!("{}_{:.1}", s.is_dynamic, s.danger_zone))
         .unwrap_or_default();
 
     let st = state.threat_state.read().await;
-    let etag = format!(""seq{}_u{}_s{}_{}"", st.update_seq, user.version, selected_slot_id, user_slot_status);
+    let etag = format!("seq{}_u{}_s{}_{}", st.update_seq, user.api_key, selected_slot_id, user_slot_status);
 
     if let Some(client_etag) = headers.get(header::IF_NONE_MATCH).and_then(|h| h.to_str().ok()) {
         let clean_client = client_etag.trim().trim_start_matches("W/").trim_matches('"');
