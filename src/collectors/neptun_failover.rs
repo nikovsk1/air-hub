@@ -8,7 +8,7 @@ use tracing::{info, warn};
 
 use crate::canonical_registry::ExchangeLogManager;
 use crate::crypto_decoder::RawExtractedTarget;
-use crate::geo_math::calculate_bearing;
+use crate::geo_math::{calculate_bearing, calculate_haversine_distance};
 use crate::history::HistoryManager;
 use crate::oblast_detector::OblastDetector;
 use crate::tracker::{now_sec, OfficialAlert, ThreatState};
@@ -81,8 +81,31 @@ pub async fn run_failover_neptun_collector(
                             _ => 0,
                         };
 
-                        let id = t.get("id").and_then(|v| v.as_str()).map(|s| s.to_string())
-                            .unwrap_or_else(|| format!("nep_{:.2}", lat));
+                        // Точкова Естафета (Failover Handover):
+                        // Якщо поруч (<15 км) є активна ціль від основного джерела UkraineAlarm зі схожим вектором руху,
+                        // успадковуємо її оригінальний ID, щоб не плодити дублікатів і не створювати хибних маркерів збиттів
+                        let candidate_id = {
+                            let state = threat_state.read().await;
+                            let mut best_match: Option<(String, f64)> = None;
+                            for (existing_id, trk) in &state.tracker.tracks {
+                                if !existing_id.starts_with("nep_") {
+                                    let d = calculate_haversine_distance(trk.lat, trk.lon, lat, lon);
+                                    let mut h_diff = (trk.heading - heading).abs();
+                                    if h_diff > 180.0 { h_diff = 360.0 - h_diff; }
+                                    if d <= 15.0 && (h_diff <= 40.0 || heading == 0.0 || trk.heading == 0.0) {
+                                        if best_match.as_ref().map_or(true, |(_, best_d)| d < *best_d) {
+                                            best_match = Some((existing_id.clone(), d));
+                                        }
+                                    }
+                                }
+                            }
+                            best_match.map(|(id, _)| id)
+                        };
+
+                        let id = candidate_id.unwrap_or_else(|| {
+                            t.get("id").and_then(|v| v.as_str()).map(|s| s.to_string())
+                                .unwrap_or_else(|| format!("nep_{:.2}_{:.2}", lat, lon))
+                        });
 
                         extracted.push(RawExtractedTarget {
                             id,

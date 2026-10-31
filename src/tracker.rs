@@ -147,30 +147,41 @@ impl TargetTrack {
         if let Some(last_pt) = self.trajectory.last() {
             let dist_from_last = calculate_haversine_distance(last_pt.lat, last_pt.lon, lat, lon);
 
-            let calculated_heading = if dist_from_last > 0.2 {
-                calculate_bearing(last_pt.lat, last_pt.lon, lat, lon)
-            } else if heading > 0.0 {
-                heading
+            // Захист від фізично неможливих стрибків (телепортація > 60 км за один пакет):
+            // скидаємо попередні точки, щоб не малювати павутиння ліній через усю країну
+            // Захист від фізично неможливих стрибків (телепортація > 350 км за один пакет):
+            // скидаємо попередні точки тільки при аномальному перескоку координат
+            if dist_from_last > 350.0 {
+                self.trajectory.clear();
+                self.trajectory.push(TrajectoryPoint {
+                    lat,
+                    lon,
+                    ts: now as i64,
+                });
+                self.heading = if heading > 0.0 { heading } else { self.heading };
             } else {
-                self.heading
-            };
+                let calculated_heading = if dist_from_last > 0.3 {
+                    calculate_bearing(last_pt.lat, last_pt.lon, lat, lon)
+                } else if heading > 0.0 {
+                    heading
+                } else {
+                    self.heading
+                };
 
-            // Dead Reckoning: додаємо нову точку лише при зміні курсу, швидкості, або чекпоінті 120с
-            if self.trajectory.len() < 2 {
-                if dist_from_last >= 0.3 {
-                    self.trajectory.push(TrajectoryPoint {
-                        lat,
-                        lon,
-                        ts: now as i64,
-                    });
-                }
-            } else {
                 let time_since_last = (now as i64) - last_pt.ts;
-                let is_turn = dist_from_last >= 0.4 && heading_diff(self.heading, calculated_heading) >= 4.0;
-                let is_speed_change = (speed - self.speed_kmh).abs() >= 25.0 && speed > 0.0 && self.speed_kmh > 0.0;
-                let is_heartbeat = time_since_last >= 120 && dist_from_last >= 0.3;
+                let h_diff = heading_diff(self.heading, calculated_heading);
 
-                if is_turn || is_speed_change || is_heartbeat {
+                // Точка фіксується у постійну траєкторію, якщо:
+                // 1. Поворот курсу >= 4.0 градусів на відстані від 400 метрів (збереження віражів)
+                // 2. Або ціль пролетіла понад 1.5 км по прямій від останньої точки
+                // 3. Або різка зміна швидкості >= 30 км/год (маневр/розгін)
+                // 4. Або минуло понад 30 секунд без нових точок (контрольний чекпоінт)
+                let is_turn = dist_from_last >= 0.4 && h_diff >= 4.0;
+                let is_distance_step = dist_from_last >= 1.5;
+                let is_speed_change = (speed - self.speed_kmh).abs() >= 30.0 && speed > 0.0 && self.speed_kmh > 0.0;
+                let is_heartbeat = time_since_last >= 30 && dist_from_last >= 0.3;
+
+                if is_turn || is_distance_step || is_speed_change || is_heartbeat {
                     self.trajectory.push(TrajectoryPoint {
                         lat,
                         lon,
@@ -180,17 +191,13 @@ impl TargetTrack {
                     if self.trajectory.len() > 1000 {
                         self.trajectory.drain(0..100);
                     }
-                } else if dist_from_last >= 0.2 {
-                    // Рух по прямій: оновлюємо верхівку траєкторії без роздування масиву
-                    if let Some(tip) = self.trajectory.last_mut() {
-                        tip.lat = lat;
-                        tip.lon = lon;
-                        tip.ts = now as i64;
-                    }
                 }
-            }
+                // На прямих відрізках між фіксованими точками ми НЕ мутуємо self.trajectory.last_mut().
+                // Це гарантує, що dist_from_last та time_since_last накопичуються від дійсно зафіксованої
+                // опорної точки, а поточні координати цілі оновлюються у self.lat та self.lon нижче.
 
-            self.heading = calculated_heading;
+                self.heading = calculated_heading;
+            }
         }
 
         self.lat = lat;
@@ -461,6 +468,7 @@ pub struct ThreatState {
     pub last_update_ts: f64,
     pub last_targets_update_ts: f64,
     pub last_primary_targets_ts: f64,
+    pub last_ws_targets_ts: f64,
     pub last_alerts_update_ts: f64,
     pub update_seq: u64,
     pub upstream_provider: String,
@@ -478,6 +486,7 @@ impl Default for ThreatState {
             last_update_ts: now_sec(),
             last_targets_update_ts: now_sec(),
             last_primary_targets_ts: now_sec(),
+            last_ws_targets_ts: 0.0,
             last_alerts_update_ts: now_sec(),
             update_seq: 1,
             upstream_provider: "Centrifugo (ws.ukrainealarm.com)".to_string(),
@@ -614,5 +623,81 @@ mod tests {
         assert_eq!(tracker.tracks.len(), 0);
         assert_eq!(tracker.recent_lost.len(), 1);
     }
-}
 
+    #[test]
+    fn test_target_jump_resets_trajectory() {
+        let mut trk = TargetTrack::new(
+            "tgt_teleport".to_string(),
+            "shahed".to_string(),
+            1,
+            50.0,
+            30.0,
+            90.0,
+            185.0,
+            "Київська".to_string(),
+            "14".to_string(),
+        );
+        assert_eq!(trk.trajectory.len(), 1);
+
+        // Нормальний невеликий рух (1 км)
+        trk.update(50.01, 30.01, 45.0, 185.0, "Київська".to_string(), "14".to_string(), None, None);
+        assert!(trk.trajectory.len() >= 1);
+
+        // Аномальний стрибок на 300 км (наприклад у Суми або Львів)
+        trk.update(52.5, 34.0, 90.0, 185.0, "Сумська".to_string(), "18".to_string(), None, None);
+        // Захист від телепортації повинен очистити старі точки і не креслити павутиння
+        assert_eq!(trk.trajectory.len(), 1);
+        assert_eq!(trk.trajectory[0].lat, 52.5);
+        assert_eq!(trk.trajectory[0].lon, 34.0);
+    }
+
+
+    #[test]
+    fn test_trajectory_accumulation_straight_flight() {
+        let mut trk = TargetTrack::new(
+            "straight_drone".to_string(),
+            "shahed".to_string(),
+            8,
+            50.0,
+            30.0,
+            90.0,
+            185.0,
+            "Київська".to_string(),
+            "14".to_string(),
+        );
+        assert_eq!(trk.trajectory.len(), 1);
+
+        // Рух мікро-кроками по 150 метрів (~0.002 градуса довготи на 50° пн. ш.)
+        // Раніше баг затирав верхівку і за 30 км залишалося лише 1-2 точки!
+        for i in 1..=30 {
+            let lon_offset = (i as f64) * 0.002;
+            trk.update(50.0, 30.0 + lon_offset, 90.0, 185.0, "Київська".to_string(), "14".to_string(), None, None);
+        }
+        // Загальна дистанція ~4.3 км (понад 1.5 км двічі)
+        // Траєкторія обов'язково повинна містити збережені проміжні точки!
+        assert!(trk.trajectory.len() >= 3, "Trajectory should accumulate intermediate points, got {}", trk.trajectory.len());
+    }
+
+    #[test]
+    fn test_missile_speed_does_not_clear_trajectory() {
+        let mut trk = TargetTrack::new(
+            "kalibr".to_string(),
+            "missile".to_string(),
+            3,
+            48.0,
+            31.0,
+            0.0,
+            850.0,
+            "Миколаївська".to_string(),
+            "12".to_string(),
+        );
+        trk.update(48.05, 31.0, 0.0, 850.0, "Миколаївська".to_string(), "12".to_string(), None, None);
+        assert_eq!(trk.trajectory.len(), 2);
+
+        // Зсув ракети на 80 км (наприклад, пауза апстріму або політ за 5 хвилин)
+        // 80 км / 111.0 = ~0.72 градуса
+        trk.update(48.77, 31.0, 0.0, 850.0, "Кіровоградська".to_string(), "10".to_string(), None, None);
+        // Не повинно очищати траєкторію (80 км < 350 км)!
+        assert_eq!(trk.trajectory.len(), 3, "Trajectory must retain history for fast cruise missiles");
+    }
+}

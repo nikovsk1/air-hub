@@ -116,8 +116,12 @@ pub async fn process_ukrainealarm_payload(
         state.last_update_ts = now;
         state.last_targets_update_ts = now;
         state.last_primary_targets_ts = now;
+        if source_label.contains("WS") {
+            state.last_ws_targets_ts = now;
+        }
         state.update_seq += 1;
         state.upstream_provider = format!("{} ({})", source_label, stream_type);
+        info!("Updated radar snapshot via {} ({} active targets)", state.upstream_provider, extracted.len());
 
         // Синхронізація активних траєкторій в історію з дроселюванням (раз на 15 с для стабільних цілей)
         for trk in state.tracker.tracks.values_mut() {
@@ -299,7 +303,12 @@ pub async fn run_ukrainealarm_collector(
 
             for line in text.lines() {
                 let trimmed = line.trim();
-                if trimmed.is_empty() || trimmed == "{}" || trimmed == r#"{"id":0}"# {
+                if trimmed.is_empty() || trimmed == r#"{"id":0}"# {
+                    continue;
+                }
+                // Відповідь на Centrifugo heartbeat ping для запобігання обриву з'єднання кожні 25с
+                if trimmed == "{}" {
+                    let _ = write.send(Message::Text("{}".to_string())).await;
                     continue;
                 }
 
@@ -458,25 +467,27 @@ pub async fn run_ukrainealarm_http_fallback(
 
     // 2. Dual-Stack Smart Fusion Engine
     loop {
-        let silence_sec = {
+        let ws_silence_sec = {
             let state = threat_state.read().await;
-            now_sec() - state.last_targets_update_ts
+            now_sec() - state.last_ws_targets_ts
         };
 
-        // Якщо WebSocket стабільно постачає дані (мовчання <= 8.0 сек), працюємо як фоновий Anchor Reconciler (раз на 35 сек)
-        if silence_sec <= 8.0 {
-            sleep(Duration::from_secs(35)).await;
+        // Якщо WebSocket стабільно постачає дані (мовчання <= 12.0 сек), Fallback не втручається
+        // і не перезаписує свіжі цілі застарілим кешованим знімком
+        if ws_silence_sec <= 12.0 {
+            sleep(Duration::from_secs(6)).await;
+            continue;
         }
 
-        // Захист від занадто частого опитування: мінімум 9.5 секунд між запитами (Rate Limit & max-age=10 guard)
+        // Якщо WebSocket мовчить >12.0 сек: Fallback стає основним джерелом і опитує кожні 9.5-10 сек
         let elapsed = last_fetch_instant.elapsed();
         if elapsed < Duration::from_millis(9500) {
             sleep(Duration::from_millis(9500) - elapsed).await;
         }
 
         debug!(
-            "Polling UkraineAlarm Fallback (silence: {:.1}s, last_hash: {:?})...",
-            silence_sec, last_hash
+            "Polling UkraineAlarm Fallback (WS silence: {:.1}s, last_hash: {:?})...",
+            ws_silence_sec, last_hash
         );
 
         let req = http_client
@@ -512,17 +523,14 @@ pub async fn run_ukrainealarm_http_fallback(
                                 }
 
                                 if !skip_reprocessing {
-                                    let success = process_ukrainealarm_payload(
+                                    let _success = process_ukrainealarm_payload(
                                         payload,
-                                        if silence_sec > 8.0 { "UkraineAlarm HTTP Fallback" } else { "UkraineAlarm Fallback (Anchor Sync)" },
+                                        "UkraineAlarm HTTP Fallback",
                                         &threat_state,
                                         &detector,
                                         &history_mgr,
                                         &exchange_mgr,
                                     ).await;
-                                    if success {
-                                        info!("Updated radar snapshot via UkraineAlarm Fallback");
-                                    }
                                 }
                             } else {
                                 warn!("HTTP fallback response has empty 'n' payload field");

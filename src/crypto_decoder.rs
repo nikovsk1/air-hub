@@ -282,6 +282,7 @@ pub struct RawExtractedTarget {
 }
 
 impl RawExtractedTarget {
+    #[allow(dead_code)]
     pub fn simple(id: String, lat: f64, lon: f64, raw_name: String, raw_type_code: i64, heading_deg: f64) -> Self {
         Self {
             id,
@@ -492,17 +493,25 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
 
             if targets.is_none() && !arr.is_empty() {
                 if let Some(first) = arr[0].as_array() {
-                    if first.len() >= 8 && first[0].is_number() && first[7].is_number() {
+                    // Гнучкий розбір цілей: масив має містити щонайменше 3 числових індекси [uuid, coords, type],
+                    // але не повинен бути масивом координат (де всі числа в діапазоні 0..=1)
+                    let is_coords_array = first.len() >= 4 && first[0..4].iter().all(|x| {
+                        x.as_f64().map_or(false, |v| (0.0..=1.0).contains(&v))
+                    });
+
+                    if !is_coords_array && first.len() >= 3 && first[0].is_number() && first[1].is_number() && first[2].is_number() {
                         let mut extracted_targets = Vec::new();
                         for item in arr {
                             if let Some(row) = item.as_array() {
                                 let numbers: Vec<f64> = row.iter().filter_map(|x| x.as_f64()).collect();
-                                if numbers.len() >= 8 {
+                                if numbers.len() >= 3 {
                                     extracted_targets.push(numbers);
                                 }
                             }
                         }
-                        *targets = Some(extracted_targets);
+                        if !extracted_targets.is_empty() {
+                            *targets = Some(extracted_targets);
+                        }
                     }
                 }
             }
@@ -527,48 +536,12 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
     const MAX_LAT: f64 = 52.37;
     const LAT_RANGE: f64 = 7.99;
 
-    // Спроба знайти масив попередніх точок траєкторій у decoded[5][0]
-    let mut trails_map: std::collections::HashMap<usize, Vec<(f64, f64)>> = std::collections::HashMap::new();
-    if let Some(arr) = decoded.as_array() {
-        if arr.len() > 5 {
-            if let Some(fifth) = arr[5].as_array() {
-                if let Some(trails_arr) = fifth.first().and_then(|v| v.as_array()) {
-                    for (t_idx, trk_val) in trails_arr.iter().enumerate() {
-                        if let Some(pt_list) = trk_val.as_array() {
-                            let mut trail_pts = Vec::new();
-                            for pt_item in pt_list {
-                                if let Some(pt_coords) = pt_item.as_array() {
-                                    if pt_coords.len() >= 2 {
-                                        let nx = pt_coords[0].as_f64().unwrap_or(0.0);
-                                        let ny = pt_coords[1].as_f64().unwrap_or(0.0);
-                                        if (0.0..=1.0).contains(&nx) && (0.0..=1.0).contains(&ny) {
-                                            let lon = MIN_LON + (nx * LON_RANGE);
-                                            let lat = MAX_LAT - (ny * LAT_RANGE);
-                                            trail_pts.push((lat, lon));
-                                        }
-                                    }
-                                } else if let Some(c_idx_val) = pt_item.as_u64() {
-                                    let c_i = c_idx_val as usize;
-                                    if c_i < coords.len() {
-                                        let lon = MIN_LON + (coords[c_i][0] * LON_RANGE);
-                                        let lat = MAX_LAT - (coords[c_i][1] * LAT_RANGE);
-                                        trail_pts.push((lat, lon));
-                                    }
-                                }
-                            }
-                            if !trail_pts.is_empty() {
-                                trails_map.insert(t_idx, trail_pts);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // decoded[5][0] містить конфігурацію сповіщень сирен, а не траєкторії.
+    // Траєкторії надійно та органічно накопичуються трекером TargetTracker у реальному часі.
 
     let mut result = Vec::new();
 
-    for (target_row_idx, t) in targets.iter().enumerate() {
+    for t in targets.iter() {
         if t.len() < 3 {
             continue;
         }
@@ -613,9 +586,7 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
             None
         };
 
-        let trail = trails_map.remove(&target_row_idx)
-            .or_else(|| trails_map.remove(&uuid_idx))
-            .unwrap_or_default();
+        let trail = Vec::new();
 
         let uid = if let Some(ref uuids) = found_uuids {
             if uuid_idx < uuids.len() {
@@ -1018,4 +989,5 @@ mod tests {
         assert_eq!(decoded[0].raw_type_code, 1);
         assert_eq!(decoded[0].heading_deg, 180.0);
     }
+
 }

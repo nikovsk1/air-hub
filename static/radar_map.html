@@ -11,6 +11,10 @@
   <!-- Leaflet CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet.markercluster CSS & JS for GPU-accelerated history aggregation -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <!-- Leaflet.heat Plugin for Threat Corridors & Impacts -->
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
@@ -197,6 +201,54 @@
     }
     .impact-cross-container:hover .impact-cross-svg {
       transform: scale(1.25);
+    }
+
+    /* ================= TACTICAL MARKER CLUSTERS ================= */
+    .tactical-cluster-wrapper {
+      background: transparent;
+      border: none;
+    }
+    .tactical-cluster-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.75);
+      font-family: 'Satoshi', -apple-system, sans-serif;
+      font-weight: 700;
+      transition: transform 0.18s ease;
+      user-select: none;
+      cursor: pointer;
+    }
+    .tactical-cluster-container:hover {
+      transform: scale(1.18);
+    }
+    .tactical-cluster-small {
+      width: 32px;
+      height: 32px;
+      background: rgba(12, 16, 26, 0.90);
+      border: 2px solid #38bdf8;
+      color: #38bdf8;
+      font-size: 12px;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+    }
+    .tactical-cluster-medium {
+      width: 38px;
+      height: 38px;
+      background: rgba(12, 16, 26, 0.92);
+      border: 2.2px solid #fbbf24;
+      color: #fbbf24;
+      font-size: 13.5px;
+      box-shadow: 0 0 12px rgba(251, 191, 36, 0.40);
+    }
+    .tactical-cluster-large {
+      width: 44px;
+      height: 44px;
+      background: rgba(12, 16, 26, 0.94);
+      border: 2.5px solid #f97316;
+      color: #f97316;
+      font-size: 15px;
+      box-shadow: 0 0 15px rgba(249, 115, 22, 0.45);
     }
 
     /* ETA Waypoint Point on Vector Line (------•------•------•) */
@@ -1028,15 +1080,7 @@
 </head>
 <body>
 
-  <!-- Physical Refraction SVG Filter for Liquid Glass -->
-  <svg style="position: absolute; width: 0; height: 0; overflow: hidden;" aria-hidden="true">
-    <defs>
-      <filter id="liquid-glass-refract" x="-10%" y="-10%" width="120%" height="120%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" result="noise" />
-        <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.5" xChannelSelector="R" yChannelSelector="G" />
-      </filter>
-    </defs>
-  </svg>
+  
 
   <!-- SIDEBAR TOGGLE (MOBILE / COLLAPSED) -->
   <button class="sidebar-toggle-fab" id="btnOpenSidebar" onclick="toggleSidebar()" title="Меню Радара та Аналітики">
@@ -1114,14 +1158,7 @@
 
     <!-- TAB 1: OPERATIONAL LIVE RADAR (Item 3) -->
     <div class="tab-content active" id="tabRadar">
-      <!-- Компактний фрейм синхронізації добових параметрів (НАД розділом «Активні цілі») -->
-      <div class="sync-status-box" style="margin: 0 0 8px 0; padding: 6px 9px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px;">
-        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1;">
-          <span style="font-size: 9.5px; color: var(--text-gray); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Остання синхронізація добових параметрів:</span>
-          <span id="syncDateLabel" style="font-size: 10.5px; color: #cbd5e1; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2;">Очікується звірка</span>
-        </div>
-        <span id="summaryReconcileBadge" style="flex-shrink: 0; font-size: 9.5px; padding: 2px 7px; border-radius: 4px; font-weight: 600; letter-spacing: 0.2px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); cursor: default; transition: all 0.2s ease;" title="Локальний оперативний підрахунок Air Alert Hub (до найближчої щогодинної звірки)">⚡ Локально</span>
-      </div>
+      
 
       <!-- Розділ "АКТИВНІ ЦІЛІ" (без емодзі в заголовку) -->
       <div class="panel-section">
@@ -1260,8 +1297,7 @@
       <div class="panel-section">
         <div class="section-header" style="display:flex;justify-content:space-between;align-items:center;">
           <span>Статистика вибірки</span>
-          <span id="analyticsReconcileBadge" style="display:none;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600;text-transform:uppercase;"></span>
-        </div>
+          </div>
         <div class="stats-cards-grid">
           <div class="stat-box">
             <div class="stat-num" id="statTotalTargets" style="color:#38bdf8;">0</div>
@@ -1645,10 +1681,30 @@
       throw new Error("Leaflet is not defined (CDN unreachable)");
     }
 
+    const viewParam = (urlParams.get('view') || '').toLowerCase();
+    const isMobileViewport = window.innerWidth <= 768;
+    const isMobileMode = viewParam === 'mobile' || (viewParam !== 'desktop' && isMobileViewport);
+
+    // Dynamic initial zoom and centering:
+    // On mobile vertical screens, zoom 5 fits Ukraine without horizontal clipping
+    const defaultZoom = urlParams.has('zoom') 
+      ? parseInt(urlParams.get('zoom'), 10) 
+      : (isMobileMode ? 5 : 6);
+    const defaultCenterLat = urlParams.has('lat') 
+      ? parseFloat(urlParams.get('lat')) 
+      : (isMobileMode ? 48.8 : 48.5);
+    const defaultCenterLon = urlParams.has('lon') 
+      ? parseFloat(urlParams.get('lon')) 
+      : 31.3;
+
+    if (isMobileMode) {
+      document.body.classList.add('mobile-mode');
+    }
+
     const map = L.map('map', {
       preferCanvas: true,
-      center: [48.5, 31.5],
-      zoom: 6,
+      center: [defaultCenterLat, defaultCenterLon],
+      zoom: defaultZoom,
       zoomControl: false,
       attributionControl: false
     });
@@ -1661,11 +1717,45 @@
       maxZoom: 16, pane: 'overlayPane'
     }).addTo(map);
 
+    // MarkerClusterGroup для тактичного групування сотень точок збиттів в історії
+    let historyImpactClusterGroup = null;
+    if (typeof L.markerClusterGroup === 'function') {
+      historyImpactClusterGroup = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        spiderfyOnMaxZoom: true,
+        maxClusterRadius: 45,
+        disableClusteringAtZoom: 13,
+        chunkedLoading: true,
+        chunkInterval: 100,
+        iconCreateFunction: function(cluster) {
+          const count = cluster.getChildCount();
+          let sizeClass = 'tactical-cluster-small';
+          let size = 32;
+          if (count >= 50) {
+            sizeClass = 'tactical-cluster-large';
+            size = 44;
+          } else if (count >= 10) {
+            sizeClass = 'tactical-cluster-medium';
+            size = 38;
+          }
+          return L.divIcon({
+            html: `<div class="tactical-cluster-container ${sizeClass}"><span>${count}</span></div>`,
+            className: 'tactical-cluster-wrapper',
+            iconSize: L.point(size, size),
+            iconAnchor: L.point(size / 2, size / 2)
+          });
+        }
+      });
+      map.addLayer(historyImpactClusterGroup);
+    }
+
     let oblastsLayer = null;
     let ukraineMaskLayer = null;
     let corridorHeatLayer = null;
     let impactHeatLayer = null;
     let currentAlertMap = {};
+    let lastRenderedAlertsSig = '';
     let selectedRegionLayer = null;
 
     function getRegionBaseStyle(layer) {
@@ -1915,31 +2005,38 @@
     function createTargetMarkerIcon(cat, headingDeg, labelText, speedKmh) {
       const meta = THREAT_CATEGORIES[cat] || THREAT_CATEGORIES.unknown;
       const color = meta.color;
-      const angle = (headingDeg || 0) % 360;
-      const svgShape = getThreatSvgShape(cat, color, angle);
+      const svgShape = getThreatSvgShape(cat, color, 0); // Базовий орієнтований силует
 
       const speedStr = speedKmh && speedKmh > 0 ? ` • ${Math.round(speedKmh)} км/г` : '';
       const tagHtml = visualConfig.showSpeedLabels
         ? `<div class="target-label-tag">${labelText || meta.name}${speedStr}</div>`
         : '';
 
+      const angle = (headingDeg || 0) % 360;
       return L.divIcon({
         className: 'target-marker',
-        html: `<div style="position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;"><div class="icon-rotator" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">${svgShape}</div>${tagHtml}</div>`,
+        html: `<div style="position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;"><div class="icon-rotator" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;transform:rotate(${angle.toFixed(1)}deg);transition:none;">${svgShape}</div>${tagHtml}</div>`,
         iconSize: [32, 32],
         iconAnchor: [16, 16]
       });
     }
 
-    function createImpactCrossIcon(cat, titleText) {
+    function createImpactCrossIcon(cat, titleText, isLive = true) {
       const meta = THREAT_CATEGORIES[cat] || THREAT_CATEGORIES.unknown;
       const color = meta.color || '#ef4444';
+      const pulseHtml = isLive 
+        ? `<div class="impact-cross-pulse" style="border: 2px solid ${color};"></div>` 
+        : '';
+      const filterStyle = isLive 
+        ? `filter: drop-shadow(0 0 6px ${color});` 
+        : `filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8));`;
+
       return L.divIcon({
         className: 'impact-cross-marker',
         html: `
           <div class="impact-cross-container" style="--pulse-color: ${color};" title="${titleText}">
-            <div class="impact-cross-pulse" style="border: 2px solid ${color};"></div>
-            <svg class="impact-cross-svg" viewBox="0 0 24 24" fill="none">
+            ${pulseHtml}
+            <svg class="impact-cross-svg" viewBox="0 0 24 24" fill="none" style="${filterStyle}">
               <!-- Dark outline for high contrast on map -->
               <path d="M5 5L19 19M5 19L19 5" stroke="#000000" stroke-width="4.5" stroke-linecap="round"/>
               <!-- Category color stroke -->
@@ -2136,16 +2233,26 @@
         const pCur = pts[i];
         const pNext = pts[i + 1];
 
-        const b1 = Math.atan2(pCur[1] - pPrev[1], pCur[0] - pPrev[0]);
-        const b2 = Math.atan2(pNext[1] - pCur[1], pNext[0] - pCur[0]);
+        // Косинусна поправка довготи для України (~50° пн. ш.)
+        const cosLat = Math.cos((pCur[0] * Math.PI) / 180.0);
+        const dLon1 = (pCur[1] - pPrev[1]) * cosLat;
+        const dLat1 = pCur[0] - pPrev[0];
+        const dLon2 = (pNext[1] - pCur[1]) * cosLat;
+        const dLat2 = pNext[0] - pCur[0];
+
+        // Пропускаємо ідентичні точки для уникнення NaN
+        if ((dLon1 === 0 && dLat1 === 0) || (dLon2 === 0 && dLat2 === 0)) continue;
+
+        const b1 = Math.atan2(dLon1, dLat1);
+        const b2 = Math.atan2(dLon2, dLat2);
         let angleDelta = Math.abs(b2 - b1);
         if (angleDelta > Math.PI) angleDelta = 2 * Math.PI - angleDelta;
 
-        if (angleDelta >= 0.35) {
-          const qLat = 0.78 * pCur[0] + 0.22 * pPrev[0];
-          const qLon = 0.78 * pCur[1] + 0.22 * pPrev[1];
-          const rLat = 0.78 * pCur[0] + 0.22 * pNext[0];
-          const rLon = 0.78 * pCur[1] + 0.22 * pNext[1];
+        if (angleDelta >= 0.25) { // Плавне географічне заокруглення кутів
+          const qLat = 0.75 * pCur[0] + 0.25 * pPrev[0];
+          const qLon = 0.75 * pCur[1] + 0.25 * pPrev[1];
+          const rLat = 0.75 * pCur[0] + 0.25 * pNext[0];
+          const rLon = 0.75 * pCur[1] + 0.25 * pNext[1];
           res.push([qLat, qLon], [rLat, rLon]);
         } else {
           res.push(pCur);
@@ -2170,29 +2277,41 @@
 
             let curLat = sim.targetLat;
             let curLon = sim.targetLon;
-            if (dt < 2.0) {
+            if (dt < 1.5) {
+              // Плавна інтерполяція до підтвердженої радіолокаційної координати
               const t = Math.min(1.0, dt / 1.5);
               curLat = sim.startLat + (sim.targetLat - sim.startLat) * t;
               curLon = sim.startLon + (sim.targetLon - sim.startLon) * t;
-            } else if (dt < 10.0 && sim.speedKmh > 10) {
-              const extraSec = dt - 2.0;
-              const distKm = (sim.speedKmh * extraSec) / 3600.0;
+            } else if (dt < 6.0 && sim.speedKmh > 10) {
+              // Демпфована екстраполяція вперед із експоненційним затуханням (запобігає відльоту та відкату назад)
+              const extraSec = dt - 1.5;
+              const decay = Math.exp(-extraSec * 0.6);
+              const distKm = ((sim.speedKmh * extraSec) / 3600.0) * decay;
               const rad = (sim.currentHeading * Math.PI) / 180.0;
               curLat = sim.targetLat + (distKm / 111.0) * Math.cos(rad);
               curLon = sim.targetLon + (distKm / (111.0 * Math.cos((sim.targetLat * Math.PI) / 180.0))) * Math.sin(rad);
             }
             it.marker.setLatLng([curLat, curLon]);
 
+            // Синхронізація кінця сліду coreTrail з рухомим маркером (тротлінг 20 FPS)
+            if (it.coreTrail && it.baseTrailPts && it.baseTrailPts.length > 0) {
+              if (now - (it.lastTrailUpdateTs || 0) >= 50) {
+                it.lastTrailUpdateTs = now;
+                it.coreTrail.setLatLngs(it.baseTrailPts.concat([[curLat, curLon]]));
+              }
+            }
+
             const deltaH = ((sim.targetHeading - sim.currentHeading + 540) % 360) - 180;
-            if (Math.abs(deltaH) > 0.5) {
-              sim.currentHeading += deltaH * Math.min(1.0, 0.15);
+            if (Math.abs(deltaH) > 0.2) {
+              // Плавний поворот по найкоротшій дузі (Shortest-Arc Slerp)
+              sim.currentHeading += deltaH * Math.min(1.0, 0.14);
               sim.currentHeading = (sim.currentHeading + 360) % 360;
-              if (!it.rotatorEl) {
+              if (!it.rotatorEl || !it.rotatorEl.isConnected) {
                 const iconEl = it.marker.getElement();
                 if (iconEl) it.rotatorEl = iconEl.querySelector('.icon-rotator');
               }
               if (it.rotatorEl) {
-                it.rotatorEl.style.transform = `rotate(${Math.round(sim.currentHeading)}deg)`;
+                it.rotatorEl.style.transform = `rotate(${sim.currentHeading.toFixed(1)}deg)`;
               }
             }
           }
@@ -2232,8 +2351,7 @@
           todayTargetCounts = Object.assign({}, data.today_stats.categories);
           todayHistoryLoaded = true;
         }
-        updateReconcileUI(data.today_stats.status, data.today_stats.last_reconciled_at);
-      }
+        }
       updateTodayStatsAndGauge();
 
       // Closest Threat HUD Pill: <назва цілі> <Зелений дистанція км> <новий блок ETA> (Task 4)
@@ -2307,9 +2425,19 @@
         });
         currentAlertMap = alertMap;
 
-        oblastsLayer.eachLayer(layer => {
-          applyRegionStyle(layer);
-        });
+        // Memoize alert status across 160 regions to prevent expensive DOM style recalculation
+        const alertsSigParts = [];
+        for (const k in alertMap) {
+          const it = alertMap[k];
+          alertsSigParts.push(k + ':' + (it.alert ? '1' : '0') + ':' + (it.color || ''));
+        }
+        const alertsSig = alertsSigParts.sort().join(';');
+        if (alertsSig !== lastRenderedAlertsSig) {
+          lastRenderedAlertsSig = alertsSig;
+          oblastsLayer.eachLayer(layer => {
+            applyRegionStyle(layer);
+          });
+        }
       }
 
       // Render Active Live Targets (Tasks 1, 7, 8, 9, 19)
@@ -2395,7 +2523,7 @@
             lastPacketTs: performance.now()
           };
 
-          liveLayers[tid] = { marker, coreTrail, originDot, futureLine, etaMarkers, cat, trk, sim };
+          liveLayers[tid] = { marker, coreTrail, originDot, futureLine, etaMarkers, cat, trk, sim, baseTrailPts: trajPts };
         } else {
           const item = liveLayers[tid];
           item.trk = trk;
@@ -2414,7 +2542,8 @@
           item.marker.setPopupContent(popupHtml);
 
           if (visualConfig.showTrails && trajPts.length > 1) {
-            if (item.coreTrail) item.coreTrail.setLatLngs(trajPts);
+            item.baseTrailPts = trajPts;
+          if (item.coreTrail) item.coreTrail.setLatLngs(trajPts);
             else item.coreTrail = L.polyline(trajPts, { color: meta.color, weight: meta.coreWeight, opacity: 0.92, lineCap: 'round', lineJoin: 'round' }).addTo(map);
           } else {
             if (item.coreTrail) { map.removeLayer(item.coreTrail); item.coreTrail = null; }
@@ -2431,17 +2560,25 @@
             if (item.futureLine) item.futureLine.setLatLngs(extraPts);
             else item.futureLine = L.polyline(extraPts, { color: meta.vectorColor, weight: 1.6, opacity: 0.38, dashArray: meta.vectorDash }).addTo(map);
 
-            (item.etaMarkers || []).forEach(m => map.removeLayer(m));
-            item.etaMarkers = [];
+            if (!item.etaMarkers) item.etaMarkers = [];
             const nowSec = Math.floor(Date.now() / 1000);
-            corridor.forEach(pt => {
+            for (let i = 0; i < corridor.length; i++) {
+              const pt = corridor[i];
               const mins = pt.minutes || pt.minutes_ahead || 5;
               const clockStr = new Date((nowSec + mins * 60) * 1000).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-              const m = L.marker([pt.lat, pt.lon], {
-                icon: createEtaWaypointIcon(mins, clockStr, meta.vectorColor)
-              }).addTo(map);
-              item.etaMarkers.push(m);
-            });
+              const icon = createEtaWaypointIcon(mins, clockStr, meta.vectorColor);
+              if (i < item.etaMarkers.length) {
+                item.etaMarkers[i].setLatLng([pt.lat, pt.lon]);
+                item.etaMarkers[i].setIcon(icon);
+              } else {
+                const m = L.marker([pt.lat, pt.lon], { icon }).addTo(map);
+                item.etaMarkers.push(m);
+              }
+            }
+            while (item.etaMarkers.length > corridor.length) {
+              const excessMarker = item.etaMarkers.pop();
+              map.removeLayer(excessMarker);
+            }
           } else {
             if (item.futureLine) { map.removeLayer(item.futureLine); item.futureLine = null; }
             (item.etaMarkers || []).forEach(m => map.removeLayer(m));
@@ -2476,48 +2613,7 @@
       return `${cnt} цілей`;
     }
 
-    function formatSyncDate(isoStr) {
-      if (!isoStr) return 'Очікується звірка';
-      try {
-        const d = new Date(isoStr);
-        if (isNaN(d.getTime())) return isoStr;
-        const day = String(d.getDate()).padStart(2, '0');
-        const mon = String(d.getMonth() + 1).padStart(2, '0');
-        const yr = d.getFullYear();
-        const hr = String(d.getHours()).padStart(2, '0');
-        const min = String(d.getMinutes()).padStart(2, '0');
-        return `${day}.${mon}.${yr} ${hr}:${min}`;
-      } catch (e) {
-        return isoStr;
-      }
-    }
-
-    function updateReconcileUI(status, lastReconciledAt) {
-      const badge = document.getElementById('summaryReconcileBadge');
-      const dateLbl = document.getElementById('syncDateLabel');
-      const formattedDate = formatSyncDate(lastReconciledAt);
-
-      if (dateLbl) {
-        dateLbl.innerText = formattedDate;
-      }
-
-      if (badge) {
-        if (status === 'reconciled') {
-          badge.innerText = '✓ Верифіковано';
-          badge.style.background = 'rgba(16, 185, 129, 0.15)';
-          badge.style.color = '#34d399';
-          badge.style.border = '1px solid rgba(16, 185, 129, 0.35)';
-          badge.title = `Підтверджено серверами UkraineAlarm (${formattedDate})`;
-        } else {
-          badge.innerText = '⚡ Локально';
-          badge.style.background = 'rgba(245, 158, 11, 0.15)';
-          badge.style.color = '#fbbf24';
-          badge.style.border = '1px solid rgba(245, 158, 11, 0.35)';
-          badge.title = 'Локальний оперативний підрахунок Air Alert Hub (до найближчої щогодинної звірки)';
-        }
-      }
-    }
-
+    
     // Sidebar Summary: "Активні цілі"
     function updateLiveSidebarSummary(threats) {
       const cntEl = document.getElementById('liveTotalCountLabel'); if (cntEl) cntEl.innerText = threats.length;
@@ -2561,9 +2657,6 @@
         const res = await fetch(`/api/v1/history?date=${encodeURIComponent(todayStr)}&token=${encodeURIComponent(token)}`);
         if (res.ok) {
           const ds = await res.json();
-          if (ds.summary) {
-            updateReconcileUI(ds.summary.status, ds.summary.last_reconciled_at);
-          }
           if (ds.summary && ds.summary.types && Object.keys(ds.summary.types).length > 0) {
             todayTargetCounts = {};
             for (const [k, v] of Object.entries(ds.summary.types)) {
@@ -2606,9 +2699,14 @@
       }
 
       const totalToday = Object.values(mergedCounts).reduce((a, b) => a + b, 0);
-      renderRadialTodayGauge(mergedCounts, totalToday);
+      const gaugeSig = `${totalToday}_${selectedGaugeCategory || 'none'}_${Object.entries(mergedCounts).map(([k,v]) => k+':'+v).join(',')}`;
+      if (gaugeSig !== lastRenderedGaugeSig) {
+        lastRenderedGaugeSig = gaugeSig;
+        renderRadialTodayGauge(mergedCounts, totalToday);
+      }
     }
 
+    let lastRenderedGaugeSig = '';
     let selectedGaugeCategory = null;
     function toggleGaugeCategorySelection(catKey) {
       if (selectedGaugeCategory === catKey) {
@@ -2616,7 +2714,8 @@
       } else {
         selectedGaugeCategory = catKey;
       }
-      renderRadialTodayGauge(todayTargetCounts, Object.values(todayTargetCounts).reduce((a, b) => a + b, 0));
+      lastRenderedGaugeSig = '';
+      updateTodayStatsAndGauge();
     }
 
     function renderRadialTodayGauge(countsMap, total) {
@@ -3862,28 +3961,7 @@
 
       renderAnalyticsThreatCheckboxes(catCounts);
 
-      const analyticsBadge = document.getElementById('analyticsReconcileBadge');
-      if (analyticsBadge) {
-        if (latestLoadedSummary) {
-          analyticsBadge.style.display = 'inline-block';
-          if (latestLoadedSummary.status === 'reconciled') {
-            analyticsBadge.innerText = '✓ Верифіковано';
-            analyticsBadge.style.background = 'rgba(16, 185, 129, 0.15)';
-            analyticsBadge.style.color = '#34d399';
-            analyticsBadge.style.border = '1px solid rgba(16, 185, 129, 0.35)';
-            analyticsBadge.title = `Підтверджено серверами UkraineAlarm (${formatSyncDate(latestLoadedSummary.last_reconciled_at)})`;
-          } else {
-            analyticsBadge.innerText = '⚡ Локально';
-            analyticsBadge.style.background = 'rgba(245, 158, 11, 0.15)';
-            analyticsBadge.style.color = '#fbbf24';
-            analyticsBadge.style.border = '1px solid rgba(245, 158, 11, 0.35)';
-            analyticsBadge.title = 'Локальний оперативний підрахунок Air Alert Hub (до найближчої щогодинної звірки)';
-          }
-        } else {
-          analyticsBadge.style.display = 'none';
-        }
-      }
-
+      
       const total = filteredTracks.length;
       document.getElementById('statTotalTargets').innerText = total;
       document.getElementById('statDownedPct').innerText = total > 0 ? Math.round((lostCount / total) * 100) + '%' : '0%';
@@ -3931,7 +4009,11 @@
       if (impactHeatLayer) { map.removeLayer(impactHeatLayer); impactHeatLayer = null; }
       sampleTrailLayers.forEach(l => map.removeLayer(l));
       sampleTrailLayers = [];
-      sampleImpactLayers.forEach(l => map.removeLayer(l));
+      if (historyImpactClusterGroup) {
+        historyImpactClusterGroup.clearLayers();
+      } else {
+        sampleImpactLayers.forEach(l => map.removeLayer(l));
+      }
       sampleImpactLayers = [];
       for (const id in playbackActiveMarkers) map.removeLayer(playbackActiveMarkers[id]);
       for (const id in playbackActiveTrails) map.removeLayer(playbackActiveTrails[id]);
@@ -4066,9 +4148,10 @@
             }).addTo(map);
           }
         } else if (showSampleImpacts && curT >= trk.end_time) {
+          // Статичний тактичний хрестик без пульсації (isLive = false) для 60 FPS рендерингу
           const impMarker = L.marker([lastPt.lat, lastPt.lon], {
-            icon: createImpactCrossIcon(trk.cat, `${trk.name} (${new Date(trk.end_time * 1000).toLocaleString('uk-UA')})`)
-          }).addTo(map).bindPopup(`
+            icon: createImpactCrossIcon(trk.cat, `${trk.name} (${new Date(trk.end_time * 1000).toLocaleString('uk-UA')})`, false)
+          }).bindPopup(`
             <div class="popup-title">❌ ${trk.name}</div>
             <div class="popup-row"><span>Час втрати:</span><span class="popup-val">${new Date(trk.end_time * 1000).toLocaleString('uk-UA')}</span></div>
             <div class="popup-row"><span>Координати:</span><span class="popup-val">${lastPt.lat.toFixed(4)}, ${lastPt.lon.toFixed(4)}</span></div>
@@ -4076,6 +4159,16 @@
           sampleImpactLayers.push(impMarker);
         }
       });
+
+      // Пакетне додавання до кластерної групи (без навантаження на DOM)
+      if (showSampleImpacts && sampleImpactLayers.length > 0) {
+        if (historyImpactClusterGroup) {
+          historyImpactClusterGroup.clearLayers();
+          historyImpactClusterGroup.addLayers(sampleImpactLayers);
+        } else {
+          sampleImpactLayers.forEach(l => l.addTo(map));
+        }
+      }
 
       // 3. Теплова мапа коридорів (Холодний ціаново-неоновий спектр повітряних трас)
       if (showCorridorHeat && corridorPoints.length > 0 && typeof L.heatLayer === 'function') {
@@ -4243,6 +4336,7 @@
       }
     }
 
+    let lastPlaybackVisualRefreshTs = 0;
     function playbackStepLoop(nowMs) {
       if (!isPlayingHistory || isLiveMode) return;
       const dtSec = (nowMs - lastFrameTs) / 1000;
@@ -4253,9 +4347,21 @@
         if (analyticsSimTime >= analyticsMaxTime) {
           analyticsSimTime = analyticsMaxTime;
           pauseHistoryPlayback();
+          refreshMapVisuals();
+          return;
         }
         document.getElementById('timeSlider').value = Math.round(analyticsSimTime - analyticsMinTime);
-        refreshMapVisuals();
+        const dt = new Date(analyticsSimTime * 1000);
+        const bTime = document.getElementById('barClockTime');
+        if (bTime) bTime.innerText = dt.toLocaleTimeString('uk-UA');
+        const bDate = document.getElementById('barClockDate');
+        if (bDate) bDate.innerText = formatShortFullDate(dt);
+
+        // Throttle heavy map/heat/cluster redraw to 20 FPS (50ms interval) to prevent GPU/CPU saturation
+        if (nowMs - lastPlaybackVisualRefreshTs >= 50) {
+          lastPlaybackVisualRefreshTs = nowMs;
+          refreshMapVisuals();
+        }
       }
       if (isPlayingHistory) requestAnimationFrame(playbackStepLoop);
     }
