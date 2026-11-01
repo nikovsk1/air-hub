@@ -279,6 +279,12 @@ pub struct RawExtractedTarget {
     pub time_offset_ms: Option<i64>,
     #[serde(default)]
     pub trail_points: Vec<(f64, f64)>,
+    #[serde(default = "default_active_status")]
+    pub upstream_status: String,
+}
+
+fn default_active_status() -> String {
+    "active".to_string()
 }
 
 impl RawExtractedTarget {
@@ -295,6 +301,7 @@ impl RawExtractedTarget {
             confidence: None,
             time_offset_ms: None,
             trail_points: Vec::new(),
+            upstream_status: "active".to_string(),
         }
     }
 }
@@ -542,10 +549,16 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
         if t[0] < 0.0 || t[1] < 0.0 || t[2] < 0.0 || t[0].is_nan() || t[1].is_nan() || t[2].is_nan() {
             continue;
         }
-        // Активні цілі: t[4] — статус у польоті (1 = активна). Відсікаємо неактивні/архівні (0)
-        if t.len() > 4 && t[4] == 0.0 {
-            continue;
-        }
+        // Статус засічки з t[4]: 1.0 => active, 0.0 => lost (archived), 2.0 => cooldown (blind zone), 3.0 => lost (destroyed)
+        let upstream_status = if t.len() > 4 {
+            match t[4] as i64 {
+                0 | 3 => "lost".to_string(),
+                2 => "cooldown".to_string(),
+                _ => "active".to_string(),
+            }
+        } else {
+            "active".to_string()
+        };
         let uuid_idx = t[0] as usize;
         let c_idx = t[1] as usize;
         let typ_idx = t[2] as usize;
@@ -620,6 +633,7 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
                 confidence,
                 time_offset_ms,
                 trail_points: trail,
+                upstream_status,
             });
         }
     }
@@ -777,6 +791,7 @@ pub fn extract_targets_from_svg(svg_str: &str) -> Result<Vec<RawExtractedTarget>
             confidence: None,
             time_offset_ms: None,
             trail_points: Vec::new(),
+            upstream_status: "active".to_string(),
         });
     }
 

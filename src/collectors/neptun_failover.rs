@@ -96,6 +96,7 @@ pub async fn run_failover_neptun_collector(
                             confidence: None,
                             time_offset_ms: None,
                             trail_points: Vec::new(),
+                            upstream_status: "active".to_string(),
                         });
                     }
 

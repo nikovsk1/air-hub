@@ -59,6 +59,14 @@ pub struct TargetTrack {
     pub confidence: Option<u8>,
     #[serde(default)]
     pub last_history_sync_ts: f64,
+    #[serde(default = "default_active_status")]
+    pub status: String,
+    #[serde(default)]
+    pub cooldown_start_ts: Option<f64>,
+}
+
+fn default_active_status() -> String {
+    "active".to_string()
 }
 
 fn heading_diff(a: f64, b: f64) -> f64 {
@@ -110,6 +118,8 @@ impl TargetTrack {
             }],
             confidence: None,
             last_history_sync_ts: 0.0,
+            status: "active".to_string(),
+            cooldown_start_ts: None,
         }
     }
 
@@ -327,6 +337,13 @@ impl TargetTracker {
             let eff_speed = t.speed_kmh.unwrap_or(0.0);
 
             if let Some(trk) = self.tracks.get_mut(&t.id) {
+                if t.upstream_status == "cooldown" {
+                    trk.status = "cooldown".to_string();
+                    trk.cooldown_start_ts = Some(now);
+                } else if t.upstream_status == "active" {
+                    trk.status = "active".to_string();
+                    trk.cooldown_start_ts = None;
+                }
                 // Timestamp Guard: захист від перескоків назад у часі між стрімами
                 let obs_ts = if let Some(offset) = t.time_offset_ms {
                     now - (offset as f64 / 1000.0)
@@ -377,11 +394,24 @@ impl TargetTracker {
             }
         }
 
-        // Перевірка застарілих треків (> 40 сек) -> фіксація як status: "lost"
+        // Дворівневий життєвий цикл без оновлень від джерела:
+        // 1. Якщо ціль у статусі "active" не оновлювалась >= 20 сек -> переводимо в "cooldown"
+        // 2. Якщо ціль у статусі "cooldown" не оновлювалась >= 60 сек -> остаточний перехід у "lost"
         let mut expired_ids = Vec::new();
-        for (id, trk) in &self.tracks {
-            if !seen_ids.contains(id) && (now - trk.last_seen) > 40.0 {
-                expired_ids.push(id.clone());
+        for (id, trk) in self.tracks.iter_mut() {
+            if !seen_ids.contains(id) {
+                let silence = now - trk.last_seen;
+                if trk.status == "active" {
+                    if silence >= 20.0 {
+                        trk.status = "cooldown".to_string();
+                        trk.cooldown_start_ts = Some(now);
+                    }
+                } else if trk.status == "cooldown" {
+                    let cd_start = trk.cooldown_start_ts.unwrap_or(trk.last_seen);
+                    if (now - cd_start) >= 60.0 {
+                        expired_ids.push(id.clone());
+                    }
+                }
             }
         }
 
@@ -805,6 +835,57 @@ mod tests {
         assert_eq!(trk.lon, 31.0600);
     }
 
+
+    #[test]
+    fn test_target_status_lifecycle_cooldown_and_recovery() {
+        let mut tracker = TargetTracker::default();
+        let detector = OblastDetector::default();
+        let t0 = now_sec();
+
+        // 1. Поява активної цілі
+        let target = RawExtractedTarget {
+            id: "tgt_lifecycle".to_string(),
+            raw_name: "Шахед".to_string(),
+            raw_type_code: 1,
+            lat: 50.45,
+            lon: 30.52,
+            heading_deg: 90.0,
+            speed_kmh: Some(185.0),
+            confidence: Some(4),
+            time_offset_ms: None,
+            trail_points: vec![],
+            upstream_status: "active".to_string(),
+        };
+        tracker.update_batch(&[target.clone()], &detector, None, "test_ws");
+        assert_eq!(tracker.tracks.get("tgt_lifecycle").unwrap().status, "active");
+
+        // 2. Через 21 секунду без оновлень (перехід у cooldown)
+        if let Some(trk) = tracker.tracks.get_mut("tgt_lifecycle") {
+            trk.last_seen = t0 - 21.0;
+        }
+        let empty_batch: Vec<RawExtractedTarget> = vec![];
+        let lost = tracker.update_batch(&empty_batch, &detector, None, "test_ws");
+        assert_eq!(lost.len(), 0, "Ціль у cooldown НЕ повинна скидатись у lost");
+        assert_eq!(tracker.tracks.get("tgt_lifecycle").unwrap().status, "cooldown");
+
+        // 3. Відновлення активності: надходить оновлення зі статусом active
+        tracker.update_batch(&[target.clone()], &detector, None, "test_ws");
+        let restored = tracker.tracks.get("tgt_lifecycle").unwrap();
+        assert_eq!(restored.status, "active", "Статус повинен повернутися в active");
+        assert!(restored.cooldown_start_ts.is_none());
+
+        // 4. Повне згасання: 21с мовчання -> cooldown, ще 61с у cooldown -> lost
+        if let Some(trk) = tracker.tracks.get_mut("tgt_lifecycle") {
+            trk.status = "cooldown".to_string();
+            trk.cooldown_start_ts = Some(t0 - 61.0);
+        }
+        let lost_final = tracker.update_batch(&empty_batch, &detector, None, "test_ws");
+        assert_eq!(lost_final.len(), 1, "Ціль після 60с у cooldown повинна перейти в lost");
+        assert_eq!(lost_final[0].id, "tgt_lifecycle");
+        assert!(tracker.tracks.get("tgt_lifecycle").is_none());
+        assert!(tracker.recent_lost.contains_key("tgt_lifecycle"));
+    }
+
     #[test]
     fn test_two_targets_at_identical_coordinates_are_both_retained_independently() {
         let mut tracker = TargetTracker::default();
@@ -822,6 +903,7 @@ mod tests {
                 confidence: Some(4),
                 time_offset_ms: None,
                 trail_points: vec![],
+                upstream_status: "active".to_string(),
             },
             RawExtractedTarget {
                 id: "tgt_group_2".to_string(), // Друга ціль у тій самій точці ("група х2")
@@ -834,6 +916,7 @@ mod tests {
                 confidence: Some(4),
                 time_offset_ms: None,
                 trail_points: vec![],
+                upstream_status: "active".to_string(),
             },
         ];
 
