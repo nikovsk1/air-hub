@@ -16,12 +16,24 @@
           },
           colors: {
             brand: {
-              500: '#ea580c',
-              600: '#c2410c',
-              700: '#9a3412',
-              accent: '#f97316',
-              violet: '#8b5cf6',
-              blue: '#3b82f6'
+              50: '#fbf7f3',
+              100: '#f6ece2',
+              200: '#edd8c4',
+              300: '#e2b184',
+              400: '#d0b08f',
+              500: '#cf9b6d', // Warm Sand primary
+              600: '#b88152',
+              700: '#9b7e6d', // Tempered Allspice
+              800: '#6d5b57', // Missing Link
+              900: '#493c3c', // Dark Taupe
+              950: '#282227', // Shikon
+              accent: '#cf9b6d'
+            },
+            slate: {
+              800: '#28303d',
+              850: '#222934',
+              900: '#1e232d', // Base Slate
+              950: '#13161c'  // Deep Abyss
             }
           }
         }
@@ -29,56 +41,74 @@
     }
   </script>
   <style>
-    :root { color-scheme: dark; }
-    select option { background-color: #0f172a; color: #f8fafc; }
+    :root { 
+      color-scheme: dark; 
+      --bg-app: #13161c;
+      --bg-surface: #1e232d;
+      --bg-surface-elevated: #28303d;
+      --accent-primary: #cf9b6d;
+      --accent-primary-hover: #e2b184;
+    }
+    select option { background-color: #1e232d; color: #f3f5f7; }
     /* Custom scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #0b0f17; }
-    ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #374151; }
+    ::-webkit-scrollbar-track { background: #13161c; }
+    ::-webkit-scrollbar-thumb { background: #3b4756; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #cf9b6d; }
     .slider-thumb::-webkit-slider-thumb {
       appearance: none;
       width: 16px;
       height: 16px;
       border-radius: 50%;
-      background: #10b981;
+      background: #cf9b6d;
       cursor: pointer;
     }
   
-    /* Liquid Glass & Satoshi Styling */
+    /* Tactical Slate & Warm Sand Styling (twinkle aesthetic) */
     body {
       font-family: 'Satoshi', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background-color: #08090c !important;
+      background-color: #13161c !important;
+      color: #f3f5f7;
     }
-    .liquid-glass {
-      background: rgba(14, 18, 28, 0.6) !important;
-      backdrop-filter: blur(14px) !important;
-      -webkit-backdrop-filter: blur(14px) !important;
-      border: 1px solid rgba(255, 255, 255, 0.12) !important;
-      box-shadow: 0 10px 32px 0 rgba(0, 0, 0, 0.55), inset 0 1px 1px 0 rgba(255, 255, 255, 0.16) !important;
+    .liquid-glass, .liquid-glass-card {
+      background: linear-gradient(180deg, rgba(42, 50, 64, 0.92) 0%, rgba(30, 35, 45, 0.94) 100%) !important;
+      backdrop-filter: blur(16px) !important;
+      -webkit-backdrop-filter: blur(16px) !important;
+      border: 1px solid rgba(128, 149, 158, 0.16) !important;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+      border-radius: 16px !important;
+      transition: all 0.22s ease;
     }
-    .liquid-glass-card {
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(12, 16, 26, 0.68) !important;
-      backdrop-filter: blur(14px) !important;
-      -webkit-backdrop-filter: blur(14px) !important;
-      border: 1px solid rgba(255, 255, 255, 0.12) !important;
-      box-shadow: 0 10px 32px 0 rgba(0, 0, 0, 0.55), inset 0 1px 1px 0 rgba(255, 255, 255, 0.16) !important;
+    .liquid-glass-card:hover {
+      border-color: rgba(207, 155, 109, 0.40) !important;
     }
 
-      @media (max-width: 768px) {
+    /* Buttons & Inputs Refinement */
+    .btn-tactical-primary {
+      background: #cf9b6d !important;
+      color: #13161c !important;
+      font-weight: 700 !important;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .btn-tactical-primary:hover {
+      background: #e2b184 !important;
+      transform: translateY(-1px);
+    }
+
+    @media (max-width: 768px) {
       input, select, textarea {
         font-size: 16px !important;
       }
     }
   </style>
 </head>
-<body class="bg-[#08090c] text-gray-100 min-h-screen font-sans antialiased selection:bg-orange-500/30 selection:text-orange-300">
+<body class="bg-[#13161c] text-gray-100 min-h-screen font-sans antialiased selection:bg-brand-500/30 selection:text-brand-300">
 
   <!-- ==================== ЕКРАН АВТОРИЗАЦІЇ (LOGIN) ==================== -->
   <div id="loginScreen" class="min-h-screen flex items-center justify-center p-4">
     <div class="liquid-glass-card rounded-2xl p-6 md:p-8 max-w-md w-full shadow-2xl">
       <div class="text-center mb-6">
-        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-orange-950/60 border border-orange-800 text-3xl mb-3 shadow-inner">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#282227] border border-[#6d5b57] text-3xl mb-3 shadow-inner text-[#cf9b6d]">
           🛡️
         </div>
         <h1 class="text-xl font-bold text-white tracking-wide">Air Alert Radar Hub</h1>
@@ -105,7 +135,7 @@
 
         <div id="loginError" class="hidden p-3 rounded-lg bg-red-950/80 border border-red-800 text-red-400 text-xs font-medium"></div>
 
-        <button type="submit" id="loginBtn" class="w-full bg-orange-600 hover:bg-orange-500 text-white font-semibold py-2.5 rounded-lg text-sm transition shadow-lg shadow-orange-900/30 flex items-center justify-center gap-2">
+        <button type="submit" id="loginBtn" class="w-full bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold py-2.5 rounded-xl text-sm transition shadow-lg shadow-black/40 flex items-center justify-center gap-2">
           <span>🔓 Увійти до панелі керування</span>
         </button>
       </form>
@@ -122,21 +152,21 @@
     <!-- ВЕРХНЯ НАВІГАЦІЙНА ПАНЕЛЬ (HEADER) -->
     <header class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-800">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-950 to-orange-700 border border-orange-600 flex items-center justify-center text-xl shadow-lg">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#282227] to-[#493c3c] border border-[#cf9b6d]/40 flex items-center justify-center text-xl shadow-lg">
           🛡️
         </div>
         <div>
           <h1 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
             <span>Air Alert Radar Hub</span>
-            <span class="text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-orange-950 text-orange-400 border border-orange-800">v2.4</span>
+            <span class="text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-[#282227] text-[#cf9b6d] border border-[#6d5b57]">v2.4</span>
           </h1>
           <p class="text-xs text-gray-400">Центр керування API-ключами, офіційними тривогами та тактичним радаром</p>
         </div>
       </div>
 
       <div class="flex items-center gap-3">
-        <div class="h-9 px-3 flex items-center gap-2 bg-orange-950/60 border border-orange-800/80 rounded-lg text-xs font-medium text-orange-400 shadow-sm">
-          <span class="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
+        <div class="h-9 px-3 flex items-center gap-2 bg-[#282227] border border-[#6d5b57] rounded-lg text-xs font-medium text-[#cf9b6d] shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-[#cf9b6d] animate-pulse"></span>
           <span>Адмін-сесія активна</span>
         </div>
         <button onclick="handleLogout()" class="h-9 px-3.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
@@ -147,9 +177,9 @@
     </header>
 
     <!-- НАВІГАЦІЙНА ПАНЕЛЬ (ШВИДКИЙ ПЕРЕХІД) -->
-    <nav class="flex flex-wrap items-center justify-between gap-2 p-2 bg-gray-900/90 border border-gray-800 rounded-xl shadow-md">
+    <nav class="flex flex-wrap items-center justify-between gap-2 p-2 bg-[#1e232d] border border-[rgba(128,149,158,0.16)] rounded-xl shadow-md">
       <div class="flex flex-wrap items-center gap-2">
-        <a href="/admin" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-orange-600 text-white shadow flex items-center gap-1.5 transition">
+        <a href="/admin" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[#cf9b6d] text-[#13161c] font-bold shadow flex items-center gap-1.5 transition">
           <span>⚙️</span>
           <span>Адмін-панель</span>
         </a>
@@ -173,7 +203,7 @@
 
     <!-- СТАТУС ПІДКЛЮЧЕННЯ ТА ДЖЕРЕЛО (2 КОЛОНКИ) -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl flex items-center justify-between shadow">
+      <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] p-4 rounded-xl flex items-center justify-between shadow">
         <div class="flex items-center gap-3">
           <div id="upstreamDot" class="w-3.5 h-3.5 rounded-full bg-orange-500 animate-pulse shrink-0"></div>
           <div>
@@ -184,7 +214,7 @@
         <span id="upstreamBadge" class="bg-orange-950 text-orange-400 border border-orange-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0">ОСНОВНИЙ</span>
       </div>
 
-      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl flex items-center justify-between shadow">
+      <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] p-4 rounded-xl flex items-center justify-between shadow">
         <div class="flex items-center gap-3">
           <div id="proxyDot" class="w-3.5 h-3.5 rounded-full bg-blue-500 shrink-0"></div>
           <div>
@@ -211,26 +241,26 @@
 
     <!-- ТЕЛЕМЕТРІЯ ТА МЕТРИКИ (4 КОЛОНКИ) -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow">
+      <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] p-4 rounded-xl shadow">
         <div class="text-xs text-gray-400">🎯 Фізичних цілей у повітрі</div>
         <div id="statThreats" class="text-2xl font-bold text-red-400 mt-1">--</div>
       </div>
-      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow">
+      <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] p-4 rounded-xl shadow">
         <div class="text-xs text-gray-400">📢 Офіційних сирен</div>
         <div id="statSirens" class="text-2xl font-bold text-yellow-400 mt-1">--</div>
       </div>
-      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow">
+      <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] p-4 rounded-xl shadow">
         <div class="text-xs text-gray-400">✈️ Загроза зльоту МіГ-31К</div>
         <div id="statMig" class="text-2xl font-bold text-cyan-400 mt-1">--</div>
       </div>
-      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow">
+      <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] p-4 rounded-xl shadow">
         <div class="text-xs text-gray-400">🔑 Всього API-ключів</div>
         <div id="statKeysCount" class="text-2xl font-bold text-blue-400 mt-1">--</div>
       </div>
     </div>
 
     <!-- ==================== ФРЕЙМ 1: КОРИСТУВАЧІ ТА API-КЛЮЧІ ==================== -->
-    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-xl" id="usersFrame">
+    <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] rounded-xl overflow-hidden shadow-xl" id="usersFrame">
       <div class="p-4 border-b border-gray-800 flex flex-wrap justify-between items-center gap-3">
         <div>
           <h2 class="font-semibold text-white flex items-center gap-2">
@@ -246,7 +276,7 @@
             <span>📤</span><span>Відновити бекап</span>
           </button>
           <input type="file" id="restoreFileInput" accept=".json" class="hidden" onchange="uploadBackup(event)">
-          <button onclick="toggleCreateKeyDrawer()" class="h-8 px-3.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow">
+          <button onclick="toggleCreateKeyDrawer()" class="h-8 px-3.5 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow">
             <span>➕</span><span>Створити ключ</span>
           </button>
         </div>
@@ -261,7 +291,7 @@
           </div>
           <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
             <input type="text" id="newKeyOwnerInput" placeholder="Введіть ім'я власника (наприклад: 'Дім', 'Офіс', 'Дружина', 'ESP32 Вітальня')..." class="h-9 flex-1 bg-gray-900 border border-gray-700 px-3 rounded-lg text-xs text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500">
-            <button onclick="submitCreateKey()" class="h-9 px-4 bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded-lg text-xs flex items-center justify-center gap-1.5 transition shadow shrink-0">
+            <button onclick="submitCreateKey()" class="h-9 px-4 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold font-semibold rounded-lg text-xs flex items-center justify-center gap-1.5 transition shadow shrink-0">
               <span>💾 Створити ключ</span>
             </button>
             <button onclick="toggleCreateKeyDrawer(false)" class="h-9 px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-medium transition shrink-0">
@@ -297,7 +327,7 @@
     </div>
 
     <!-- ==================== ФРЕЙМ 2: АРХІВ ІСТОРІЇ ПОЛЬОТІВ ==================== -->
-    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-xl" id="historyFrame">
+    <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] rounded-xl overflow-hidden shadow-xl" id="historyFrame">
       <div class="p-4 border-b border-gray-800 flex flex-wrap justify-between items-center gap-3">
         <div>
           <h2 class="font-semibold text-white flex items-center gap-2">
@@ -388,7 +418,7 @@
     </div>
 
     <!-- ==================== ФРЕЙМ 3: ДОВІДНИК ТА ЛОГ ОБМІНУ ==================== -->
-    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-xl" id="directoryFrame">
+    <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] rounded-xl overflow-hidden shadow-xl" id="directoryFrame">
       <div class="p-4 border-b border-gray-800 flex flex-wrap justify-between items-center gap-3">
         <div>
           <h2 class="font-semibold text-white flex items-center gap-2">
@@ -825,7 +855,7 @@ ${resp.api_key}
             </div>
           </td>
           <td class="p-3 font-mono text-xs">
-            <span onclick="copyToClipboard('${u.api_key}')" class="bg-gray-950 hover:bg-gray-900 border border-gray-800 hover:border-gray-700 px-2.5 py-1 rounded select-all text-sky-400 cursor-pointer inline-flex items-center gap-1 transition" title="Клікніть, щоб скопіювати ключ">
+            <span onclick="copyToClipboard('${u.api_key}')" class="bg-gray-950 hover:bg-[#1e232d] border border-[rgba(128,149,158,0.16)] hover:border-gray-700 px-2.5 py-1 rounded select-all text-sky-400 cursor-pointer inline-flex items-center gap-1 transition" title="Клікніть, щоб скопіювати ключ">
               <span>${u.api_key}</span>
               <span class="text-gray-500 text-[10px]">📋</span>
             </span>
@@ -843,7 +873,7 @@ ${resp.api_key}
           <td class="p-3 text-xs text-gray-400 whitespace-nowrap">${lastSeen}</td>
           <td class="p-3 text-right">
             <div class="flex items-center justify-end gap-1.5 whitespace-nowrap">
-              <button onclick="toggleUserDrawer('${u.api_key}')" class="h-8 px-3 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow" title="Розгорнути список точок">
+              <button onclick="toggleUserDrawer('${u.api_key}')" class="h-8 px-3 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow" title="Розгорнути список точок">
                 <span>⚙️ Налаштувати</span>
                 <span id="chevron_${u.api_key}">▾</span>
               </button>
@@ -871,7 +901,7 @@ ${resp.api_key}
               </span>
             </div>
 
-            <div onclick="copyToClipboard('${u.api_key}')" class="bg-gray-950 hover:bg-gray-900 border border-gray-800 px-3 py-2 rounded-lg flex items-center justify-between text-xs font-mono text-sky-400 cursor-pointer" title="Натисніть для копіювання">
+            <div onclick="copyToClipboard('${u.api_key}')" class="bg-gray-950 hover:bg-[#1e232d] border border-[rgba(128,149,158,0.16)] px-3 py-2 rounded-lg flex items-center justify-between text-xs font-mono text-sky-400 cursor-pointer" title="Натисніть для копіювання">
               <span class="truncate">${u.api_key}</span>
               <span class="text-gray-400 text-sm shrink-0 ml-2">📋</span>
             </div>
@@ -884,7 +914,7 @@ ${resp.api_key}
             </div>
 
             <div class="grid grid-cols-4 gap-2 pt-2 border-t border-gray-800">
-              <button onclick="toggleUserDrawer('${u.api_key}')" class="col-span-2 h-9 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 shadow">
+              <button onclick="toggleUserDrawer('${u.api_key}')" class="col-span-2 h-9 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-semibold flex items-center justify-center gap-1 shadow">
                 <span>⚙️ Точки</span>
                 <span id="chevron_mob_${u.api_key}">▾</span>
               </button>
@@ -927,7 +957,7 @@ ${resp.api_key}
                     ${slotsCount} / 5 слотів
                   </span>
                   ${slotsCount < 5 ? `
-                    <button onclick="toggleAddSlotDrawer('${u.api_key}')" class="h-8 px-3 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow">
+                    <button onclick="toggleAddSlotDrawer('${u.api_key}')" class="h-8 px-3 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow">
                       <span>➕ Додати точку</span>
                     </button>
                   ` : `
@@ -1003,7 +1033,7 @@ ${resp.api_key}
 
                 <div class="flex justify-end items-center gap-2 pt-2">
                   <button onclick="toggleAddSlotDrawer('${u.api_key}', false)" class="h-7 px-3 text-xs text-gray-400 hover:text-white">Скасувати</button>
-                  <button onclick="submitNewSlot('${u.api_key}')" class="h-7 px-4 bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded text-xs flex items-center gap-1 transition shadow">
+                  <button onclick="submitNewSlot('${u.api_key}')" class="h-7 px-4 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold font-semibold rounded text-xs flex items-center gap-1 transition shadow">
                     💾 Додати точку
                   </button>
                 </div>
@@ -1104,7 +1134,7 @@ ${resp.api_key}
             </td>
             <td class="p-3 text-right">
               <div class="flex items-center justify-end gap-1.5 whitespace-nowrap">
-                <a href="/map?token=${encodeURIComponent(apiKey)}&slot=${encodeURIComponent(slotId)}" target="_blank" class="h-7 px-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1 shadow transition">
+                <a href="/map?token=${encodeURIComponent(apiKey)}&slot=${encodeURIComponent(slotId)}" target="_blank" class="h-7 px-2.5 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-semibold inline-flex items-center gap-1 shadow transition">
                   <span>⚙️ Налаштувати на мапі</span>
                 </a>
                 <button onclick="deleteSlot('${encodeURIComponent(apiKey)}', '${encodeURIComponent(slotId)}', '${encodeURIComponent(safeName)}')" class="h-7 px-2.5 bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 rounded-lg text-xs font-medium inline-flex items-center gap-1 transition" title="Видалити точку">
@@ -1997,7 +2027,7 @@ ${resp.api_key}
         <button onclick="closeRadarUserModal()" class="px-3.5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-semibold transition">
           Скасувати
         </button>
-        <button onclick="launchRadarWithSelectedUser()" class="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow">
+        <button onclick="launchRadarWithSelectedUser()" class="px-4 py-2 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow">
           <span>🎯</span><span>Відкрити радар</span>
         </button>
       </div>

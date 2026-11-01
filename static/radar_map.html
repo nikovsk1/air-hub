@@ -83,69 +83,90 @@
 
 
     :root {
-
-
-
       color-scheme: dark;
 
+      /* Tactical Slate & Twinkle Surfaces */
+      --bg-app: #13161c;
+      --bg-dark: #13161c;
+      --bg-surface: #1e232d;
+      --bg-surface-elevated: #28303d;
+      --bg-surface-card: rgba(30, 35, 45, 0.90);
+      --bg-surface-inset: rgba(19, 22, 28, 0.70);
 
+      /* Warm Sand & Reference Palette */
+      --accent-primary: #cf9b6d;
+      --accent-primary-hover: #e2b184;
+      --accent-warm-sand: #cf9b6d;
+      --accent-warm-sand-light: #e2b184;
+      --accent-fossil: #d0b08f;
+      --accent-allspice: #9b7e6d;
+      --accent-link: #6d5b57;
+      --accent-taupe: #493c3c;
+      --accent-shikon: #282227;
 
-      --bg-dark: #08090c;
+      /* Supporting and Telemetry Accents */
+      --accent-steel: #3b4756;
+      --accent-sage: #80959e;
+      --accent-orange: #cf9b6d;
+      --accent-orange-light: #e2b184;
+      --accent-cyan: #00f0ff;
+      --threat-carmine: #ff3366;
 
+      /* Typography */
+      --text-white: #f3f5f7;
+      --text-gray: #80959e;
+      --text-muted: #80959e;
+      --text-dim: #52606e;
+      --text-accent: #cf9b6d;
 
+      /* Tactile Borders & Squircles */
+      --glass-border: rgba(128, 149, 158, 0.16);
+      --border-card: 1px solid rgba(128, 149, 158, 0.16);
+      --border-card-hover: 1px solid rgba(207, 155, 109, 0.45);
+      --glass-specular: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      --glass-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+      --shadow-elevation: 0 14px 34px rgba(0, 0, 0, 0.45);
+      --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.28);
+      --shadow-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 
-      --bg-surface: #0c101a;
+      --radius-xs: 6px;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 20px;
+    }
 
+    /* ================= 4. TELEMETRY STATUS INDICATOR (Active Glow vs Idle Dim) ================= */
+    .status-indicator-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 5px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
 
+    /* STATE 1: ACTIVE THREATS (count > 0) */
+    .status-indicator-dot.active-threat {
+      background: #ff3366;
+      box-shadow: 0 0 10px #ff3366, 0 0 20px rgba(255, 51, 102, 0.5);
+      animation: radarThreatPulse 1.8s infinite;
+    }
 
-      --accent-orange: #ea580c;
+    @keyframes radarThreatPulse {
+      0% { transform: scale(1); opacity: 1; box-shadow: 0 0 8px #ff3366; }
+      50% { transform: scale(1.25); opacity: 0.85; box-shadow: 0 0 16px #ff3366; }
+      100% { transform: scale(1); opacity: 1; box-shadow: 0 0 8px #ff3366; }
+    }
 
-
-
-      --accent-orange-light: #f97316;
-
-
-
-      --accent-violet: #8b5cf6;
-
-
-
-      --accent-violet-dark: #7c3aed;
-
-
-
-      --accent-blue: #3b82f6;
-
-
-
-      --accent-cyan: #00e5ff;
-
-
-
-      --text-white: #ffffff;
-
-
-
-      --text-gray: #94a3b8;
-
-
-
-      --text-dim: #64748b;
-
-
-
-      --glass-border: rgba(255, 255, 255, 0.14);
-
-
-
-      --glass-specular: inset 0 1px 1px 0 rgba(255, 255, 255, 0.22);
-
-
-
-      --glass-shadow: 0 16px 40px 0 rgba(0, 0, 0, 0.65);
-
-
-
+    /* STATE 2: IDLE CLEAR (count === 0) */
+    .status-indicator-dot.idle-clear {
+      background: #3b4756;
+      border: 1px solid rgba(128, 149, 158, 0.3);
+      box-shadow: none;
+      opacity: 0.55;
+      animation: none;
     }
 
 
@@ -343,29 +364,17 @@
 
 
     .liquid-glass {
+      background: linear-gradient(180deg, rgba(42, 50, 64, 0.92) 0%, rgba(30, 35, 45, 0.94) 100%);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(128, 149, 158, 0.16);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-elevation), var(--shadow-inset-top);
+      transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    }
 
-
-
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(13, 17, 28, 0.88);
-
-
-
-      backdrop-filter: blur(20px) saturate(190%);
-
-
-
-      -webkit-backdrop-filter: blur(20px) saturate(190%);
-
-
-
-      border: 1px solid var(--glass-border);
-
-
-
-      box-shadow: var(--glass-shadow), var(--glass-specular);
-
-
-
+    .liquid-glass:hover {
+      border-color: rgba(207, 155, 109, 0.45);
     }
 
 
@@ -375,33 +384,17 @@
 
 
     .liquid-glass-card {
+      background: linear-gradient(180deg, rgba(42, 50, 64, 0.92) 0%, rgba(30, 35, 45, 0.94) 100%);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(128, 149, 158, 0.16);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-elevation), var(--shadow-inset-top);
+      transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    }
 
-
-
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(12, 16, 26, 0.65);
-
-
-
-      backdrop-filter: blur(16px) saturate(180%);
-
-
-
-      -webkit-backdrop-filter: blur(16px) saturate(180%);
-
-
-
-      border: 1px solid var(--glass-border);
-
-
-
-      border-radius: 12px;
-
-
-
-      box-shadow: var(--glass-shadow), var(--glass-specular);
-
-
-
+    .liquid-glass-card:hover {
+      border-color: rgba(207, 155, 109, 0.45);
     }
 
 
@@ -447,57 +440,24 @@
 
 
     .hud-card {
-
-
-
       height: 38px;
-
-
-
       line-height: 1;
-
-
-
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(12, 16, 26, 0.90);
-
-
-
-      backdrop-filter: blur(20px) saturate(190%);
-
-
-
-      -webkit-backdrop-filter: blur(20px) saturate(190%);
-
-
-
-      border: 1px solid var(--glass-border);
-
-
-
-      border-radius: 10px;
-
-
-
+      background: linear-gradient(180deg, rgba(42, 50, 64, 0.92) 0%, rgba(30, 35, 45, 0.94) 100%);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(128, 149, 158, 0.16);
+      border-radius: var(--radius-lg);
       padding: 0 12px; pointer-events: auto;
-
-
-
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), var(--glass-specular);
-
-
-
+      box-shadow: var(--shadow-card), var(--shadow-inset-top);
       display: inline-flex; align-items: center; gap: 8px;
-
-
-
       font-size: 12px; font-weight: 600;
-
-
-
       box-sizing: border-box;
+      transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    }
 
-
-
+    .hud-card:hover {
+      border-color: rgba(207, 155, 109, 0.45);
+      transform: translateY(-1px);
     }
 
 
@@ -2162,41 +2122,14 @@
 
 
     .sidebar-panel {
-
-
-
       position: absolute; top: 12px; left: 12px; bottom: 72px; width: 330px;
-
-
-
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(12, 16, 26, 0.90);
-
-
-
-      backdrop-filter: blur(20px) saturate(190%); -webkit-backdrop-filter: blur(20px) saturate(190%);
-
-
-
-      border: 1px solid var(--glass-border); border-radius: 14px;
-
-
-
+      background: linear-gradient(180deg, rgba(38, 46, 58, 0.95) 0%, rgba(26, 31, 41, 0.97) 100%);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(128, 149, 158, 0.16); border-radius: var(--radius-xl);
       z-index: 1050; display: flex; flex-direction: column;
-
-
-
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), var(--glass-specular);
-
-
-
+      box-shadow: var(--shadow-elevation), var(--shadow-inset-top);
       transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
-
-
-
       overflow: hidden;
-
-
-
     }
 
 
@@ -2370,25 +2303,14 @@
 
 
     .panel-section {
-
-
-
-      background: rgba(255, 255, 255, 0.035);
-
-
-
-      border: 1px solid rgba(255, 255, 255, 0.07);
-
-
-
-      border-radius: 11px; padding: 10px; display: flex; flex-direction: column; gap: 8px;
-
-
-
-      box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.07);
-
-
-
+      background: rgba(30, 35, 45, 0.65);
+      border: 1px solid rgba(128, 149, 158, 0.14);
+      border-radius: var(--radius-md); padding: 10px; display: flex; flex-direction: column; gap: 8px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      transition: border-color 0.2s ease;
+    }
+    .panel-section:hover {
+      border-color: rgba(207, 155, 109, 0.28);
     }
 
 
@@ -2906,37 +2828,14 @@
 
 
     .bottom-timeline-bar {
-
-
-
       position: absolute; bottom: 12px; left: 12px; right: 12px;
-
-
-
-      height: 48px; border-radius: 12px;
-
-
-
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(11, 15, 25, 0.65);
-
-
-
-      backdrop-filter: blur(18px) saturate(180%); -webkit-backdrop-filter: blur(18px) saturate(180%);
-
-
-
-      border: 1px solid var(--glass-border);
-
-
-
-      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.6), var(--glass-specular);
-
-
-
-      z-index: 1000; display: flex; align-items: center; padding: 0 12px; gap: 10px;
-
-
-
+      height: 48px; border-radius: var(--radius-lg);
+      background: linear-gradient(180deg, rgba(42, 50, 64, 0.94) 0%, rgba(28, 33, 44, 0.96) 100%);
+      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(128, 149, 158, 0.16);
+      box-shadow: var(--shadow-elevation), var(--shadow-inset-top);
+      z-index: 1000; display: flex; align-items: center; padding: 0 14px; gap: 12px;
+      transition: all 0.2s ease;
     }
 
 
@@ -4413,7 +4312,133 @@
         top: max(8px, env(safe-area-inset-top)) !important;
       }
     }
-</style>
+
+    /* ================= 7. MAP PROVIDER & API TOKEN VAULT STYLES ================= */
+    .map-provider-selector {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .provider-radio-card {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 8px 10px;
+      border-radius: var(--radius-md);
+      background: rgba(19, 22, 28, 0.65);
+      border: 1px solid rgba(128, 149, 158, 0.16);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .provider-radio-card:hover {
+      border-color: rgba(207, 155, 109, 0.4);
+      background: rgba(207, 155, 109, 0.05);
+    }
+    .provider-radio-card.active, .provider-radio-card:has(input:checked) {
+      border-color: var(--accent-primary);
+      background: rgba(207, 155, 109, 0.12);
+      box-shadow: 0 0 10px rgba(207, 155, 109, 0.2);
+    }
+    .provider-radio-card input {
+      display: none;
+    }
+    .provider-name {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--text-white);
+    }
+    .provider-desc {
+      font-size: 9.5px;
+      color: var(--text-muted);
+      line-height: 1.25;
+    }
+    .api-token-container {
+      margin-top: 8px;
+      background: rgba(19, 22, 28, 0.5);
+      border: 1px solid rgba(128, 149, 158, 0.14);
+      border-radius: var(--radius-md);
+      padding: 8px 10px;
+    }
+    .token-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+    }
+    .token-status {
+      font-size: 9.5px;
+      color: var(--accent-primary);
+      font-weight: 700;
+    }
+    .token-input-wrapper {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .settings-input {
+      flex: 1;
+      height: 32px;
+      background: rgba(19, 22, 28, 0.8);
+      border: 1px solid rgba(128, 149, 158, 0.2);
+      border-radius: var(--radius-sm);
+      color: #fff;
+      font-size: 11px;
+      padding: 0 8px;
+      outline: none;
+      font-family: monospace;
+      transition: border-color 0.2s ease;
+    }
+    .settings-input:focus {
+      border-color: var(--accent-primary);
+    }
+    .btn-toggle-eye {
+      width: 32px;
+      height: 32px;
+      background: rgba(42, 50, 64, 0.6);
+      border: 1px solid rgba(128, 149, 158, 0.2);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      transition: background 0.2s;
+    }
+    .btn-toggle-eye:hover {
+      background: rgba(207, 155, 109, 0.25);
+    }
+    .token-hint {
+      font-size: 9.5px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+    .btn-save-settings {
+      width: 100%;
+      height: 34px;
+      margin-top: 8px;
+      background: var(--accent-primary);
+      color: #13161c;
+      font-weight: 800;
+      font-size: 11px;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-save-settings:hover {
+      background: var(--accent-primary-hover);
+      transform: translateY(-1px);
+    }
+
+  </style>
 
 
 
@@ -4466,11 +4491,11 @@
       <!-- 1. Threats & MiG Card (Accordion Pill) -->
       <div class="hud-card hud-collapsed" id="threatsCard" onclick="handleCardClick('threats', event)">
         <div class="hud-mini-view">
-          <span id="threatsBadgeMini" class="badge badge-green">Цілей: 0</span>
+          <span id="threatsBadgeMini" class="badge badge-green"><span class="status-indicator-dot idle-clear"></span>Цілей: 0</span>
           <span class="accordion-arrow" title="Розгорнути праворуч">▸</span>
         </div>
         <div class="hud-full-view">
-          <span id="threatsBadge" class="badge badge-green">Цілей: 0</span>
+          <span id="threatsBadge" class="badge badge-green"><span class="status-indicator-dot idle-clear"></span>Цілей: 0</span>
           <span id="migBadge" class="badge badge-green">МіГ-31К: Чисто</span>
           <span class="accordion-arrow" onclick="toggleHudCard('threats', event)" title="Згорнути ліворуч">◂</span>
         </div>
@@ -5774,10 +5799,44 @@
 
 
 
+      <div class="panel-section" id="mapProviderSection">
+        <div class="section-header"><span>Тип підкладки мапи & API-токен</span></div>
+        
+        <div class="map-provider-selector">
+          <label class="provider-radio-card" id="cardCarto">
+            <input type="radio" name="mapProvider" value="carto" checked onchange="handleProviderChange('carto')">
+            <span class="provider-name">CartoDB Dark Matter</span>
+            <span class="provider-desc">Ультра-мінімалістична мапа</span>
+          </label>
+
+          <label class="provider-radio-card" id="cardArcgis">
+            <input type="radio" name="mapProvider" value="arcgis" onchange="handleProviderChange('arcgis')">
+            <span class="provider-name">ArcGIS Dark Gray</span>
+            <span class="provider-desc">Класична основа</span>
+          </label>
+        </div>
+
+        <!-- Блок введення API-токену -->
+        <div class="api-token-container" id="apiTokenBox">
+          <div class="token-header">
+            <label for="mapApiToken">API-токен карти:</label>
+            <span class="token-status" id="tokenStatusBadge">Локальне сховище</span>
+          </div>
+          <div class="token-input-wrapper">
+            <input type="password" id="mapApiToken" class="settings-input" 
+                   placeholder="Введіть API ключ (напр. pk.eyJ1...)" 
+                   autocomplete="off">
+            <button type="button" class="btn-toggle-eye" onclick="toggleTokenVisibility()" title="Показати/приховати токен">👁️</button>
+          </div>
+          <p class="token-hint">Токен зберігається локально в безпечному сховищі браузера.</p>
+        </div>
+
+        <button type="button" class="btn-save-settings" onclick="saveMapProviderConfig()">
+          💾 Зберегти та оновити мапу
+        </button>
+      </div>
+
       <div class="panel-section">
-
-
-
         <div class="section-header"><span>Шари мапи</span></div>
 
 
@@ -6135,441 +6194,114 @@
 
 
     const THREAT_CATEGORIES = {
-
-
-
       shahed: {
-
-
-
         name: 'Шахед / Герань',
-
-
-
         icon: '📐',
-
-
-
-        color: '#FFB703',
-
-
-
+        color: '#FFE600',
         glowWeight: 0, glowOpacity: 0,
-
-
-
         coreWeight: 2.2,
-
-
-
-        vectorColor: '#FFB703', vectorDash: '4, 6',
-
-
-
-        badgeBg: '#b45309'
-
-
-
+        vectorColor: '#FFE600', vectorDash: '4, 6',
+        badgeBg: '#854d0e'
       },
-
-
-
       shahed_jet: {
-
-
-
         name: 'Реактивний шахед',
-
-
-
         icon: '⚡',
-
-
-
-        color: '#00E5FF',
-
-
-
+        color: '#00F0FF',
         glowWeight: 0, glowOpacity: 0,
-
-
-
         coreWeight: 2.5,
-
-
-
-        vectorColor: '#00E5FF', vectorDash: '6, 4',
-
-
-
-        badgeBg: '#0891b2'
-
-
-
+        vectorColor: '#00F0FF', vectorDash: '6, 4',
+        badgeBg: '#0e7490'
       },
-
-
-
       missile: {
-
-
-
         name: 'Крилата ракета',
-
-
-
         icon: '🚀',
-
-
-
-        color: '#FF2A6D',
-
-
-
+        color: '#FF2D55',
         glowWeight: 0, glowOpacity: 0,
-
-
-
         coreWeight: 2.4,
-
-
-
-        vectorColor: '#FF2A6D', vectorDash: '8, 4',
-
-
-
-        badgeBg: '#e11d48'
-
-
-
+        vectorColor: '#FF2D55', vectorDash: '8, 4',
+        badgeBg: '#be123c'
       },
-
-
-
       ballistic: {
-
-
-
         name: 'Балістична ракета',
-
-
-
         icon: '☄️',
-
-
-
-        color: '#D946EF',
-
-
-
+        color: '#FF003C',
         glowWeight: 0, glowOpacity: 0,
-
-
-
         coreWeight: 3.0,
-
-
-
-        vectorColor: '#D946EF', vectorDash: '4, 4',
-
-
-
-        badgeBg: '#a21caf'
-
-
-
+        vectorColor: '#FF003C', vectorDash: '4, 4',
+        badgeBg: '#9f1239'
       },
-
-
-
       kab: {
-
-
-
         name: 'КАБ / Бомба',
-
-
-
         icon: '💣',
-
-
-
-        color: '#FB923C',
-
-
-
+        color: '#FF9500',
         glowWeight: 0, glowOpacity: 0,
-
-
-
         coreWeight: 2.2,
-
-
-
-        vectorColor: '#FB923C', vectorDash: '3, 5',
-
-
-
-        badgeBg: '#ea580c'
-
-
-
+        vectorColor: '#FF9500', vectorDash: '3, 5',
+        badgeBg: '#c2410c'
       },
-
-
-
       lancet: {
-
-
-
         name: 'Ланцет',
-
-
-
         icon: '✳️',
-
-
-
-        color: '#F43F5E',
-
-
-
+        color: '#FF007A',
         glowWeight: 0, glowOpacity: 0,
-
-
-
         coreWeight: 2.0,
-
-
-
-        vectorColor: '#F43F5E', vectorDash: '2, 4',
-
-
-
-        badgeBg: '#be123c'
-
-
-
+        vectorColor: '#FF007A', vectorDash: '2, 4',
+        badgeBg: '#9d174d'
       },
-
-
-
       artillery: {
-
-
-
         name: 'Артилерія / РСЗВ',
-
-
-
         icon: '💥',
-
-
-
-        color: '#DC2626',
-
-
-
+        color: '#FF453A',
         glowWeight: 0, glowOpacity: 0,
-
-
-
         coreWeight: 2.5,
-
-
-
-        vectorColor: '#DC2626', vectorDash: '2, 4',
-
-
-
-        badgeBg: '#b91c1c'
-
-
-
+        vectorColor: '#FF453A', vectorDash: '2, 4',
+        badgeBg: '#991b1b'
       },
-
-
-
       recon: {
-
-
-
         name: 'Розвідник',
-
-
-
         icon: '🛰️',
-
-
-
-        color: '#A855F7',
-
-
-
+        color: '#B388FF',
         glowWeight: 0, glowOpacity: 0,
-
-
-
         coreWeight: 2.0,
-
-
-
-        vectorColor: '#C084FC', vectorDash: '4, 4',
-
-
-
-        badgeBg: '#7e22ce'
-
-
-
+        vectorColor: '#B388FF', vectorDash: '4, 4',
+        badgeBg: '#6b21a8'
       },
-
-
-
       fpv: {
-
-
-
         name: 'FPV / Молнія',
-
-
-
         icon: '🛸',
-
-
-
-        color: '#84CC16',
-
-
-
+        color: '#CF9B6D',
         glowWeight: 0, glowOpacity: 0,
-
-
-
         coreWeight: 1.8,
-
-
-
-        vectorColor: '#84CC16', vectorDash: '2, 4',
-
-
-
-        badgeBg: '#4d7c0f'
-
-
-
+        vectorColor: '#CF9B6D', vectorDash: '2, 4',
+        badgeBg: '#78350f'
       },
-
-
-
       aviation: {
-
-
-
         name: 'Авіація (Су/Ту/МіГ)',
-
-
-
         icon: '✈️',
-
-
-
-        color: '#E11D48',
-
-
-
+        color: '#FF3B30',
         glowWeight: 0, glowOpacity: 0,
-
-
-
         coreWeight: 2.4,
-
-
-
-        vectorColor: '#FDA4AF', vectorDash: '6, 4',
-
-
-
-        badgeBg: '#be123c'
-
-
-
+        vectorColor: '#FF3B30', vectorDash: '6, 4',
+        badgeBg: '#991b1b'
       },
-
-
-
       banderol: {
-
-
-
         name: 'Бандероль',
-
-
-
         icon: '🛩️',
-
-
-
-        color: '#34D399',
-
-
-
+        color: '#34E7E4',
         glowWeight: 0, glowOpacity: 0,
-
-
-
         coreWeight: 2.2,
-
-
-
-        vectorColor: '#6EE7B7', vectorDash: '4, 4',
-
-
-
-        badgeBg: '#059669'
-
-
-
+        vectorColor: '#34E7E4', vectorDash: '4, 4',
+        badgeBg: '#0f766e'
       },
-
-
-
       unknown: {
-
-
-
         name: 'Невідома ціль',
-
-
-
         icon: '❓',
-
-
-
-        color: '#F8FAFC',
-
-
-
+        color: '#80959E',
         glowWeight: 0, glowOpacity: 0,
-
-
-
         coreWeight: 2.0,
-
-
-
-        vectorColor: '#F8FAFC', vectorDash: '3, 3',
-
-
-
-        badgeBg: '#475569'
-
-
-
+        vectorColor: '#80959E', vectorDash: '3, 3',
+        badgeBg: '#334155'
       }
-
-
-
     };
 
 
@@ -6811,30 +6543,35 @@
 
 
     const map = L.map('map', {
-
-
-
-      preferCanvas: true,
-
-
-
       center: [defaultCenterLat, defaultCenterLon],
-
-
-
       zoom: defaultZoom,
-
-
-
       zoomControl: false,
-
-
-
       attributionControl: false
-
-
-
     });
+
+    // Dedicated Architectural Map Panes with strict Z-Index hierarchy
+    map.createPane('zonesPane');
+    map.getPane('zonesPane').style.zIndex = '350';
+    map.getPane('zonesPane').style.pointerEvents = 'none';
+
+    map.createPane('heatmapPane');
+    map.getPane('heatmapPane').style.zIndex = '380';
+    map.getPane('heatmapPane').style.pointerEvents = 'none';
+
+    map.createPane('trailsPane');
+    map.getPane('trailsPane').style.zIndex = '450';
+    map.getPane('trailsPane').style.pointerEvents = 'none';
+
+    map.createPane('waypointsPane');
+    map.getPane('waypointsPane').style.zIndex = '500';
+
+    map.createPane('targetsPane');
+    map.getPane('targetsPane').style.zIndex = '600';
+
+    map.createPane('labelsPane');
+    map.getPane('labelsPane').style.zIndex = '650';
+    map.getPane('labelsPane').style.pointerEvents = 'none';
+
     let isMapZooming = false;
     map.on('zoomstart', () => { isMapZooming = true; });
     map.on('zoomanim', () => { isMapZooming = true; });
@@ -6847,8 +6584,16 @@
           it.coreTrail.setLatLngs(it.baseTrailPts.concat([[it.sim.curLat, it.sim.curLon]]));
         }
       }
+      if (!isLiveMode) {
+        refreshMapVisuals();
+      }
     });
-    map.on('moveend', () => { isMapZooming = false; });
+    map.on('moveend', () => {
+      isMapZooming = false;
+      if (!isLiveMode) {
+        refreshMapVisuals();
+      }
+    });
 
 
 
@@ -6861,27 +6606,72 @@
 
 
 
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    let currentBaseTileLayer = null;
+    let currentRefTileLayer = null;
 
+    function initMapTileLayer() {
+      const provider = localStorage.getItem('radar_map_provider') || 'carto';
+      const token = localStorage.getItem('radar_map_token') || '';
 
+      if (currentBaseTileLayer) { map.removeLayer(currentBaseTileLayer); currentBaseTileLayer = null; }
+      if (currentRefTileLayer) { map.removeLayer(currentRefTileLayer); currentRefTileLayer = null; }
 
-      maxZoom: 16
+      if (provider === 'carto') {
+        const url = token ? 
+          `https://{s}.basemaps.cartocdn.com/rastertiles/dark_nolabels/{z}/{x}/{y}{r}.png?api_key=${encodeURIComponent(token)}` :
+          'https://{s}.basemaps.cartocdn.com/rastertiles/dark_nolabels/{z}/{x}/{y}{r}.png';
+        currentBaseTileLayer = L.tileLayer(url, {
+          subdomains: 'abcd',
+          maxZoom: 19,
+          attribution: '&copy; CartoDB'
+        }).addTo(map);
+      } else {
+        currentBaseTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 16
+        }).addTo(map);
+        currentRefTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 16, pane: 'overlayPane'
+        }).addTo(map);
+      }
 
+      // Sync radio selection and input in UI
+      const radio = document.querySelector(`input[name="mapProvider"][value="${provider}"]`);
+      if (radio) radio.checked = true;
+      const tokenInput = document.getElementById('mapApiToken');
+      if (tokenInput && token) tokenInput.value = token;
+      handleProviderChange(provider);
+    }
 
+    function handleProviderChange(provider) {
+      const tokenBox = document.getElementById('apiTokenBox');
+      if (tokenBox) {
+        tokenBox.style.display = 'block';
+      }
+    }
 
-    }).addTo(map);
+    function toggleTokenVisibility() {
+      const input = document.getElementById('mapApiToken');
+      if (input) {
+        input.type = input.type === 'password' ? 'text' : 'password';
+      }
+    }
 
+    function saveMapProviderConfig() {
+      const selected = document.querySelector('input[name="mapProvider"]:checked')?.value || 'carto';
+      const tokenInput = document.getElementById('mapApiToken');
+      const tokenVal = tokenInput ? tokenInput.value.trim() : '';
 
+      localStorage.setItem('radar_map_provider', selected);
+      if (tokenVal) {
+        localStorage.setItem('radar_map_token', tokenVal);
+      } else {
+        localStorage.removeItem('radar_map_token');
+      }
+      initMapTileLayer();
+    }
 
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
-
-
-
-      maxZoom: 16, pane: 'overlayPane'
-
-
-
-    }).addTo(map);
+    // Initialize tile layer on load
+    initMapTileLayer();
 
 
 
@@ -7249,6 +7039,7 @@
 
 
         oblastsLayer = L.geoJSON(geojson, {
+          pane: 'zonesPane',
 
 
 
@@ -7449,6 +7240,7 @@
 
 
         ukraineMaskLayer = L.polygon([worldRing, ...holes], {
+          pane: 'zonesPane',
 
 
 
@@ -7569,473 +7361,173 @@
 
 
     function getThreatSvgShape(cat, color, angle) {
-
-
+      // Tactical Barrier Stroke for 100% contrast against red/yellow alerts
+      const barrierColor = "#0B0E14";
+      const barrierWidth = "2.5";
 
       if (cat === 'shahed') {
-
-
-
         return `
-
-
-
-          <svg width="32" height="32" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
-
-
-
+          <svg width="34" height="34" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
             <g transform="rotate(90 20 20)">
-
-
-
+              <!-- Outer tactical black barrier -->
+              <path d="M7.0 20.0 C7.2 21.0 9.8 21.3 11.2 21.3 H14.4 L28.0 30.8 C28.2 30.9 28.5 31.0 28.7 31.0 H32.4 C32.5 31.0 32.6 30.9 32.6 30.8 V22.3 H31.6 C31.3 22.3 31.0 22.0 31.0 21.7 V18.2 C31.0 17.9 31.3 17.6 31.6 17.6 H32.6 V9.2 C32.6 9.1 32.5 9.0 32.4 9.0 H28.7 C28.5 9.0 28.2 9.1 28.0 9.2 L14.5 18.6 H11.2 C9.9 18.6 7.2 18.9 7.0 19.9 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}" stroke-linejoin="round"/>
+              <!-- Core delta-wing & white motor -->
               <path d="M7.0 20.0 C7.2 21.0 9.8 21.3 11.2 21.3 H14.4 L28.0 30.8 C28.2 30.9 28.5 31.0 28.7 31.0 H32.4 C32.5 31.0 32.6 30.9 32.6 30.8 V22.3 H31.6 C31.3 22.3 31.0 22.0 31.0 21.7 V18.2 C31.0 17.9 31.3 17.6 31.6 17.6 H32.6 V9.2 C32.6 9.1 32.5 9.0 32.4 9.0 H28.7 C28.5 9.0 28.2 9.1 28.0 9.2 L14.5 18.6 H11.2 C9.9 18.6 7.2 18.9 7.0 19.9 Z" fill="${color}" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/>
-
-
-
             </g>
-
-
-
           </svg>
-
-
-
         `;
-
-
-
       }
-
-
 
       if (cat === 'shahed_jet') {
-
-
-
         return `
-
-
-
-          <svg width="32" height="32" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
-
-
-
+          <svg width="34" height="34" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
             <g transform="rotate(90 20 20)">
-
-
-
+              <!-- Outer tactical black barrier -->
+              <path d="M6.0 20.0 C6.2 21.0 8.9 21.3 10.3 21.3 H13.5 L27.3 30.8 C27.5 30.9 27.8 31.0 28.0 31.0 H31.8 C31.9 31.0 32.0 30.9 32.0 30.8 V23.6 H28.0 C27.5 23.6 27.5 22.9 27.5 22.9 V17.1 C27.5 17.1 27.5 16.4 28.0 16.4 H31.8 V9.2 C31.8 9.1 31.7 9.0 31.8 9.0 H28.0 C27.8 9.0 27.5 9.1 27.3 9.2 L13.6 18.6 H10.3 C8.9 18.6 6.2 18.9 6.0 19.9 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}" stroke-linejoin="round"/>
               <path d="M6.0 20.0 C6.2 21.0 8.9 21.3 10.3 21.3 H13.5 L27.3 30.8 C27.5 30.9 27.8 31.0 28.0 31.0 H31.8 C31.9 31.0 32.0 30.9 32.0 30.8 V23.6 H28.0 C27.5 23.6 27.5 22.9 27.5 22.9 V17.1 C27.5 17.1 27.5 16.4 28.0 16.4 H31.8 V9.2 C31.8 9.1 31.7 9.0 31.8 9.0 H28.0 C27.8 9.0 27.5 9.1 27.3 9.2 L13.6 18.6 H10.3 C8.9 18.6 6.2 18.9 6.0 19.9 Z" fill="${color}" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/>
-
-
-
-              <rect x="28" y="18" width="5" height="4" rx="1" fill="#ffffff" stroke="${color}" stroke-width="0.8"/>
-
-
-
+              <rect x="28" y="18" width="5" height="4" rx="1" fill="#ffffff" stroke="${barrierColor}" stroke-width="0.8"/>
             </g>
-
-
-
           </svg>
-
-
-
         `;
-
-
-
       }
-
-
 
       if (cat === 'missile') {
-
-
-
         return `
-
-
-
-          <svg width="32" height="32" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 8px ${color});">
-
-
-
+          <svg width="34" height="34" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 8px ${color});">
             <g transform="rotate(-90 20 20)">
-
-
-
+              <!-- Outer tactical black barrier -->
+              <path d="M11.8 17.5 L29.2 17.5 L32.8 15.1 H34.6 V18.2 L36.0 19.2 V20.8 L34.6 21.8 V24.9 H32.8 L29.2 22.5 L11.8 22.5 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}" stroke-linejoin="round"/>
+              <path d="M19.0 11.5 L22.5 17.5 H17.0 Z M19.0 28.5 L22.5 22.5 H17.0 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}"/>
+              <!-- Core missile body with white axial spine -->
               <path d="M11.8 17.5 L29.2 17.5 L32.8 15.1 H34.6 V18.2 L36.0 19.2 V20.8 L34.6 21.8 V24.9 H32.8 L29.2 22.5 L11.8 22.5 Z" fill="${color}" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/>
-
-
-
               <path d="M19.0 11.5 L22.5 17.5 H17.0 Z M19.0 28.5 L22.5 22.5 H17.0 Z" fill="${color}" stroke="#ffffff" stroke-width="1.0"/>
-
-
-
             </g>
-
-
-
           </svg>
-
-
-
         `;
-
-
-
       }
-
-
 
       if (cat === 'ballistic') {
-
-
-
         return `
-
-
-
-          <svg width="32" height="32" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 9px ${color});">
-
-
-
+          <svg width="34" height="34" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 9px ${color});">
             <g transform="rotate(90 20 20)">
-
-
-
+              <!-- Outer tactical black barrier -->
+              <path d="M8.0 20.0 L13.0 16.5 L31.0 16.5 L35.0 12.0 H37.0 V28.0 H35.0 L31.0 23.5 L13.0 23.5 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}" stroke-linejoin="round"/>
               <path d="M8.0 20.0 L13.0 16.5 L31.0 16.5 L35.0 12.0 H37.0 V28.0 H35.0 L31.0 23.5 L13.0 23.5 Z" fill="${color}" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/>
-
-
-
-              <circle cx="36" cy="20" r="2.2" fill="#facc15"/>
-
-
-
+              <circle cx="36" cy="20" r="2.4" fill="#ffffff" stroke="${barrierColor}" stroke-width="1.0"/>
             </g>
-
-
-
           </svg>
-
-
-
         `;
-
-
-
       }
-
-
 
       if (cat === 'artillery') {
-
-
-
         return `
-
-
-
-          <svg width="32" height="32" viewBox="0 0 40 40" style="filter: drop-shadow(0 0 6px ${color});">
-
-
-
+          <svg width="34" height="34" viewBox="0 0 40 40" style="filter: drop-shadow(0 0 6px ${color});">
+            <!-- Outer tactical black barrier -->
+            <path d="M20 3 L23 13 L33 9 L28 18 L37 20 L28 22 L33 31 L23 27 L20 37 L17 27 L7 31 L12 22 L3 20 L12 18 L7 9 L17 13 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}" stroke-linejoin="round"/>
             <path d="M20 3 L23 13 L33 9 L28 18 L37 20 L28 22 L33 31 L23 27 L20 37 L17 27 L7 31 L12 22 L3 20 L12 18 L7 9 L17 13 Z" fill="${color}" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/>
-
-
-
-            <circle cx="20" cy="20" r="4.5" fill="#ffffff" stroke="${color}" stroke-width="1.3"/>
-
-
-
+            <circle cx="20" cy="20" r="4.5" fill="#ffffff" stroke="${barrierColor}" stroke-width="1.5"/>
           </svg>
-
-
-
         `;
-
-
-
       }
-
-
 
       if (cat === 'kab') {
-
-
-
         return `
-
-
-
-          <svg width="30" height="30" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
-
-
-
+          <svg width="32" height="32" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
             <g transform="rotate(180 20 20)">
-
-
-
+              <!-- Outer tactical black barrier -->
+              <path d="M16.0 22.3 C16.0 19.1 17.3 16.3 18.5 13.2 L17.5 13.2 C17.1 13.2 16.8 12.9 16.8 12.6 V8.3 H18.8 V10.2 H21.2 V8.3 H23.2 V12.6 C23.2 12.9 22.9 13.2 22.5 13.2 L21.5 13.2 C22.7 16.3 24.0 19.1 24.0 22.3 C24.0 26.6 22.2 30.1 20.0 32.0 C17.8 30.1 16.0 26.6 16.0 22.3 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}" stroke-linejoin="round"/>
+              <line x1="8" y1="20" x2="32" y2="20" stroke="${barrierColor}" stroke-width="3.5" stroke-linecap="round"/>
+              <!-- Bomb core & white wings -->
               <path d="M16.0 22.3 C16.0 19.1 17.3 16.3 18.5 13.2 L17.5 13.2 C17.1 13.2 16.8 12.9 16.8 12.6 V8.3 H18.8 V10.2 H21.2 V8.3 H23.2 V12.6 C23.2 12.9 22.9 13.2 22.5 13.2 L21.5 13.2 C22.7 16.3 24.0 19.1 24.0 22.3 C24.0 26.6 22.2 30.1 20.0 32.0 C17.8 30.1 16.0 26.6 16.0 22.3 Z" fill="${color}" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/>
-
-
-
               <line x1="8" y1="20" x2="32" y2="20" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
-
-
-
             </g>
-
-
-
           </svg>
-
-
-
         `;
-
-
-
       }
-
-
 
       if (cat === 'banderol') {
-
-
-
         return `
-
-
-
-          <svg width="32" height="32" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
-
-
-
+          <svg width="34" height="34" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
+            <path d="M19.5 4.0 C19.7 3.4 20.3 3.4 20.5 4.0 L22.0 12.0 L22.0 33.0 L20.0 35.0 L18.0 33.0 L18.0 12.0 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}"/>
+            <path d="M6.0 15.0 L34.0 15.0 L34.0 18.0 L6.0 18.0 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}"/>
+            <path d="M14.0 32.0 L26.0 32.0 L26.0 34.0 L14.0 34.0 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}"/>
+            
             <path d="M19.5 4.0 C19.7 3.4 20.3 3.4 20.5 4.0 L22.0 12.0 L22.0 33.0 L20.0 35.0 L18.0 33.0 L18.0 12.0 Z" fill="${color}" stroke="#ffffff" stroke-width="1.2"/>
-
-
-
             <path d="M6.0 15.0 L34.0 15.0 L34.0 18.0 L6.0 18.0 Z" fill="${color}" stroke="#ffffff" stroke-width="1.1"/>
-
-
-
             <path d="M14.0 32.0 L26.0 32.0 L26.0 34.0 L14.0 34.0 Z" fill="${color}" stroke="#ffffff" stroke-width="1.0"/>
-
-
-
           </svg>
-
-
-
         `;
-
-
-
       }
-
-
 
       if (cat === 'recon') {
-
-
-
         return `
-
-
-
-          <svg width="30" height="30" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
-
-
+          <svg width="32" height="32" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
+            <path d="M20 6 C18.8 6 18 8 18 11 L18 31 C18 32.5 18.8 33 20 33 C21.2 33 22 32.5 22 31 L22 11 C22 8 21.2 6 20 6 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}"/>
+            <path d="M4 16.5 L36 16.5 L36 19.5 L4 19.5 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}"/>
+            <polygon points="20,30 11,34 20,32 29,34" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}"/>
 
             <path d="M20 6 C18.8 6 18 8 18 11 L18 31 C18 32.5 18.8 33 20 33 C21.2 33 22 32.5 22 31 L22 11 C22 8 21.2 6 20 6 Z" fill="${color}" stroke="#ffffff" stroke-width="1.3"/>
-
-
-
             <path d="M4 16.5 L36 16.5 L36 19.5 L4 19.5 Z" fill="${color}" stroke="#ffffff" stroke-width="1.0"/>
-
-
-
             <polygon points="20,30 11,34 20,32 29,34" fill="${color}" stroke="#ffffff" stroke-width="1.0"/>
-
-
-
-            <circle cx="20" cy="11" r="2.0" fill="#00e5ff" stroke="#ffffff" stroke-width="0.8"/>
-
-
-
+            <circle cx="20" cy="11" r="2.2" fill="#00f0ff" stroke="${barrierColor}" stroke-width="0.8"/>
           </svg>
-
-
-
         `;
-
-
-
       }
-
-
 
       if (cat === 'lancet') {
-
-
-
         return `
-
-
-
-          <svg width="30" height="30" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
-
-
+          <svg width="32" height="32" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
+            <path d="M20 7 C19 7 18.2 8.5 18.2 11 L18.2 31 C18.2 32.5 19 33 20 33 C21 33 21.8 32.5 21.8 31 L21.8 11 C21.8 8.5 21 7 20 7 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}"/>
+            <polygon points="19,16 6,7 8,5 20,14" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}"/>
+            <polygon points="21,16 34,7 32,5 20,14" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}"/>
+            <polygon points="19,18 6,27 8,29 20,20" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}"/>
+            <polygon points="21,18 34,27 32,29 20,20" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}"/>
 
             <path d="M20 7 C19 7 18.2 8.5 18.2 11 L18.2 31 C18.2 32.5 19 33 20 33 C21 33 21.8 32.5 21.8 31 L21.8 11 C21.8 8.5 21 7 20 7 Z" fill="${color}" stroke="#ffffff" stroke-width="1.2"/>
-
-
-
             <polygon points="19,16 6,7 8,5 20,14" fill="${color}" stroke="#ffffff" stroke-width="0.9"/>
-
-
-
             <polygon points="21,16 34,7 32,5 20,14" fill="${color}" stroke="#ffffff" stroke-width="0.9"/>
-
-
-
             <polygon points="19,18 6,27 8,29 20,20" fill="${color}" stroke="#ffffff" stroke-width="0.9"/>
-
-
-
             <polygon points="21,18 34,27 32,29 20,20" fill="${color}" stroke="#ffffff" stroke-width="0.9"/>
-
-
-
-            <polygon points="19,27 10,21 11,20 20,25.5" fill="${color}" stroke="#ffffff" stroke-width="0.8"/>
-
-
-
-            <polygon points="21,27 30,21 29,20 20,25.5" fill="${color}" stroke="#ffffff" stroke-width="0.8"/>
-
-
-
           </svg>
-
-
-
         `;
-
-
-
       }
-
-
 
       if (cat === 'fpv') {
-
-
-
         return `
-
-
-
-          <svg width="28" height="28" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
-
-
-
-            <rect x="17.5" y="15" width="5" height="10" rx="1.5" fill="${color}" stroke="#ffffff" stroke-width="1.2"/>
-
-
-
+          <svg width="30" height="30" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
+            <line x1="10" y1="10" x2="30" y2="30" stroke="${barrierColor}" stroke-width="3.5" stroke-linecap="round"/>
+            <line x1="30" y1="10" x2="10" y2="30" stroke="${barrierColor}" stroke-width="3.5" stroke-linecap="round"/>
+            <rect x="17.5" y="15" width="5" height="10" rx="1.5" fill="${color}" stroke="${barrierColor}" stroke-width="1.8"/>
             <line x1="10" y1="10" x2="30" y2="30" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
-
-
-
             <line x1="30" y1="10" x2="10" y2="30" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
-
-
-
-            <circle cx="10" cy="10" r="4.5" stroke="${color}" stroke-width="1.6" fill="rgba(255,255,255,0.4)"/>
-
-
-
-            <circle cx="30" cy="10" r="4.5" stroke="${color}" stroke-width="1.6" fill="rgba(255,255,255,0.4)"/>
-
-
-
-            <circle cx="10" cy="30" r="4.5" stroke="${color}" stroke-width="1.6" fill="rgba(255,255,255,0.4)"/>
-
-
-
-            <circle cx="30" cy="30" r="4.5" stroke="${color}" stroke-width="1.6" fill="rgba(255,255,255,0.4)"/>
-
-
-
+            <circle cx="10" cy="10" r="4.5" stroke="${color}" stroke-width="1.6" fill="rgba(255,255,255,0.7)"/>
+            <circle cx="30" cy="10" r="4.5" stroke="${color}" stroke-width="1.6" fill="rgba(255,255,255,0.7)"/>
+            <circle cx="10" cy="30" r="4.5" stroke="${color}" stroke-width="1.6" fill="rgba(255,255,255,0.7)"/>
+            <circle cx="30" cy="30" r="4.5" stroke="${color}" stroke-width="1.6" fill="rgba(255,255,255,0.7)"/>
           </svg>
-
-
-
         `;
-
-
-
       }
-
-
 
       if (cat === 'aviation') {
-
-
-
         return `
-
-
-
-          <svg width="32" height="32" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 8px ${color});">
-
-
-
+          <svg width="34" height="34" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 8px ${color});">
+            <!-- Outer tactical black barrier -->
+            <path d="M20 5 L22 14 L34 25 L34 28 L23 25 L23 33 L27 36 L27 38 L20 36 L13 38 L13 36 L17 33 L17 25 L6 28 L6 25 L18 14 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}" stroke-linejoin="round"/>
             <path d="M20 5 L22 14 L34 25 L34 28 L23 25 L23 33 L27 36 L27 38 L20 36 L13 38 L13 36 L17 33 L17 25 L6 28 L6 25 L18 14 Z" fill="${color}" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/>
-
-
-
+            <!-- White cockpit glazing -->
+            <circle cx="20" cy="11" r="1.5" fill="#ffffff"/>
           </svg>
-
-
-
         `;
-
-
-
       }
 
-
-
-      // Default / unknown: delta wing with '?' in center (matches Image 3)
-
-
-
+      // Default / unknown: delta wing with '?' in center
       return `
-
-
-
-        <svg width="32" height="32" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
-
-
-
+        <svg width="34" height="34" viewBox="0 0 40 40" style="transform: rotate(${angle}deg); filter: drop-shadow(0 0 6px ${color});">
+          <path d="M20 7 L33 29 L28 31 L20 28 L12 31 L7 29 Z" fill="none" stroke="${barrierColor}" stroke-width="${barrierWidth}" stroke-linejoin="round"/>
           <path d="M20 7 L33 29 L28 31 L20 28 L12 31 L7 29 Z" fill="${color}" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/>
-
-
-
           <text x="20" y="23" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff" stroke="#000000" stroke-width="0.5" style="font-family:sans-serif;">?</text>
-
-
-
         </svg>
-
-
-
       `;
-
-
-
     }
 
 
@@ -9221,16 +8713,18 @@
 
             // Плавне з'єднання кінчика лінії без розриву та без петлі назад на носі
 
-            if (!isMapZooming && it.coreTrail && it.baseTrailPts && it.baseTrailPts.length > 0) {
-
+            if (it.coreTrail && it.baseTrailPts && it.baseTrailPts.length > 0) {
               if (!it.lastTrailSyncTs || (now - it.lastTrailSyncTs) >= 40) {
-
                 it.lastTrailSyncTs = now;
-
                 it.coreTrail.setLatLngs(it.baseTrailPts.concat([[curLat, curLon]]));
-
               }
-
+            }
+            if (it.futureLine && it.sim) {
+              const fPts = it.futureLine.getLatLngs();
+              if (fPts && fPts.length > 1) {
+                fPts[0] = L.latLng(curLat, curLon);
+                it.futureLine.setLatLngs(fPts);
+              }
             }
 
 
@@ -9363,16 +8857,15 @@
 
 
 
-      tBadge.innerText = `Цілей: ${count}`;
+      const dotClass = count > 0 ? 'active-threat' : 'idle-clear';
+      const badgeClass = count > 0 ? 'badge badge-red' : 'badge badge-green';
+      tBadge.innerHTML = `<span class="status-indicator-dot ${dotClass}"></span>Цілей: ${count}`;
+      tBadge.className = badgeClass;
       const tMini = document.getElementById('threatsBadgeMini');
       if (tMini) {
-        tMini.innerText = `Цілей: ${count}`;
-        tMini.className = count > 0 ? 'badge badge-red' : 'badge badge-green';
+        tMini.innerHTML = `<span class="status-indicator-dot ${dotClass}"></span>Цілей: ${count}`;
+        tMini.className = badgeClass;
       }
-
-
-
-      tBadge.className = count > 0 ? 'badge badge-red' : 'badge badge-green';
 
 
 
@@ -9999,16 +9492,9 @@
 
 
         const corridor = trk.extrapolated || trk.extrapolated_path || [];
-
-
-
-        const extraPts = [[trk.lat, trk.lon]].concat(corridor.map(p => [p.lat, p.lon]));
-
-
-
-
-
-
+        const curMarker = liveLayers[tid] && liveLayers[tid].marker ? liveLayers[tid].marker.getLatLng() : null;
+        const curStartPt = curMarker ? [curMarker.lat, curMarker.lng] : [trk.lat, trk.lon];
+        const extraPts = [curStartPt].concat(corridor.map(p => [p.lat, p.lon]));
 
         const appDesc = trk.approach_desc || (trk.approach_angle !== undefined ? (trk.approach_angle <= 45 ? 'Прямий курс на точку' : trk.approach_angle <= 85 ? 'Наближається' : 'Рухається повз / віддаляється') : '');
         const appColor = trk.approach_angle <= 45 ? '#ef4444' : (trk.approach_angle <= 85 ? '#f59e0b' : '#94a3b8');
@@ -10036,7 +9522,7 @@
 
 
 
-          const marker = L.marker([trk.lat, trk.lon], { icon, opacity: isLead ? 1 : 0 }).addTo(map).bindPopup(popupHtml);
+          const marker = L.marker([trk.lat, trk.lon], { icon, pane: 'targetsPane', opacity: isLead ? 1 : 0 }).addTo(map).bindPopup(popupHtml);
 
 
 
@@ -10060,7 +9546,7 @@
 
 
 
-            coreTrail = L.polyline(trajPts, {
+            coreTrail = L.polyline(trajPts, { pane: 'trailsPane',
 
 
 
@@ -10080,7 +9566,7 @@
 
 
 
-            originDot = L.circleMarker(trajPts[0], {
+            originDot = L.circleMarker(trajPts[0], { pane: 'waypointsPane',
 
 
 
@@ -10108,7 +9594,7 @@
 
 
 
-            futureLine = L.polyline(extraPts, {
+            futureLine = L.polyline(extraPts, { pane: 'trailsPane',
 
 
 
@@ -10204,6 +9690,9 @@
 
             lastPacketTs: performance.now()
 
+          ,
+            lastRadarLat: trk.lat,
+            lastRadarLon: trk.lon
           };
 
 
@@ -10217,95 +9706,78 @@
 
 
         } else {
-
-
-
           const item = liveLayers[tid];
-
-
-
           item.trk = trk;
 
-
-
-
-
-
+          let isNewRadarObservation = false;
 
           if (item.sim) {
-
             const now = performance.now();
-
             const curMarkerPos = item.marker.getLatLng();
-
             const curVisualLat = curMarkerPos.lat;
-
             const curVisualLon = curMarkerPos.lng;
 
-
-
-            const dLat = (trk.lat - curVisualLat) * 111.0;
-
-            const dLon = (trk.lon - curVisualLon) * 111.0 * Math.cos((curVisualLat * Math.PI) / 180.0);
-
-            const distKm = Math.sqrt(dLat * dLat + dLon * dLon);
-
-
-
             const effH = trk.heading_deg || trk.heading || item.sim.flightHeading || item.sim.curHeading || 0;
-
             const effSpd = trk.speed_kmh || 0;
-
-            item.sim.flightHeading = effH; // Генеральний курс польоту
-
+            item.sim.flightHeading = effH;
             item.sim.speedKmh = effSpd;
 
+            // КРИТИЧНО: Перевіряємо, чи апстрім передав ДІЙСНО НОВУ засічку РЛС!
+            // Якщо координати не змінилися (повторний снепшот опитування або пауза апстріму),
+            // літак НЕ повинен розвертатися і летіти назад на стару точку.
+            // Він має завершити екстраполяцію і ЗАВМЕРТИ після 10 секунд!
+            const lastRadLat = item.sim.lastRadarLat !== undefined ? item.sim.lastRadarLat : trk.lat;
+            const lastRadLon = item.sim.lastRadarLon !== undefined ? item.sim.lastRadarLon : trk.lon;
+            const dRadLat = (trk.lat - lastRadLat) * 111.0;
+            const dRadLon = (trk.lon - lastRadLon) * 111.0 * Math.cos((trk.lat * Math.PI) / 180.0);
+            const distFromLastRadarKm = Math.sqrt(dRadLat * dRadLat + dRadLon * dRadLon);
 
+            isNewRadarObservation = (distFromLastRadarKm > 0.015); // > 15 метрів від попередньої засічки РЛС
 
-            if (distKm > 0.03) {
-              const bearingToTrk = calculateBearing(curVisualLat, curVisualLon, trk.lat, trk.lon);
-              const startH = item.sim.curHeading || effH;
-              const deltaEntryCourse = Math.abs(((bearingToTrk - startH + 540) % 360) - 180);
+            if (isNewRadarObservation) {
+              item.sim.lastRadarLat = trk.lat;
+              item.sim.lastRadarLon = trk.lon;
 
-              item.sim.inTransition = true;
-              item.sim.transStartLat = curVisualLat;
-              item.sim.transStartLon = curVisualLon;
-              item.sim.transTargetLat = trk.lat;
-              item.sim.transTargetLon = trk.lon;
-              item.sim.transStartHeading = startH;
-              item.sim.transitHeading = bearingToTrk;
+              const dLat = (trk.lat - curVisualLat) * 111.0;
+              const dLon = (trk.lon - curVisualLon) * 111.0 * Math.cos((curVisualLat * Math.PI) / 180.0);
+              const distKm = Math.sqrt(dLat * dLat + dLon * dLon);
 
-              // Варіант 1 (Поріг ±45°):
-              // Якщо точка попереду в конусі 90° (deltaEntryCourse <= 45°), літак НЕ завмирає (turnDuration = 0s)
-              // Якщо кут > 45° (гострий маневр або засічка позаду), 1с розворот на місці
-              item.sim.turnDuration = deltaEntryCourse > 45.0 ? 1.0 : 0.0;
-              item.sim.transDuration = 2.0;
+              if (distKm > 0.03) {
+                const bearingToTrk = calculateBearing(curVisualLat, curVisualLon, trk.lat, trk.lon);
+                const startH = item.sim.curHeading || effH;
+                const deltaEntryCourse = Math.abs(((bearingToTrk - startH + 540) % 360) - 180);
 
-              // Фаза 3: якщо генеральний курс після прибуття змістився > 45°, 1с розворот на точці
-              const deltaExitCourse = Math.abs(((effH - bearingToTrk + 540) % 360) - 180);
-              item.sim.exitTurnDuration = deltaExitCourse > 45.0 ? 1.0 : 0.0;
-              item.sim.exitHeading = effH;
+                item.sim.inTransition = true;
+                item.sim.transStartLat = curVisualLat;
+                item.sim.transStartLon = curVisualLon;
+                item.sim.transTargetLat = trk.lat;
+                item.sim.transTargetLon = trk.lon;
+                item.sim.transStartHeading = startH;
+                item.sim.transitHeading = bearingToTrk;
 
-              item.sim.transStartTs = now;
+                // Варіант 1 (Поріг ±45°):
+                item.sim.turnDuration = deltaEntryCourse > 45.0 ? 1.0 : 0.0;
+                item.sim.transDuration = 2.0;
 
-              item.sim.fakeStartLat = trk.lat;
-              item.sim.fakeStartLon = trk.lon;
-              const totalTransSec = item.sim.turnDuration + item.sim.transDuration + item.sim.exitTurnDuration;
-              item.sim.fakeStartTs = now + totalTransSec * 1000;
-            } else {
-              item.sim.inTransition = false;
-              item.sim.targetHeading = effH;
-              item.sim.fakeStartLat = trk.lat;
-              item.sim.fakeStartLon = trk.lon;
-              item.sim.fakeStartTs = now;
+                const deltaExitCourse = Math.abs(((effH - bearingToTrk + 540) % 360) - 180);
+                item.sim.exitTurnDuration = deltaExitCourse > 45.0 ? 1.0 : 0.0;
+                item.sim.exitHeading = effH;
+
+                item.sim.transStartTs = now;
+                item.sim.fakeStartLat = trk.lat;
+                item.sim.fakeStartLon = trk.lon;
+                const totalTransSec = item.sim.turnDuration + item.sim.transDuration + item.sim.exitTurnDuration;
+                item.sim.fakeStartTs = now + totalTransSec * 1000;
+              } else {
+                item.sim.inTransition = false;
+                item.sim.targetHeading = effH;
+                item.sim.fakeStartLat = trk.lat;
+                item.sim.fakeStartLon = trk.lon;
+                item.sim.fakeStartTs = now;
+              }
             }
             item.sim.lastPacketTs = now;
-
           }
-
-
-
-          // Оновлення статусу та часу для cooldown
 
           if (trk.status === 'cooldown') {
 
@@ -10392,42 +9864,18 @@
 
 
           if (visualConfig.showTrails && trajPts.length > 1) {
-
-
-
-            item.baseTrailPts = (trajPts.length > 1 ? trajPts.slice(0, -1) : []);
-
-
-
-            if (item.coreTrail) {
-
-              item.coreTrail.setLatLngs(smoothVisualTrail(trajPts));
-
-              item.coreTrail.setStyle({ color: meta.color, weight: meta.coreWeight });
-
-            } else {
-
-              item.coreTrail = L.polyline(smoothVisualTrail(trajPts), { color: meta.color, weight: meta.coreWeight, opacity: 0.92, lineCap: 'round', lineJoin: 'round' }).addTo(map);
-
+            if (isNewRadarObservation) {
+              item.baseTrailPts = (trajPts.length > 1 ? trajPts.slice(0, -1) : []);
+              if (item.coreTrail) {
+                item.coreTrail.setLatLngs(smoothVisualTrail(trajPts));
+                item.coreTrail.setStyle({ color: meta.color, weight: meta.coreWeight });
+              } else {
+                item.coreTrail = L.polyline(smoothVisualTrail(trajPts), { pane: 'trailsPane', color: meta.color, weight: meta.coreWeight, opacity: 0.92, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+              }
+            } else if (!item.coreTrail) {
+              item.coreTrail = L.polyline(smoothVisualTrail(trajPts), { pane: 'trailsPane', color: meta.color, weight: meta.coreWeight, opacity: 0.92, lineCap: 'round', lineJoin: 'round' }).addTo(map);
             }
-
-
-
-          } else {
-
-
-
-            if (item.coreTrail) { map.removeLayer(item.coreTrail); item.coreTrail = null; }
-
-
-
           }
-
-
-
-
-
-
 
           if (visualConfig.showOriginDot && trajPts.length > 0) {
 
@@ -10441,7 +9889,7 @@
 
             } else {
 
-              item.originDot = L.circleMarker(trajPts[0], { radius: 2.2, color: '#fff', fillColor: meta.color, fillOpacity: 0.9, weight: 1.2 }).addTo(map);
+              item.originDot = L.circleMarker(trajPts[0], { pane: 'waypointsPane', radius: 2.2, color: '#fff', fillColor: meta.color, fillOpacity: 0.9, weight: 1.2 }).addTo(map);
 
             }
 
@@ -10475,7 +9923,7 @@
 
             } else {
 
-              item.futureLine = L.polyline(extraPts, { color: meta.vectorColor, weight: 1.6, opacity: 0.38, dashArray: meta.vectorDash }).addTo(map);
+              item.futureLine = L.polyline(extraPts, { pane: 'trailsPane', color: meta.vectorColor, weight: 1.6, opacity: 0.38, dashArray: meta.vectorDash }).addTo(map);
 
             }
 
@@ -14757,6 +14205,8 @@
 
 
     let sampleTrailLayers = [];
+    let sampleTrailLayersMap = {};
+    let sampleOriginDotsMap = {};
 
 
 
@@ -15760,14 +15210,11 @@
 
 
 
+          const rawPts = normPath.map(p => [p.lat, p.lon]);
+          const fullSmoothPts = (rawPts.length > 2) ? smoothVisualTrail(rawPts) : rawPts;
           loadedAnalyticsTracks.push({
-
-
-
+            fullSmoothPts: fullSmoothPts,
             id,
-
-
-
             name: item.name_ua || item.type || THREAT_CATEGORIES[cat].name,
 
 
@@ -16254,6 +15701,15 @@
       sampleTrailLayers = [];
 
       if (fullReset) {
+        for (const id in sampleTrailLayersMap) {
+          map.removeLayer(sampleTrailLayersMap[id]);
+        }
+        sampleTrailLayersMap = {};
+        for (const id in sampleOriginDotsMap) {
+          map.removeLayer(sampleOriginDotsMap[id]);
+        }
+        sampleOriginDotsMap = {};
+
         for (const id in playbackActiveMarkers) map.removeLayer(playbackActiveMarkers[id]);
         for (const id in playbackActiveTrails) map.removeLayer(playbackActiveTrails[id]);
         playbackActiveMarkers = {};
@@ -16643,81 +16099,46 @@
 
 
 
-        // Render smoothed trajectory trails and origin launch marker (Tasks 7, 10, 14, 15)
-
-
-
-        if (showSampleTrails && visiblePts.length > 1) {
-
-
-
-          const rawPts = visiblePts.map(p => [p.lat, p.lon]);
-
-
-
-          const smoothPts = smoothVisualTrail(rawPts);
-
-
-
-          const poly = L.polyline(smoothPts, {
-
-
-
-            color: trk.color, weight: 2.2, opacity: 0.75, lineCap: 'round', lineJoin: 'round'
-
-
-
-          }).addTo(map);
-
-
-
-          sampleTrailLayers.push(poly);
-
-
-
-        }
-
-
-
-
-
-
-
-        // Origin Launch Marker at path[0] (Task 10)
-
-
-
+                // Render smoothed trajectory trails and origin launch marker (Object-Pooled, Zero Re-Creation)
         if (showSampleTrails && trk.path && trk.path.length > 0) {
+          // 1. Origin Dot at trk.path[0] - created once per track in waypointsPane
+          if (!sampleOriginDotsMap[trk.id]) {
+            const originPoint = trk.path[0];
+            const originDot = L.circleMarker([originPoint.lat, originPoint.lon], {
+              pane: 'waypointsPane',
+              radius: 2.2, color: '#ffffff', fillColor: trk.color, fillOpacity: 0.9, weight: 1.2
+            }).addTo(map).bindTooltip(`Старт: ${trk.name} (${new Date(trk.start_time * 1000).toLocaleTimeString('uk-UA', {hour:'2-digit', minute:'2-digit'})})`, { direction: 'top' });
+            sampleOriginDotsMap[trk.id] = originDot;
+          }
 
-
-
-          const originPoint = trk.path[0];
-
-
-
-          const originDot = L.circleMarker([originPoint.lat, originPoint.lon], {
-
-
-
-            radius: 2.2, color: '#ffffff', fillColor: trk.color, fillOpacity: 0.9, weight: 1.2
-
-
-
-          }).addTo(map).bindTooltip(`Старт: ${trk.name} (${new Date(trk.start_time * 1000).toLocaleTimeString('uk-UA', {hour:'2-digit', minute:'2-digit'})})`, { direction: 'top' });
-
-
-
-          sampleTrailLayers.push(originDot);
-
-
-
+          // 2. Completed Static Trail (curT >= trk.end_time) - created once in trailsPane
+          if (curT >= trk.end_time) {
+            if (!sampleTrailLayersMap[trk.id]) {
+              const staticPts = trk.fullSmoothPts || (visiblePts.length > 2 ? smoothVisualTrail(visiblePts.map(p => [p.lat, p.lon])) : visiblePts.map(p => [p.lat, p.lon]));
+              const poly = L.polyline(staticPts, {
+                pane: 'trailsPane',
+                color: trk.color, weight: 2.2, opacity: 0.75, lineCap: 'round', lineJoin: 'round'
+              }).addTo(map);
+              sampleTrailLayersMap[trk.id] = poly;
+            }
+            if (playbackActiveTrails[trk.id]) {
+              map.removeLayer(playbackActiveTrails[trk.id]);
+              delete playbackActiveTrails[trk.id];
+            }
+          } else if (sampleTrailLayersMap[trk.id]) {
+            map.removeLayer(sampleTrailLayersMap[trk.id]);
+            delete sampleTrailLayersMap[trk.id];
+          }
+        } else {
+          if (sampleOriginDotsMap[trk.id]) {
+            map.removeLayer(sampleOriginDotsMap[trk.id]);
+            delete sampleOriginDotsMap[trk.id];
+          }
+          if (sampleTrailLayersMap[trk.id]) {
+            map.removeLayer(sampleTrailLayersMap[trk.id]);
+            delete sampleTrailLayersMap[trk.id];
+          }
         }
-
-
-
-
-
-
 
         // Active Moving Flight at curT (Pool-optimized: zero DOM thrashing during playback & zoom)
         if (curT >= trk.start_time && curT <= trk.end_time) {
@@ -16735,7 +16156,7 @@
               }
             } else {
               const icon = createTargetMarkerIcon(trk.cat, lastPt.heading, displayName, lastPt.speed);
-              const m = L.marker([lastPt.lat, lastPt.lon], { icon }).addTo(map);
+              const m = L.marker([lastPt.lat, lastPt.lon], { icon, pane: 'targetsPane' }).addTo(map);
               if (showHistoryNames) {
                 m.bindTooltip(trk.name, { permanent: true, direction: 'top', className: 'target-history-tooltip' });
               }
@@ -16748,11 +16169,12 @@
 
           if (showSampleTrails && visiblePts.length > 1) {
             const rawPts = visiblePts.map(p => [p.lat, p.lon]);
-            const smoothPts = smoothVisualTrail(rawPts);
+            const smoothPts = (rawPts.length > 2) ? smoothVisualTrail(rawPts) : rawPts;
             if (playbackActiveTrails[trk.id]) {
               playbackActiveTrails[trk.id].setLatLngs(smoothPts);
             } else {
               playbackActiveTrails[trk.id] = L.polyline(smoothPts, {
+                pane: 'trailsPane',
                 color: trk.color, weight: 2.6, opacity: 0.92, lineCap: 'round', lineJoin: 'round'
               }).addTo(map);
             }
@@ -16774,6 +16196,18 @@
         if (!activeMovingTrackIds.has(id)) {
           map.removeLayer(playbackActiveTrails[id]);
           delete playbackActiveTrails[id];
+        }
+      }
+      for (const id in sampleOriginDotsMap) {
+        if (!activeSampleTracks.some(t => t.id === id)) {
+          map.removeLayer(sampleOriginDotsMap[id]);
+          delete sampleOriginDotsMap[id];
+        }
+      }
+      for (const id in sampleTrailLayersMap) {
+        if (!activeSampleTracks.some(t => t.id === id)) {
+          map.removeLayer(sampleTrailLayersMap[id]);
+          delete sampleTrailLayersMap[id];
         }
       }
 
@@ -16877,7 +16311,7 @@
 
 
 
-        corridorHeatLayer = L.heatLayer(corridorPoints, {
+        corridorHeatLayer = L.heatLayer(corridorPoints, { pane: 'heatmapPane',
 
 
 
@@ -16957,7 +16391,7 @@
 
 
 
-        impactHeatLayer = L.heatLayer(impactPoints, {
+        impactHeatLayer = L.heatLayer(impactPoints, { pane: 'heatmapPane',
 
 
 
