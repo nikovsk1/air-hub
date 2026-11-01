@@ -3743,7 +3743,7 @@
 
 
 
-        max-width: 190px; flex-shrink: 0;
+        max-width: 210px; flex-shrink: 0;
 
 
 
@@ -3916,13 +3916,11 @@
 
 
       #todayGaugeContainer svg {
-
-
-
-        max-width: 190px; height: auto;
-
-
-
+        width: 100%;
+        max-width: 220px;
+        height: auto;
+        display: block;
+        margin: 0 auto;
       }
 
 
@@ -4343,7 +4341,79 @@
 
 
 
-  </style>
+  
+    /* Uniform HUD Geometry & Accordion Styling */
+    .sidebar-toggle-fab {
+      width: 36px !important;
+      height: 36px !important;
+      min-width: 36px !important;
+      font-size: 16px !important;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+    .hud-card {
+      height: 36px !important;
+      box-sizing: border-box;
+      padding: 0 10px !important;
+      display: inline-flex !important;
+      align-items: center;
+      transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
+    }
+    .accordion-arrow {
+      font-size: 11px;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 0 3px;
+      user-select: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.18s, transform 0.18s;
+    }
+    .accordion-arrow:hover {
+      color: #38bdf8;
+      transform: scale(1.15);
+    }
+    .hud-card.hud-collapsed .hud-full-view {
+      display: none !important;
+    }
+    .hud-card.hud-collapsed .hud-mini-view {
+      display: inline-flex !important;
+      align-items: center;
+      gap: 5px;
+    }
+    .hud-card.hud-expanded .hud-mini-view {
+      display: none !important;
+    }
+    .hud-card.hud-expanded .hud-full-view {
+      display: inline-flex !important;
+      align-items: center;
+      gap: 6px;
+    }
+
+    @media (max-width: 768px) {
+      .sidebar-toggle-fab {
+        width: 34px !important;
+        height: 34px !important;
+        min-width: 34px !important;
+        font-size: 15px !important;
+        top: max(8px, env(safe-area-inset-top)) !important;
+        left: 8px !important;
+      }
+      .hud-card {
+        height: 34px !important;
+        padding: 0 7px !important;
+        font-size: 11px !important;
+      }
+      .hud-top {
+        left: 48px !important;
+        top: max(8px, env(safe-area-inset-top)) !important;
+      }
+    }
+</style>
 
 
 
@@ -4392,169 +4462,66 @@
 
 
   <div class="hud-top" id="hudTopBar">
-
-
-
     <div class="hud-group">
-
-
-
-      <div class="hud-card">
-
-
-
-        <span id="threatsBadge" class="badge badge-green">Цілей: 0</span>
-
-
-
-        <span id="migBadge" class="badge badge-green">МіГ-31К: Чисто</span>
-
-
-
+      <!-- 1. Threats & MiG Card (Accordion Pill) -->
+      <div class="hud-card hud-collapsed" id="threatsCard" onclick="handleCardClick('threats', event)">
+        <div class="hud-mini-view">
+          <span id="threatsBadgeMini" class="badge badge-green">Цілей: 0</span>
+          <span class="accordion-arrow" title="Розгорнути праворуч">▸</span>
+        </div>
+        <div class="hud-full-view">
+          <span id="threatsBadge" class="badge badge-green">Цілей: 0</span>
+          <span id="migBadge" class="badge badge-green">МіГ-31К: Чисто</span>
+          <span class="accordion-arrow" onclick="toggleHudCard('threats', event)" title="Згорнути ліворуч">◂</span>
+        </div>
       </div>
 
-
-
-
-
-
-
-      <!-- Slot Selector Card with Custom Multi-Select Dropdown & Crosshairs Center Button -->
-
-
-
-      <div class="hud-card" id="slotSelectorCard" style="position:relative;">
-
-
-
-        <span style="font-size: 11.5px; color: #94a3b8;">Точка:</span>
-
-
-
-        <button id="slotDropdownTrigger" class="slot-trigger-btn" onclick="toggleSlotDropdown(event)" title="Вибір точок для відстеження">
-
-
-
-          <span id="slotDropdownLabel">Точка 1</span>
-
-
-
-          <span class="slot-arrow">▾</span>
-
-
-
-        </button>
-
-
-
-        <button id="btnCenterOnSlot" class="hud-icon-btn" onclick="centerMapOnSelectedSlots()" title="Центрувати мапу на обраних точках">
-
-
-
-          🎯
-
-
-
-        </button>
-
-
-
-
-
-
-
-        <!-- Custom Dropdown Menu with Checkboxes -->
-
-
-
-        <div id="slotDropdownMenu" class="liquid-glass-card slot-dropdown-popover" style="display:none;" onclick="event.stopPropagation()">
-
-
-
-          <div class="slot-drop-header">
-
-
-
-            <div class="slot-chk-item all-chk-item" onclick="toggleSelectAllSlots(event)">
-
-
-
-              <input type="checkbox" id="selectAllSlotsChk" class="custom-chk" style="pointer-events:none;">
-
-
-
-              <span class="slot-item-title" style="font-weight:700;">Всі точки</span>
-
-
-
-            </div>
-
-
-
-          </div>
-
-
-
-          <div class="slot-drop-divider"></div>
-
-
-
-          <div id="slotDropdownItems" class="slot-drop-list">
-
-
-
-            <!-- Dynamic checkboxes for each slot -->
-
-
-
-          </div>
-
-
-
+      <!-- 2. Slot Selector Card (Accordion Pill) -->
+      <div class="hud-card hud-collapsed" id="slotSelectorCard" onclick="handleCardClick('slot', event)" style="position:relative;">
+        <div class="hud-mini-view">
+          <span id="slotDropdownLabelMini" style="font-weight:600;color:#f8fafc;">Точка 1</span>
+          <span class="accordion-arrow" title="Розгорнути праворуч">▸</span>
+        </div>
+        <div class="hud-full-view">
+          <span style="font-size: 11.5px; color: #94a3b8;">Точка:</span>
+          <button id="slotDropdownTrigger" class="slot-trigger-btn" onclick="toggleSlotDropdown(event)" title="Вибір точок для відстеження">
+            <span id="slotDropdownLabel">Точка 1</span>
+            <span class="slot-arrow">▾</span>
+          </button>
+          <button id="btnCenterOnSlot" class="hud-icon-btn" onclick="centerMapOnSelectedSlots()" title="Центрувати мапу на обраних точках">
+            🎯
+          </button>
+          <span class="accordion-arrow" onclick="toggleHudCard('slot', event)" title="Згорнути ліворуч">◂</span>
         </div>
 
-
-
+        <!-- Custom Dropdown Menu with Checkboxes -->
+        <div id="slotDropdownMenu" class="liquid-glass-card slot-dropdown-popover" style="display:none;" onclick="event.stopPropagation()">
+          <div class="slot-drop-header">
+            <div class="slot-chk-item all-chk-item" onclick="toggleSelectAllSlots(event)">
+              <input type="checkbox" id="selectAllSlotsChk" class="custom-chk" style="pointer-events:none;">
+              <span class="slot-item-title" style="font-weight:700;">Всі точки</span>
+            </div>
+          </div>
+          <div class="slot-drop-divider"></div>
+          <div id="slotDropdownItems" class="slot-drop-list">
+            <!-- Dynamic checkboxes for each slot -->
+          </div>
+        </div>
       </div>
 
-
-
-
-
-
-
-      <!-- Closest Threat Card (Clickable with breakdown & relocated distance badge) -->
-
-
-
-      <div class="hud-card" id="closestCard" onclick="toggleClosestBreakdown(event)" style="position:relative; cursor:pointer;" title="Натисніть для перегляду загроз за обраними точками">
-
-
-
-        <span class="closest-label">Найближча ціль:</span>
-
-
-
-        <span class="closest-val" id="closestTargetName">--</span>
-
-
-
-        <span id="slotClosestDistBadge" class="slot-dist-badge calm">--</span>
-
-
-
-        <span id="slotClosestEtaBadge" class="slot-eta-badge" style="display:none;">--</span>
-
-
-
-        <span id="closestChevron" class="closest-chevron">▾</span>
-
-
-
-
-
-
-
+      <!-- 3. Closest Threat Card (Accordion Pill with mobile support) -->
+      <div class="hud-card hud-collapsed" id="closestCard" onclick="handleCardClick('closest', event)" style="position:relative;" title="Найближча загроза">
+        <div class="hud-mini-view">
+          <span id="closestMiniText" style="font-weight:600;color:#f8fafc;">Спокійно</span>
+          <span class="accordion-arrow" title="Розгорнути праворуч">▸</span>
+        </div>
+        <div class="hud-full-view">
+          <span class="closest-label">Найближча ціль:</span>
+          <span class="closest-val" id="closestTargetName" onclick="toggleClosestBreakdown(event)">--</span>
+          <span id="slotClosestDistBadge" class="slot-dist-badge calm" onclick="toggleClosestBreakdown(event)">--</span>
+          <span id="slotClosestEtaBadge" class="slot-eta-badge" style="display:none;" onclick="toggleClosestBreakdown(event)">--</span>
+          <span class="accordion-arrow" onclick="toggleHudCard('closest', event)" title="Згорнути ліворуч">◂</span>
+        </div>
         <!-- Floating Popover breakdown across all points -->
 
 
@@ -6868,6 +6835,21 @@
 
 
     });
+    let isMapZooming = false;
+    map.on('zoomstart', () => { isMapZooming = true; });
+    map.on('zoomanim', () => { isMapZooming = true; });
+    map.on('zoomend', () => {
+      isMapZooming = false;
+      // Instantly sync trails to current marker positions after zoom animation
+      for (const tid in liveLayers) {
+        const it = liveLayers[tid];
+        if (it && it.coreTrail && it.baseTrailPts && it.sim) {
+          it.coreTrail.setLatLngs(it.baseTrailPts.concat([[it.sim.curLat, it.sim.curLon]]));
+        }
+      }
+    });
+    map.on('moveend', () => { isMapZooming = false; });
+
 
 
 
@@ -7094,7 +7076,19 @@
 
 
 
-      const st = currentAlertMap[regId];
+      let st = currentAlertMap[regId];
+
+      // Успадкування тривоги для міст-анклавів (м. Запоріжжя, м. Харків, м. Славутич),
+      // які геометрично вирізані як дірки з полігонів своїх районів та областей
+      if (!st || (!st.alert && st.color !== 'red' && st.color !== 'yellow')) {
+        if (regId === '564') { // м. Запоріжжя
+          st = currentAlertMap['149'] || currentAlertMap['12']; // Запорізький район або Запорізька область
+        } else if (regId === '1293') { // м. Харків
+          st = currentAlertMap['124'] || currentAlertMap['22']; // Харківський район або Харківська область
+        } else if (regId === '750') { // м. Славутич
+          st = currentAlertMap['74'] || currentAlertMap['14']; // Вишгородський район або Київська область
+        }
+      }
 
 
 
@@ -8992,7 +8986,7 @@
 
       const y = Math.sin(deltaLambda) * Math.cos(phi2);
 
-      const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(deltaLambda);
+      const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
 
       const theta = Math.atan2(y, x);
 
@@ -9143,80 +9137,79 @@
 
 
             if (sim.inTransition) {
-
               const tElapsed = (now - sim.transStartTs) / 1000.0;
+              const turnDur1 = sim.turnDuration !== undefined ? sim.turnDuration : 1.0;
+              const flightDur = sim.transDuration || 2.0;
+              const turnDur2 = sim.exitTurnDuration !== undefined ? sim.exitTurnDuration : 1.0;
 
-              const t = Math.min(1.0, tElapsed / sim.transDuration);
+              if (turnDur1 > 0 && tElapsed < turnDur1) {
+                // Phase 1 (0..1.0s): Stand in place and rotate nose towards transitHeading (лише якщо кут > 45°)
+                curLat = sim.transStartLat;
+                curLon = sim.transStartLon;
+                const turnProg = Math.min(1.0, tElapsed / turnDur1);
+                const easeTurn = turnProg * turnProg * (3 - 2 * turnProg);
+                const deltaH = ((sim.transitHeading - sim.transStartHeading + 540) % 360) - 180;
+                sim.curHeading = (sim.transStartHeading + deltaH * easeTurn + 360) % 360;
+                sim.targetHeading = sim.curHeading;
+              } else if (tElapsed < (turnDur1 + flightDur)) {
+                // Phase 2: Direct transit to transTargetLat/Lon (flightDur = 2.0s)
+                const flightElapsed = tElapsed - turnDur1;
+                const t = Math.min(1.0, flightElapsed / flightDur);
+                const ease = t * t * (3 - 2 * t);
+                curLat = sim.transStartLat + (sim.transTargetLat - sim.transStartLat) * ease;
+                curLon = sim.transStartLon + (sim.transTargetLon - sim.transStartLon) * ease;
 
-              // Плавний переліт до нової точки (Hermite cubic smoothstep)
-
-              const ease = t * t * (3 - 2 * t);
-
-              curLat = sim.transStartLat + (sim.transTargetLat - sim.transStartLat) * ease;
-
-              curLon = sim.transStartLon + (sim.transTargetLon - sim.transStartLon) * ease;
-
-
-
-              if (t >= 1.0) {
-
-                sim.inTransition = false;
-
-                curLat = sim.transTargetLat;
-
-                curLon = sim.transTargetLon;
-
-                sim.fakeStartTs = now;
-
-                // Повертаємо ніс цілі за генеральним курсом польоту
-
-                sim.targetHeading = sim.flightHeading || sim.targetHeading;
-
-              }
-
-            } else if (sim.speedKmh > 10) {
-
-              const fakeElapsed = (now - sim.fakeStartTs) / 1000.0;
-
-              if (fakeElapsed > 0) {
-
-                const rad = ((sim.flightHeading || sim.curHeading || 0) * Math.PI) / 180.0;
-
-                let effSec = fakeElapsed;
-
-                if (fakeElapsed <= 10.0) {
-
-                  // Перші 10 секунд (період оновлення апстріму): постійна крейсерська швидкість
-
-                  effSec = fakeElapsed;
-
-                } else if (fakeElapsed <= 11.0) {
-
-                  // Між 10 та 11 сек без нового пакету: плавне гальмування у 10 разів
-
-                  const tau = fakeElapsed - 10.0; // 0..1
-
-                  effSec = 10.0 + (tau - 0.45 * tau * tau);
-
+                if (turnDur1 === 0) {
+                  // Точка попереду в межах ±45°: плавний доворот носа безпосередньо у польоті без зупинки
+                  const deltaH = ((sim.transitHeading - sim.transStartHeading + 540) % 360) - 180;
+                  sim.curHeading = (sim.transStartHeading + deltaH * ease + 360) % 360;
+                  sim.targetHeading = sim.curHeading;
                 } else {
-
-                  // Після 11 сек: повна зупинка на місці в очікуванні пакету (без стрибків)
-
-                  effSec = 10.55;
-
+                  // Розворот уже виконано на місці у Фазі 1
+                  sim.curHeading = sim.transitHeading;
+                  sim.targetHeading = sim.transitHeading;
                 }
-
-                const dKm = (sim.speedKmh / 3600.0) * effSec;
-
-                curLat = sim.fakeStartLat + (dKm / 111.0) * Math.cos(rad);
-
-                curLon = sim.fakeStartLon + (dKm / (111.0 * Math.cos((sim.fakeStartLat * Math.PI) / 180.0))) * Math.sin(rad);
-
+              } else if (turnDur2 > 0 && tElapsed < (turnDur1 + flightDur + turnDur2)) {
+                // Phase 3: Arrived at target point, stand in place and rotate nose towards flightHeading (лише якщо вихідний кут > 45°)
+                curLat = sim.transTargetLat;
+                curLon = sim.transTargetLon;
+                const exitElapsed = tElapsed - (turnDur1 + flightDur);
+                const turnProg2 = Math.min(1.0, exitElapsed / turnDur2);
+                const easeTurn2 = turnProg2 * turnProg2 * (3 - 2 * turnProg2);
+                const targetH = sim.exitHeading !== undefined ? sim.exitHeading : (sim.flightHeading || sim.transitHeading);
+                const deltaH2 = ((targetH - sim.transitHeading + 540) % 360) - 180;
+                sim.curHeading = (sim.transitHeading + deltaH2 * easeTurn2 + 360) % 360;
+                sim.targetHeading = sim.curHeading;
+              } else {
+                // Phase 4: Resume dead reckoning along radar course
+                sim.inTransition = false;
+                curLat = sim.transTargetLat;
+                curLon = sim.transTargetLon;
+                sim.fakeStartLat = curLat;
+                sim.fakeStartLon = curLon;
+                sim.fakeStartTs = now;
+                sim.curHeading = sim.exitHeading !== undefined ? sim.exitHeading : (sim.flightHeading || sim.transitHeading);
+                sim.targetHeading = sim.curHeading;
               }
-
+            } else if (sim.speedKmh > 10) {
+              const fakeElapsed = (now - sim.fakeStartTs) / 1000.0;
+              if (fakeElapsed > 0) {
+                const rad = ((sim.flightHeading || sim.curHeading || 0) * Math.PI) / 180.0;
+                let effSec = fakeElapsed;
+                if (fakeElapsed <= 10.0) {
+                  effSec = fakeElapsed;
+                } else if (fakeElapsed <= 11.0) {
+                  const tau = fakeElapsed - 10.0;
+                  effSec = 10.0 + (tau - 0.45 * tau * tau);
+                } else {
+                  effSec = 10.55;
+                }
+                // 0.5x speed multiplier during extrapolation as requested
+                const dKm = ((sim.speedKmh * 0.5) / 3600.0) * effSec;
+                curLat = sim.fakeStartLat + (dKm / 111.0) * Math.cos(rad);
+                curLon = sim.fakeStartLon + (dKm / (111.0 * Math.cos((sim.fakeStartLat * Math.PI) / 180.0))) * Math.sin(rad);
+              }
             }
-
-
 
             sim.curLat = curLat;
 
@@ -9228,7 +9221,7 @@
 
             // Плавне з'єднання кінчика лінії без розриву та без петлі назад на носі
 
-            if (it.coreTrail && it.baseTrailPts && it.baseTrailPts.length > 0) {
+            if (!isMapZooming && it.coreTrail && it.baseTrailPts && it.baseTrailPts.length > 0) {
 
               if (!it.lastTrailSyncTs || (now - it.lastTrailSyncTs) >= 40) {
 
@@ -9371,6 +9364,11 @@
 
 
       tBadge.innerText = `Цілей: ${count}`;
+      const tMini = document.getElementById('threatsBadgeMini');
+      if (tMini) {
+        tMini.innerText = `Цілей: ${count}`;
+        tMini.className = count > 0 ? 'badge badge-red' : 'badge badge-green';
+      }
 
 
 
@@ -9579,6 +9577,8 @@
 
 
         distBadge.innerText = `${bestDz.closest_distance_km} км`;
+        const cMini = document.getElementById('closestMiniText');
+        if (cMini) cMini.innerText = `${typeName} ${bestDz.closest_distance_km} км`;
 
 
 
@@ -9651,6 +9651,8 @@
 
 
         distBadge.innerText = 'Спокійно';
+        const cMiniCalm = document.getElementById('closestMiniText');
+        if (cMiniCalm) cMiniCalm.innerText = 'Спокійно';
 
 
 
@@ -9698,7 +9700,7 @@
 
 
 
-        const alertSources = [data.oblasts, data.map_oblasts, data.raions];
+        const alertSources = [data.oblasts, data.map_oblasts, data.raions, data.official_alerts];
 
 
 
@@ -10082,7 +10084,7 @@
 
 
 
-              radius: 4, color: '#fff', fillColor: meta.color, fillOpacity: 0.85, weight: 1.5
+              radius: 2.2, color: '#fff', fillColor: meta.color, fillOpacity: 0.9, weight: 1.2
 
 
 
@@ -10261,69 +10263,42 @@
 
 
             if (distKm > 0.03) {
-
               const bearingToTrk = calculateBearing(curVisualLat, curVisualLon, trk.lat, trk.lon);
-
-              const headingDiff = Math.abs(((bearingToTrk - effH + 540) % 360) - 180);
-
-
-
-              // Захист від розвороту назад: якщо ціль трішки перелетіла точку координати,
-
-              // ніс НЕ повертається назад (кутова різниця > 90°), а тримається за курсом польоту
-
-              if (headingDiff > 90) {
-
-                item.sim.targetHeading = effH;
-
-              } else {
-
-                item.sim.targetHeading = bearingToTrk;
-
-              }
-
-
-
-              const travelSec = 1.8; // Плавний підліт до координат нового пакету за 1.8 сек
-
-
+              const startH = item.sim.curHeading || effH;
+              const deltaEntryCourse = Math.abs(((bearingToTrk - startH + 540) % 360) - 180);
 
               item.sim.inTransition = true;
-
               item.sim.transStartLat = curVisualLat;
-
               item.sim.transStartLon = curVisualLon;
-
               item.sim.transTargetLat = trk.lat;
-
               item.sim.transTargetLon = trk.lon;
+              item.sim.transStartHeading = startH;
+              item.sim.transitHeading = bearingToTrk;
 
-              item.sim.transDuration = travelSec;
+              // Варіант 1 (Поріг ±45°):
+              // Якщо точка попереду в конусі 90° (deltaEntryCourse <= 45°), літак НЕ завмирає (turnDuration = 0s)
+              // Якщо кут > 45° (гострий маневр або засічка позаду), 1с розворот на місці
+              item.sim.turnDuration = deltaEntryCourse > 45.0 ? 1.0 : 0.0;
+              item.sim.transDuration = 2.0;
+
+              // Фаза 3: якщо генеральний курс після прибуття змістився > 45°, 1с розворот на точці
+              const deltaExitCourse = Math.abs(((effH - bearingToTrk + 540) % 360) - 180);
+              item.sim.exitTurnDuration = deltaExitCourse > 45.0 ? 1.0 : 0.0;
+              item.sim.exitHeading = effH;
 
               item.sim.transStartTs = now;
 
-
-
               item.sim.fakeStartLat = trk.lat;
-
               item.sim.fakeStartLon = trk.lon;
-
-              item.sim.fakeStartTs = now + (travelSec * 1000);
-
+              const totalTransSec = item.sim.turnDuration + item.sim.transDuration + item.sim.exitTurnDuration;
+              item.sim.fakeStartTs = now + totalTransSec * 1000;
             } else {
-
               item.sim.inTransition = false;
-
               item.sim.targetHeading = effH;
-
               item.sim.fakeStartLat = trk.lat;
-
               item.sim.fakeStartLon = trk.lon;
-
               item.sim.fakeStartTs = now;
-
             }
-
             item.sim.lastPacketTs = now;
 
           }
@@ -10466,7 +10441,7 @@
 
             } else {
 
-              item.originDot = L.circleMarker(trajPts[0], { radius: 4, color: '#fff', fillColor: meta.color, fillOpacity: 0.85, weight: 1.5 }).addTo(map);
+              item.originDot = L.circleMarker(trajPts[0], { radius: 2.2, color: '#fff', fillColor: meta.color, fillOpacity: 0.9, weight: 1.2 }).addTo(map);
 
             }
 
@@ -11449,61 +11424,20 @@
 
 
       container.innerHTML = `
-
-
-
         <div style="display:flex;flex-direction:column;align-items:center;width:100%;">
-
-
-
-          <div style="position:relative;width:220px;height:220px;margin:0 auto;display:flex;align-items:center;justify-content:center;">
-
-
-
-            <svg width="220" height="220" viewBox="0 0 220 220" style="position:absolute;top:0;left:0;pointer-events:none;">
-
-
-
+          <div style="width:100%;max-width:220px;margin:0 auto;display:flex;justify-content:center;position:relative;">
+            <svg width="220" height="220" viewBox="0 0 220 220" style="width:100%;height:auto;display:block;overflow:visible;">
               ${spokeLines}
-
-
-
+              <!-- Concentric center circle locked in same SVG viewBox at (110, 110) -->
+              <circle cx="110" cy="110" r="42" fill="#090d16" stroke="rgba(255,255,255,0.16)" stroke-width="2" style="cursor:pointer;" onclick="selectedGaugeCategory=null; renderRadialTodayGauge(todayTargetCounts, Object.values(todayTargetCounts).reduce((a, b) => a + b, 0));"/>
+              <circle cx="110" cy="110" r="39" fill="none" stroke="rgba(0,0,0,0.5)" stroke-width="3" style="pointer-events:none;"/>
+              <text x="110" y="112" text-anchor="middle" dominant-baseline="central" fill="#f8fafc" font-size="30" font-weight="900" font-family="system-ui, -apple-system, sans-serif" letter-spacing="-0.5px" style="pointer-events:none;">${total}</text>
             </svg>
-
-
-
-            <div onclick="selectedGaugeCategory=null; renderRadialTodayGauge(todayTargetCounts, Object.values(todayTargetCounts).reduce((a, b) => a + b, 0));" style="width:84px;height:84px;border-radius:50%;background:#090d16;border:2px solid rgba(255,255,255,0.15);display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:inset 0 2px 10px rgba(0,0,0,0.8), 0 0 16px rgba(0,0,0,0.6);z-index:2;cursor:pointer;" title="Натисніть для скидання виділення">
-
-
-
-              <span style="font-size:32px;font-weight:900;color:#f8fafc;line-height:1;letter-spacing:-0.5px;">${total}</span>
-
-
-
-            </div>
-
-
-
           </div>
-
-
-
           <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px;">
-
-
-
             ${pillsHtml}
-
-
-
           </div>
-
-
-
         </div>
-
-
-
       `;
 
 
@@ -16319,12 +16253,12 @@
       sampleTrailLayers.forEach(l => map.removeLayer(l));
       sampleTrailLayers = [];
 
-      for (const id in playbackActiveMarkers) map.removeLayer(playbackActiveMarkers[id]);
-      for (const id in playbackActiveTrails) map.removeLayer(playbackActiveTrails[id]);
-      playbackActiveMarkers = {};
-      playbackActiveTrails = {};
-
       if (fullReset) {
+        for (const id in playbackActiveMarkers) map.removeLayer(playbackActiveMarkers[id]);
+        for (const id in playbackActiveTrails) map.removeLayer(playbackActiveTrails[id]);
+        playbackActiveMarkers = {};
+        playbackActiveTrails = {};
+
         if (historyImpactClusterGroup) {
           historyImpactClusterGroup.clearLayers();
         } else {
@@ -16411,6 +16345,7 @@
 
 
     function refreshMapVisuals() {
+      if (isMapZooming) return;
 
 
 
@@ -16535,6 +16470,7 @@
 
 
 
+      const activeMovingTrackIds = new Set();
       activeSampleTracks.forEach(trk => {
 
 
@@ -16763,7 +16699,7 @@
 
 
 
-            radius: 3.5, color: '#ffffff', fillColor: trk.color, fillOpacity: 0.9, weight: 1.5
+            radius: 2.2, color: '#ffffff', fillColor: trk.color, fillOpacity: 0.9, weight: 1.2
 
 
 
@@ -16783,80 +16719,63 @@
 
 
 
-        // Active Moving Flight at curT
-
-
-
+        // Active Moving Flight at curT (Pool-optimized: zero DOM thrashing during playback & zoom)
         if (curT >= trk.start_time && curT <= trk.end_time) {
-
-
+          activeMovingTrackIds.add(trk.id);
 
           if (showHistoryIcons) {
-
-
-
             const displayName = showHistoryNames ? trk.name : '';
-
-
-
-            const icon = createTargetMarkerIcon(trk.cat, lastPt.heading, displayName, lastPt.speed);
-
-
-
-            const m = L.marker([lastPt.lat, lastPt.lon], { icon }).addTo(map);
-
-
-
-            if (showHistoryNames) {
-
-
-
-              m.bindTooltip(trk.name, { permanent: true, direction: 'top', className: 'target-history-tooltip' });
-
-
-
+            if (playbackActiveMarkers[trk.id]) {
+              const m = playbackActiveMarkers[trk.id];
+              m.setLatLng([lastPt.lat, lastPt.lon]);
+              const el = m.getElement();
+              if (el) {
+                const rot = el.querySelector('.icon-rotator');
+                if (rot) rot.style.transform = `rotate(${Math.round(lastPt.heading || 0)}deg)`;
+              }
+            } else {
+              const icon = createTargetMarkerIcon(trk.cat, lastPt.heading, displayName, lastPt.speed);
+              const m = L.marker([lastPt.lat, lastPt.lon], { icon }).addTo(map);
+              if (showHistoryNames) {
+                m.bindTooltip(trk.name, { permanent: true, direction: 'top', className: 'target-history-tooltip' });
+              }
+              playbackActiveMarkers[trk.id] = m;
             }
-
-
-
-            playbackActiveMarkers[trk.id] = m;
-
-
-
+          } else if (playbackActiveMarkers[trk.id]) {
+            map.removeLayer(playbackActiveMarkers[trk.id]);
+            delete playbackActiveMarkers[trk.id];
           }
-
-
 
           if (showSampleTrails && visiblePts.length > 1) {
-
-
-
             const rawPts = visiblePts.map(p => [p.lat, p.lon]);
-
-
-
             const smoothPts = smoothVisualTrail(rawPts);
-
-
-
-            playbackActiveTrails[trk.id] = L.polyline(smoothPts, {
-
-
-
-              color: trk.color, weight: 2.6, opacity: 0.92, lineCap: 'round', lineJoin: 'round'
-
-
-
-            }).addTo(map);
-
-
-
+            if (playbackActiveTrails[trk.id]) {
+              playbackActiveTrails[trk.id].setLatLngs(smoothPts);
+            } else {
+              playbackActiveTrails[trk.id] = L.polyline(smoothPts, {
+                color: trk.color, weight: 2.6, opacity: 0.92, lineCap: 'round', lineJoin: 'round'
+              }).addTo(map);
+            }
+          } else if (playbackActiveTrails[trk.id]) {
+            map.removeLayer(playbackActiveTrails[trk.id]);
+            delete playbackActiveTrails[trk.id];
           }
-
-
-
         }
       });
+
+      // Cleanup tracks no longer active at current time slice
+      for (const id in playbackActiveMarkers) {
+        if (!activeMovingTrackIds.has(id)) {
+          map.removeLayer(playbackActiveMarkers[id]);
+          delete playbackActiveMarkers[id];
+        }
+      }
+      for (const id in playbackActiveTrails) {
+        if (!activeMovingTrackIds.has(id)) {
+          map.removeLayer(playbackActiveTrails[id]);
+          delete playbackActiveTrails[id];
+        }
+      }
 
       // Диференційне оновлення кластерів точок збиттів:
       // Зберігає існуючі DOM-елементи кластерів незмінними під час перегляду історії,
@@ -18109,6 +18028,65 @@
 
 
 
+
+    
+    // =========================================================================
+    // HUD ACCORDION CONTROLLER (Horizontal Rightward Expansion)
+    // =========================================================================
+    let expandedHudCard = (window.innerWidth <= 768) ? null : 'all';
+
+    function isMobileView() {
+      return window.innerWidth <= 768;
+    }
+
+    function applyHudAccordionState() {
+      const isMob = isMobileView();
+      const threatsEl = document.getElementById('threatsCard');
+      const slotEl = document.getElementById('slotSelectorCard');
+      const closestEl = document.getElementById('closestCard');
+
+      if (!isMob) {
+        // Desktop: all cards expanded by default, or individual toggle
+        const allExp = expandedHudCard === 'all' || expandedHudCard === null;
+        if (threatsEl) threatsEl.className = allExp || expandedHudCard === 'threats' ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
+        if (slotEl) slotEl.className = allExp || expandedHudCard === 'slot' ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
+        if (closestEl) closestEl.className = allExp || expandedHudCard === 'closest' ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
+      } else {
+        // Mobile: strict accordion - max 1 expanded card at a time
+        if (threatsEl) threatsEl.className = (expandedHudCard === 'threats') ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
+        if (slotEl) slotEl.className = (expandedHudCard === 'slot') ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
+        if (closestEl) closestEl.className = (expandedHudCard === 'closest') ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
+      }
+    }
+
+    function toggleHudCard(cardName, event) {
+      if (event) event.stopPropagation();
+      if (isMobileView()) {
+        expandedHudCard = (expandedHudCard === cardName) ? null : cardName;
+      } else {
+        if (expandedHudCard === 'all') {
+          expandedHudCard = cardName;
+        } else if (expandedHudCard === cardName) {
+          expandedHudCard = 'all';
+        } else {
+          expandedHudCard = cardName;
+        }
+      }
+      applyHudAccordionState();
+    }
+
+    function handleCardClick(cardName, event) {
+      const card = document.getElementById(cardName === 'threats' ? 'threatsCard' : cardName === 'slot' ? 'slotSelectorCard' : 'closestCard');
+      if (card && card.classList.contains('hud-collapsed')) {
+        toggleHudCard(cardName, event);
+      }
+    }
+
+    window.addEventListener('resize', () => {
+      applyHudAccordionState();
+    });
+
+    applyHudAccordionState();
 
     // Initialize: collapse sidebar on mobile
 

@@ -899,7 +899,8 @@ pub fn build_user_snapshot(
             st.raion_alerts.values().collect::<Vec<_>>()
         } else {
             st.raion_alerts.values().filter(|r| r.alert).collect::<Vec<_>>()
-        }
+        },
+        "official_alerts": st.official_alerts.values().filter(|a| a.alert).collect::<Vec<_>>()
     })
 }
 

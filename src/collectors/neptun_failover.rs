@@ -51,9 +51,11 @@ pub async fn run_failover_neptun_collector(
                     for t in threats_raw {
                         let lat = t.get("lat").and_then(|v| v.as_f64()).unwrap_or(0.0);
                         let lon = t.get("lon").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                        let mut heading = t.get("heading").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let heading_raw = t.get("heading").and_then(|v| v.as_f64());
+                        let mut heading = heading_raw.unwrap_or(0.0);
 
-                        if heading == 0.0 {
+                        // Якщо курс відсутній (null) або 0.0, спробувати обчислити за останніми двома точками треку
+                        if heading <= 0.0 {
                             if let Some(trail) = t.get("trail").and_then(|tr| tr.as_array()) {
                                 if trail.len() >= 2 {
                                     let p_prev = &trail[trail.len() - 2];

@@ -422,21 +422,89 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
     let mut found_targets: Option<Vec<Vec<f64>>> = None;
     let mut found_uuids: Option<Vec<String>> = None;
 
-    // Спроба знайти UUIDs у decoded[4] (Item 4[0])
+    // 1. Structured-First Lookup для UkraineAlarm AST v5:
+    // root[4][0] = UUIDs
+    // root[4][1] = Coordinates (довжина 4-5)
+    // root[4][2] = Taxonomy (довідник типів)
+    // root[5][2] = Active Targets (довжина 8-9)
     if let Some(arr) = decoded.as_array() {
         if arr.len() > 4 {
-            if let Some(fourth) = arr[4].as_array() {
-                for item in fourth {
-                    if let Some(inner) = item.as_array() {
-                        if !inner.is_empty() && inner.iter().take(3).all(|v| v.is_string()) {
-                            let uuids: Vec<String> = inner
-                                .iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect();
-                            if !uuids.is_empty() {
-                                found_uuids = Some(uuids);
-                                break;
+            if let Some(root4) = arr[4].as_array() {
+                // root[4][0] -> UUIDs
+                if !root4.is_empty() {
+                    if let Some(uuid_arr) = root4[0].as_array() {
+                        let uuids: Vec<String> = uuid_arr
+                            .iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect();
+                        if !uuids.is_empty() {
+                            found_uuids = Some(uuids);
+                        }
+                    }
+                }
+                // root[4][1] -> Coordinates
+                if root4.len() > 1 {
+                    if let Some(coord_arr) = root4[1].as_array() {
+                        let mut extracted_coords = Vec::new();
+                        for item in coord_arr {
+                            if let Some(row) = item.as_array() {
+                                let numbers: Vec<f64> = row.iter().filter_map(|x| x.as_f64()).collect();
+                                if numbers.len() >= 4 && numbers.len() <= 5 {
+                                    extracted_coords.push(numbers);
+                                }
                             }
+                        }
+                        if !extracted_coords.is_empty() {
+                            found_coords = Some(extracted_coords);
+                        }
+                    }
+                }
+                // root[4][2] -> Taxonomy / Types
+                if root4.len() > 2 {
+                    if let Some(types_arr) = root4[2].as_array() {
+                        let mut extracted_types = Vec::new();
+                        for item in types_arr {
+                            if let Some(row) = item.as_array() {
+                                if row.len() >= 2 {
+                                    let code = row[0].as_i64().unwrap_or(0);
+                                    let name_parts: Vec<&str> = row[1..]
+                                        .iter()
+                                        .filter_map(|x| x.as_str())
+                                        .map(|s| s.trim())
+                                        .filter(|s| !s.is_empty() && *s != "null")
+                                        .collect();
+                                    let name = if name_parts.is_empty() {
+                                        "Ціль".to_string()
+                                    } else {
+                                        name_parts.join(" ")
+                                    };
+                                    extracted_types.push((code, name));
+                                }
+                            }
+                        }
+                        if !extracted_types.is_empty() {
+                            found_types = Some(extracted_types);
+                        }
+                    }
+                }
+            }
+        }
+        if arr.len() > 5 {
+            if let Some(root5) = arr[5].as_array() {
+                // root[5][2] -> Active Targets
+                if root5.len() > 2 {
+                    if let Some(tgt_arr) = root5[2].as_array() {
+                        let mut extracted_targets = Vec::new();
+                        for item in tgt_arr {
+                            if let Some(row) = item.as_array() {
+                                let numbers: Vec<f64> = row.iter().filter_map(|x| x.as_f64()).collect();
+                                if numbers.len() >= 8 && numbers.len() <= 9 {
+                                    extracted_targets.push(numbers);
+                                }
+                            }
+                        }
+                        if !extracted_targets.is_empty() {
+                            found_targets = Some(extracted_targets);
                         }
                     }
                 }
@@ -444,6 +512,7 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
         }
     }
 
+    // 2. Рекурсивний Fallback-пошук (лише якщо структурні поля не знайдено)
     fn search_global(
         node: &Value,
         coords: &mut Option<Vec<Vec<f64>>>,
@@ -453,20 +522,17 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
         if let Some(arr) = node.as_array() {
             if coords.is_none() && !arr.is_empty() {
                 if let Some(first) = arr[0].as_array() {
-                    if first.len() >= 4 {
-                        let is_coord = first[0..4].iter().all(|x| {
-                            x.as_f64().map_or(false, |v| (0.0..=1.0).contains(&v))
-                        });
-                        if is_coord {
-                            let mut extracted_coords = Vec::new();
-                            for item in arr {
-                                if let Some(row) = item.as_array() {
-                                    let numbers: Vec<f64> = row.iter().filter_map(|x| x.as_f64()).collect();
-                                    if numbers.len() >= 4 {
-                                        extracted_coords.push(numbers);
-                                    }
+                    if first.len() >= 4 && first.len() <= 5 && first[0].is_number() && first[1].is_number() {
+                        let mut extracted_coords = Vec::new();
+                        for item in arr {
+                            if let Some(row) = item.as_array() {
+                                let numbers: Vec<f64> = row.iter().filter_map(|x| x.as_f64()).collect();
+                                if numbers.len() >= 4 && numbers.len() <= 5 {
+                                    extracted_coords.push(numbers);
                                 }
                             }
+                        }
+                        if !extracted_coords.is_empty() {
                             *coords = Some(extracted_coords);
                         }
                     }
@@ -481,7 +547,12 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
                             if let Some(row) = item.as_array() {
                                 if row.len() >= 2 {
                                     let code = row[0].as_i64().unwrap_or(0);
-                                    let name_parts: Vec<&str> = row[1..].iter().filter_map(|x| x.as_str()).collect();
+                                    let name_parts: Vec<&str> = row[1..]
+                                        .iter()
+                                        .filter_map(|x| x.as_str())
+                                        .map(|s| s.trim())
+                                        .filter(|s| !s.is_empty() && *s != "null")
+                                        .collect();
                                     let name = if name_parts.is_empty() {
                                         "Ціль".to_string()
                                     } else {
@@ -491,25 +562,21 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
                                 }
                             }
                         }
-                        *types = Some(extracted_types);
+                        if !extracted_types.is_empty() {
+                            *types = Some(extracted_types);
+                        }
                     }
                 }
             }
 
             if targets.is_none() && !arr.is_empty() {
                 if let Some(first) = arr[0].as_array() {
-                    // Гнучкий розбір цілей: масив має містити щонайменше 3 числових індекси [uuid, coords, type],
-                    // але не повинен бути масивом координат (де всі числа в діапазоні 0..=1)
-                    let is_coords_array = first.len() >= 4 && first[0..4].iter().all(|x| {
-                        x.as_f64().map_or(false, |v| (0.0..=1.0).contains(&v))
-                    });
-
-                    if !is_coords_array && first.len() >= 8 && first[0].is_number() && first[1].is_number() && first[2].is_number() {
+                    if first.len() >= 8 && first.len() <= 9 && first[0].is_number() && first[1].is_number() && first[2].is_number() {
                         let mut extracted_targets = Vec::new();
                         for item in arr {
                             if let Some(row) = item.as_array() {
                                 let numbers: Vec<f64> = row.iter().filter_map(|x| x.as_f64()).collect();
-                                if numbers.len() >= 3 {
+                                if numbers.len() >= 8 && numbers.len() <= 9 {
                                     extracted_targets.push(numbers);
                                 }
                             }
@@ -529,7 +596,10 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
         }
     }
 
-    search_global(&decoded, &mut found_coords, &mut found_types, &mut found_targets);
+    if found_coords.is_none() || found_types.is_none() || found_targets.is_none() {
+        search_global(&decoded, &mut found_coords, &mut found_types, &mut found_targets);
+    }
+    
 
     let (coords, types, targets) = match (found_coords, found_types, found_targets) {
         (Some(c), Some(t), Some(tgt)) => (c, t, tgt),
@@ -1004,6 +1074,44 @@ mod tests {
         assert_eq!(decoded[0].raw_name, "Шахед");
         assert_eq!(decoded[0].raw_type_code, 1);
         assert_eq!(decoded[0].heading_deg, 180.0);
+    }
+
+    #[tokio::test]
+    async fn test_live_ukrainealarm_decode() {
+        use reqwest::header::{USER_AGENT, ORIGIN, REFERER};
+        let client = reqwest::Client::new();
+        let resp = client.get("https://map.ukrainealarm.com/api/centrifuge/map/fallback")
+            .header(USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36")
+            .header(ORIGIN, "https://map.ukrainealarm.com")
+            .header(REFERER, "https://map.ukrainealarm.com/")
+            .send().await;
+        if let Ok(r) = resp {
+            let text = r.text().await.unwrap_or_default();
+            println!("LIVE PAYLOAD LEN: {}", text.len());
+            if let Ok(v) = serde_json::from_str::<Value>(&text) {
+                if let Some(n_str) = v.get("n").and_then(|s| s.as_str()) {
+                    let colon_pos = n_str.find(':').unwrap_or(0);
+                    println!("LIVE PREFIX: {}", &n_str[..colon_pos + 1]);
+                    match decode_payload_native(n_str) {
+                        Ok(json_val) => {
+                            println!("LIVE AST DECODED OK!");
+                            let targets = extract_targets(&json_val);
+                            println!("TARGETS EXTRACTED SUCCESSFULLY: count={}", targets.len());
+                            for (i, t) in targets.iter().enumerate() {
+                                println!("Target {}: id={}, code={}, name='{}', lat={:.4}, lon={:.4}, heading={:.1}, speed={:?}",
+                                    i, t.id, t.raw_type_code, t.raw_name, t.lat, t.lon, t.heading_deg, t.speed_kmh);
+                            }
+                        }
+                        Err(e) => {
+                            println!("DECODE ERROR: {}", e);
+                            if let Ok(surf_targets) = decode_surface_v2_payload(n_str) {
+                                println!("SURFACE DECODE OK! Targets: {}", surf_targets.len());
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
 }
