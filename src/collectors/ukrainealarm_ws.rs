@@ -63,15 +63,15 @@ pub async fn process_ukrainealarm_payload(
                 let targets = extract_targets(&decoded);
                 extracted_targets = Some((targets, "AST"));
                 let tax = extract_taxonomy(&decoded);
-                static REGISTERED_TAX: OnceLock<std::sync::RwLock<std::collections::HashSet<i64>>> = OnceLock::new();
-                let tax_set = REGISTERED_TAX.get_or_init(|| std::sync::RwLock::new(std::collections::HashSet::new()));
+                static REGISTERED_TAX: OnceLock<parking_lot::RwLock<std::collections::HashSet<i64>>> = OnceLock::new();
+                let tax_set = REGISTERED_TAX.get_or_init(|| parking_lot::RwLock::new(std::collections::HashSet::new()));
                 for item in tax {
                     let is_new_code = {
-                        let r = tax_set.read().unwrap();
+                        let r = tax_set.read();
                         !r.contains(&item.code)
                     };
                     if is_new_code {
-                        let mut w = tax_set.write().unwrap();
+                        let mut w = tax_set.write();
                         if w.insert(item.code) {
                             exchange_mgr.record_unmapped(
                                 "taxonomy",
@@ -474,15 +474,16 @@ pub async fn run_ukrainealarm_http_fallback(
 
         // Якщо WebSocket стабільно постачає дані (мовчання <= 12.0 сек), Fallback не втручається
         // і не перезаписує свіжі цілі застарілим кешованим знімком
-        if ws_silence_sec <= 12.0 {
-            sleep(Duration::from_secs(6)).await;
+        // Якщо WebSocket стабільно постачає дані (мовчання <= 8.0 сек), Fallback не втручається
+        if ws_silence_sec <= 8.0 {
+            sleep(Duration::from_millis(2000)).await;
             continue;
         }
 
-        // Якщо WebSocket мовчить >12.0 сек: Fallback стає основним джерелом і опитує кожні 9.5-10 сек
+        // Якщо WebSocket мовчить > 8.0 сек: Fallback стає основним джерелом і опитує кожні 8.0 сек
         let elapsed = last_fetch_instant.elapsed();
-        if elapsed < Duration::from_millis(9500) {
-            sleep(Duration::from_millis(9500) - elapsed).await;
+        if elapsed < Duration::from_millis(8000) {
+            sleep(Duration::from_millis(8000) - elapsed).await;
         }
 
         debug!(

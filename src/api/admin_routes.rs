@@ -1,4 +1,8 @@
-﻿use std::fs;
+fn is_valid_month_param(m: &str) -> bool {
+    m.len() == 7 && m.chars().enumerate().all(|(i, c)| if i == 4 { c == '-' } else { c.is_ascii_digit() })
+}
+
+use std::fs;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use axum::extract::{ConnectInfo, Path as AxumPath, Query, State};
@@ -364,6 +368,9 @@ async fn handle_delete_history_month(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     AxumPath(month): AxumPath<String>,
 ) -> Response {
+    if !is_valid_month_param(&month) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
     if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
         return status.into_response();
     }
@@ -383,6 +390,9 @@ async fn handle_download_history_month(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     AxumPath(month): AxumPath<String>,
 ) -> Response {
+    if !is_valid_month_param(&month) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
     if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
         return status.into_response();
     }

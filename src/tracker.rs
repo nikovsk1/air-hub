@@ -50,6 +50,8 @@ pub struct TargetTrack {
     pub speed_kmh: f64,
     pub oblast: String,
     pub oblast_id: String,
+    #[serde(default)]
+    pub raion_id: String,
     pub first_seen: f64,
     pub last_seen: f64,
     pub trajectory: Vec<TrajectoryPoint>,
@@ -75,6 +77,7 @@ impl TargetTrack {
         speed: f64,
         oblast: String,
         oblast_id: String,
+        raion_id: String,
     ) -> Self {
         let (cat, meta) = classify_target(&raw_type, raw_code);
         let now = now_sec();
@@ -97,6 +100,7 @@ impl TargetTrack {
             speed_kmh: eff_speed,
             oblast,
             oblast_id,
+            raion_id,
             first_seen: now,
             last_seen: now,
             trajectory: vec![TrajectoryPoint {
@@ -140,16 +144,26 @@ impl TargetTrack {
         speed: f64,
         oblast: String,
         oblast_id: String,
+        raion_id: String,
         raw_type: Option<&str>,
         raw_code: Option<i64>,
     ) {
         let now = now_sec();
+
+        // 1. Дедуплікація виключно за первинними координатами від джерел:
+        // Якщо зміщення від останньої реальної засічки < 30 метрів — повторний дублікат відкидається
+        let dist_from_current = calculate_haversine_distance(self.lat, self.lon, lat, lon);
+        if dist_from_current < 0.03 {
+            self.last_seen = now;
+            if speed > 0.0 { self.speed_kmh = speed; }
+            return;
+        }
+
         if let Some(last_pt) = self.trajectory.last() {
             let dist_from_last = calculate_haversine_distance(last_pt.lat, last_pt.lon, lat, lon);
 
-            // Захист від фізично неможливих стрибків (телепортація > 350 км за один пакет):
-            // скидаємо попередні точки тільки при аномальному перескоку координат (захист надзвукових ракет)
-            if dist_from_last > 350.0 {
+            // 2. Захист від фізично неможливих стрибків (телепортація > 120 км між пакетами)
+            if dist_from_last > 120.0 {
                 self.trajectory.clear();
                 self.trajectory.push(TrajectoryPoint {
                     lat,
@@ -158,10 +172,10 @@ impl TargetTrack {
                 });
                 self.heading = if heading > 0.0 { heading } else { self.heading };
             } else {
-                let calculated_heading = if dist_from_last > 0.3 {
-                    calculate_bearing(last_pt.lat, last_pt.lon, lat, lon)
-                } else if heading > 0.0 {
+                let calculated_heading = if heading > 0.0 {
                     heading
+                } else if dist_from_last > 0.3 {
+                    calculate_bearing(last_pt.lat, last_pt.lon, lat, lon)
                 } else {
                     self.heading
                 };
@@ -205,6 +219,7 @@ impl TargetTrack {
         }
         self.oblast = oblast;
         self.oblast_id = oblast_id;
+        self.raion_id = raion_id;
         self.last_seen = now;
 
         if let (Some(rt), Some(rc)) = (raw_type, raw_code) {
@@ -286,7 +301,17 @@ impl TargetTracker {
 
             // Автоматична фіксація нерозпізнаних типів цілей у журналі обміну
             let (cat, _meta) = classify_target(&t.raw_name, t.raw_type_code);
-            if cat == "unknown" && (!t.raw_name.is_empty() || t.raw_type_code != 0) {
+            let raw_lower = t.raw_name.trim().to_lowercase();
+            let is_generic = raw_lower.is_empty()
+                || raw_lower == "ціль"
+                || raw_lower == "цілі"
+                || raw_lower == "target"
+                || raw_lower == "об'єкт"
+                || raw_lower == "обєкт"
+                || raw_lower == "unknown"
+                || t.raw_type_code == 0;
+
+            if cat == "unknown" && !is_generic && t.raw_type_code != 0 {
                 if let Some(mgr) = exchange_mgr {
                     mgr.record_unmapped(
                         "threat",
@@ -318,6 +343,7 @@ impl TargetTracker {
                         eff_speed,
                         ob_info.name,
                         ob_info.id,
+                        ob_info.raion_id.clone(),
                         Some(&t.raw_name),
                         Some(t.raw_type_code),
                     );
@@ -339,6 +365,7 @@ impl TargetTracker {
                     eff_speed,
                     ob_info.name,
                     ob_info.id,
+                    ob_info.raion_id,
                 );
                 if !t.trail_points.is_empty() {
                     trk = trk.with_trail(&t.trail_points, now as i64);
@@ -502,10 +529,13 @@ impl ThreatState {
     /// Суворий перерахунок тривог: колір визначається виключно сиренами
     pub fn recompute_oblast_alerts(&mut self, detector: &OblastDetector) {
         let mut ob_targets: HashMap<String, usize> = HashMap::new();
-        let ra_targets: HashMap<String, usize> = HashMap::new();
+        let mut ra_targets: HashMap<String, usize> = HashMap::new();
 
         for trk in self.tracker.tracks.values() {
             *ob_targets.entry(trk.oblast_id.clone()).or_insert(0) += 1;
+            if !trk.raion_id.is_empty() && trk.raion_id != "0" {
+                *ra_targets.entry(trk.raion_id.clone()).or_insert(0) += 1;
+            }
         }
 
         // Області (Rank 1)
@@ -611,6 +641,7 @@ mod tests {
             185.0,
             "Київська".to_string(),
             "14".to_string(),
+            "0".to_string(),
         );
         tracker.tracks.insert("test_1".to_string(), trk);
         let future_now = now_sec() + 200.0;
@@ -634,15 +665,16 @@ mod tests {
             185.0,
             "Київська".to_string(),
             "14".to_string(),
+            "0".to_string(),
         );
         assert_eq!(trk.trajectory.len(), 1);
 
         // Нормальний невеликий рух (1 км)
-        trk.update(50.01, 30.01, 45.0, 185.0, "Київська".to_string(), "14".to_string(), None, None);
+        trk.update(50.01, 30.01, 45.0, 185.0, "Київська".to_string(), "14".to_string(), "0".to_string(), None, None);
         assert!(trk.trajectory.len() >= 1);
 
         // Аномальний стрибок на 300 км (наприклад у Суми або Львів)
-        trk.update(52.5, 34.0, 90.0, 185.0, "Сумська".to_string(), "18".to_string(), None, None);
+        trk.update(52.5, 34.0, 90.0, 185.0, "Сумська".to_string(), "18".to_string(), "0".to_string(), None, None);
         // Захист від телепортації повинен очистити старі точки і не креслити павутиння
         assert_eq!(trk.trajectory.len(), 1);
         assert_eq!(trk.trajectory[0].lat, 52.5);
@@ -662,6 +694,7 @@ mod tests {
             185.0,
             "Київська".to_string(),
             "14".to_string(),
+            "0".to_string(),
         );
         assert_eq!(trk.trajectory.len(), 1);
 
@@ -669,7 +702,7 @@ mod tests {
         // Раніше баг затирав верхівку і за 30 км залишалося лише 1-2 точки!
         for i in 1..=30 {
             let lon_offset = (i as f64) * 0.002;
-            trk.update(50.0, 30.0 + lon_offset, 90.0, 185.0, "Київська".to_string(), "14".to_string(), None, None);
+            trk.update(50.0, 30.0 + lon_offset, 90.0, 185.0, "Київська".to_string(), "14".to_string(), "0".to_string(), None, None);
         }
         // Загальна дистанція ~4.3 км (понад 1.5 км двічі)
         // Траєкторія обов'язково повинна містити збережені проміжні точки!
@@ -688,14 +721,126 @@ mod tests {
             850.0,
             "Миколаївська".to_string(),
             "12".to_string(),
+            "0".to_string(),
         );
-        trk.update(48.05, 31.0, 0.0, 850.0, "Миколаївська".to_string(), "12".to_string(), None, None);
+        trk.update(48.05, 31.0, 0.0, 850.0, "Миколаївська".to_string(), "12".to_string(), "0".to_string(), None, None);
         assert_eq!(trk.trajectory.len(), 2);
 
         // Зсув ракети на 80 км (наприклад, пауза апстріму або політ за 5 хвилин)
         // 80 км / 111.0 = ~0.72 градуса
-        trk.update(48.77, 31.0, 0.0, 850.0, "Кіровоградська".to_string(), "10".to_string(), None, None);
+        trk.update(48.77, 31.0, 0.0, 850.0, "Кіровоградська".to_string(), "10".to_string(), "0".to_string(), None, None);
         // Не повинно очищати траєкторію (80 км < 350 км)!
         assert_eq!(trk.trajectory.len(), 3, "Trajectory must retain history for fast cruise missiles");
+    }
+
+    #[test]
+    fn test_early_movement_deduplication_no_startup_stall() {
+        let mut trk = TargetTrack::new(
+            "early_drone".to_string(),
+            "shahed".to_string(),
+            1,
+            50.0,
+            30.0,
+            90.0,
+            185.0,
+            "Київська".to_string(),
+            "14".to_string(),
+            "0".to_string(),
+        );
+        let _start_time = trk.last_seen;
+
+        // 1. Дублікат з нульовим зсувом (0 метрів)
+        trk.update(50.0, 30.0, 90.0, 185.0, "Київська".to_string(), "14".to_string(), "0".to_string(), None, None);
+        assert_eq!(trk.trajectory.len(), 1, "Duplicate frame must not append to trajectory");
+
+        // 2. Мікро-флуктуація менше 30 метрів (~10 метрів: 0.0001 град на 50° широти ~ 11м)
+        // 0.00005 град ~ 5.5м < 30м -> відхиляється як джиттер
+        trk.update(50.00005, 30.0, 90.0, 185.0, "Київська".to_string(), "14".to_string(), "0".to_string(), None, None);
+        assert_eq!(trk.trajectory.len(), 1, "Sub-30m jitter must be deduplicated");
+
+        // 3. Реальний рух на 45 метрів (0.0004 град ~ 44.5м > 30м)
+        // Має оновити координати НЕГАЙНО (без 3-секундного зависання на старті!)
+        trk.update(50.0004, 30.0, 90.0, 185.0, "Київська".to_string(), "14".to_string(), "0".to_string(), None, None);
+        assert_eq!(trk.lat, 50.0004, "Target coordinates must update immediately on valid movement");
+    }
+
+    #[test]
+    fn test_strict_primary_coordinates_only_in_history() {
+        // Інваріант: в історію та траєкторію записуються ТІЛЬКИ первинні координати від апстріму.
+        // Жодних синтетичних або екстрапольованих точок бекенд не генерує!
+        let mut trk = TargetTrack::new(
+            "strict_track".to_string(),
+            "shahed".to_string(),
+            1,
+            49.0000,
+            31.0000,
+            45.0,
+            185.0,
+            "Черкаська".to_string(),
+            "23".to_string(),
+            "0".to_string(),
+        );
+
+        let input_coords = vec![
+            (49.0200, 31.0200), // ~2.6 км
+            (49.0400, 31.0400), // ~2.6 км
+            (49.0600, 31.0600), // ~2.6 км
+        ];
+
+        for (lat, lon) in &input_coords {
+            trk.update(*lat, *lon, 45.0, 185.0, "Черкаська".to_string(), "23".to_string(), "0".to_string(), None, None);
+        }
+
+        // Кожна збережена точка в траєкторії зобов'язана бути або стартовою, або однією з input_coords
+        for pt in &trk.trajectory {
+            let is_start = (pt.lat - 49.0000).abs() < 1e-6 && (pt.lon - 31.0000).abs() < 1e-6;
+            let is_from_input = input_coords.iter().any(|(ilat, ilon)| {
+                (pt.lat - ilat).abs() < 1e-6 && (pt.lon - ilon).abs() < 1e-6
+            });
+            assert!(is_start || is_from_input, "Point ({}, {}) is not from primary upstream coordinates!", pt.lat, pt.lon);
+        }
+
+        // Остання точка точно відповідає останній отриманій від апстріму
+        assert_eq!(trk.lat, 49.0600);
+        assert_eq!(trk.lon, 31.0600);
+    }
+
+    #[test]
+    fn test_two_targets_at_identical_coordinates_are_both_retained_independently() {
+        let mut tracker = TargetTracker::default();
+        let detector = OblastDetector::default();
+
+        let incoming = vec![
+            RawExtractedTarget {
+                id: "tgt_group_1".to_string(),
+                raw_name: "Шахед".to_string(),
+                raw_type_code: 1,
+                lat: 49.5000,
+                lon: 31.8000,
+                heading_deg: 270.0,
+                speed_kmh: Some(185.0),
+                confidence: Some(4),
+                time_offset_ms: None,
+                trail_points: vec![],
+            },
+            RawExtractedTarget {
+                id: "tgt_group_2".to_string(), // Друга ціль у тій самій точці ("група х2")
+                raw_name: "Шахед".to_string(),
+                raw_type_code: 1,
+                lat: 49.5000, // Ідентичні координати
+                lon: 31.8000,
+                heading_deg: 270.0,
+                speed_kmh: Some(185.0),
+                confidence: Some(4),
+                time_offset_ms: None,
+                trail_points: vec![],
+            },
+        ];
+
+        let lost = tracker.update_batch(&incoming, &detector, None, "test_ws");
+        assert_eq!(lost.len(), 0, "Жодна ціль не повинна бути втрачена");
+        assert_eq!(tracker.tracks.len(), 2, "Обидві цілі з однаковими координатами зобов'язані зберегтися у self.tracks!");
+        assert!(tracker.tracks.contains_key("tgt_group_1"));
+        assert!(tracker.tracks.contains_key("tgt_group_2"));
     }
 }

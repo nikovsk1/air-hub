@@ -224,7 +224,14 @@ async fn handle_regions_geojson(
     State(state): State<AppState>,
 ) -> Response {
     let path = state.config.data_dir.join("regions.geojson");
-    if let Ok(content) = fs::read_to_string(&path) {
+    let content = if path.exists() {
+        fs::read_to_string(&path).ok()
+    } else {
+        let default_path = state.config.data_defaults_dir.join("regions.geojson");
+        fs::read_to_string(&default_path).ok()
+    };
+
+    if let Some(content) = content {
         (
             [
                 (header::CONTENT_TYPE, "application/geo+json"),

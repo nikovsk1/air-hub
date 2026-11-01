@@ -272,6 +272,8 @@ impl HistoryManager {
         let item = json!({
             "id": trk.id,
             "cat": trk.category,
+            "name_ua": trk.type_ua,
+            "name_en": trk.type_en,
             "date": date_str,
             "start_time": trk.first_seen as i64,
             "end_time": trk.last_seen as i64,

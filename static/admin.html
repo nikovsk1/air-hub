@@ -198,9 +198,14 @@
 
     <!-- БАНЕР НЕВІДОМИХ ЦІЛЕЙ (ЯКЩО ВИЯВЛЕНО) -->
     <div id="unknownTypesBanner" class="hidden p-4 bg-amber-950/80 border border-amber-600 rounded-xl text-amber-200 text-xs shadow-lg">
-      <div class="flex items-center gap-2.5">
-        <span class="text-lg">⚠️</span>
-        <div id="unknownTypesText"></div>
+      <div class="flex items-center justify-between gap-2.5">
+        <div class="flex items-center gap-2.5 flex-1 pr-4">
+          <span class="text-lg shrink-0">⚠️</span>
+          <div id="unknownTypesText"></div>
+        </div>
+        <button onclick="dismissUnknownTypesBanner()" class="text-amber-400 hover:text-white p-1 rounded-lg transition shrink-0 cursor-pointer" title="Закрити попередження">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
       </div>
     </div>
 
@@ -665,13 +670,16 @@
           pBadge.className = "bg-blue-950 text-blue-400 border border-blue-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
         }
 
-        // Unknown target types banner
+        // Unknown target types banner з підтримкою закриття
         const unkBanner = document.getElementById("unknownTypesBanner");
         const unkText = document.getElementById("unknownTypesText");
+        const unkCount = hData.unknown_target_types_count || 0;
+        window.__lastUnknownCount = unkCount;
+        const dismissedCount = parseInt(localStorage.getItem('admin_dismissed_unknown_count') || '0', 10);
         if (unkBanner && unkText) {
-          if (hData.unknown_target_types_count > 0) {
+          if (unkCount > 0 && unkCount > dismissedCount) {
             const listStr = hData.unknown_target_types.map(x => `${x.type_identifier} (код: ${x.raw_code}, повторень: ${x.count})`).join(", ");
-            unkText.innerHTML = `<b>Увага: виявлено новий невідомий тип цілі в ефірі:</b> ${listStr}. Ціль автоматично супроводжується як <i>"Ціль не визначена"</i> із збереженням усіх алерів та координат.`;
+            unkText.innerHTML = `<b>Увага: виявлено новий невідомий тип цілі в ефірі:</b> ${listStr}. Ціль автоматично супроводжується як <i>"Ціль не визначена"</i> із збереженням усіх алертів та координат.`;
             unkBanner.classList.remove("hidden");
           } else {
             unkBanner.classList.add("hidden");
@@ -1606,6 +1614,13 @@ ${resp.api_key}
 
     // ==================== ЛОГ ОБМІНУ ТА ДОВІДНИК ====================
     let __rawExchangeEntries = [];
+
+    function dismissUnknownTypesBanner() {
+      const unkBanner = document.getElementById("unknownTypesBanner");
+      if (unkBanner) unkBanner.classList.add("hidden");
+      const current = window.__lastUnknownCount || 0;
+      localStorage.setItem('admin_dismissed_unknown_count', String(current));
+    }
 
     async function loadExchangeLog() {
       if (!currentAdminKey) return;

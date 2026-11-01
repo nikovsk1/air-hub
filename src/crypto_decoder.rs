@@ -415,22 +415,20 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
     let mut found_targets: Option<Vec<Vec<f64>>> = None;
     let mut found_uuids: Option<Vec<String>> = None;
 
-    // Спроба знайти UUIDs у decoded[4]
+    // Спроба знайти UUIDs у decoded[4] (Item 4[0])
     if let Some(arr) = decoded.as_array() {
         if arr.len() > 4 {
             if let Some(fourth) = arr[4].as_array() {
                 for item in fourth {
                     if let Some(inner) = item.as_array() {
-                        if !inner.is_empty() {
-                            if let Some(first_str) = inner[0].as_str() {
-                                if first_str.starts_with('~') {
-                                    let uuids: Vec<String> = inner
-                                        .iter()
-                                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                        .collect();
-                                    found_uuids = Some(uuids);
-                                    break;
-                                }
+                        if !inner.is_empty() && inner.iter().take(3).all(|v| v.is_string()) {
+                            let uuids: Vec<String> = inner
+                                .iter()
+                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                .collect();
+                            if !uuids.is_empty() {
+                                found_uuids = Some(uuids);
+                                break;
                             }
                         }
                     }
@@ -499,7 +497,7 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
                         x.as_f64().map_or(false, |v| (0.0..=1.0).contains(&v))
                     });
 
-                    if !is_coords_array && first.len() >= 3 && first[0].is_number() && first[1].is_number() && first[2].is_number() {
+                    if !is_coords_array && first.len() >= 8 && first[0].is_number() && first[1].is_number() && first[2].is_number() {
                         let mut extracted_targets = Vec::new();
                         for item in arr {
                             if let Some(row) = item.as_array() {
@@ -531,10 +529,6 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
         _ => return Vec::new(),
     };
 
-    const MIN_LON: f64 = 22.13;
-    const LON_RANGE: f64 = 18.09;
-    const MAX_LAT: f64 = 52.37;
-    const LAT_RANGE: f64 = 7.99;
 
     // decoded[5][0] містить конфігурацію сповіщень сирен, а не траєкторії.
     // Траєкторії надійно та органічно накопичуються трекером TargetTracker у реальному часі.
@@ -546,6 +540,10 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
             continue;
         }
         if t[0] < 0.0 || t[1] < 0.0 || t[2] < 0.0 || t[0].is_nan() || t[1].is_nan() || t[2].is_nan() {
+            continue;
+        }
+        // Активні цілі: t[4] — статус у польоті (1 = активна). Відсікаємо неактивні/архівні (0)
+        if t.len() > 4 && t[4] == 0.0 {
             continue;
         }
         let uuid_idx = t[0] as usize;
@@ -599,8 +597,11 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
         };
 
         if c_idx < coords.len() {
-            let lon = MIN_LON + (coords[c_idx][0] * LON_RANGE);
-            let lat = MAX_LAT - (coords[c_idx][1] * LAT_RANGE);
+            let norm_x = coords[c_idx][0];
+            let norm_y = coords[c_idx][1];
+            // Точна геодезична лінійна проекція AST без Mercator-зсуву:
+            let lon = 22.137059 + (norm_x * 18.090521);
+            let lat = 52.379147 - (norm_y * 7.994549);
 
             let (raw_code, raw_name) = if typ_idx < types.len() {
                 types[typ_idx].clone()

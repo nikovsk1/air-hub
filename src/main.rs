@@ -307,3 +307,71 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+#[cfg(test)]
+mod audit_bench_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+    use std::time::Instant;
+
+    #[tokio::test]
+    async fn test_audit_endpoints_and_latency() {
+        let mut config = Config::from_env();
+        config.data_dir = std::path::PathBuf::from("./data_test_audit");
+        config.static_dir = std::path::PathBuf::from("./static");
+        let _ = std::fs::create_dir_all(&config.data_dir);
+
+        let detector = Arc::new(OblastDetector::default());
+        let storage = Arc::new(StorageManager::new(&config.data_dir, &[("test_user".to_string(), "test_api_key_123".to_string())], &detector, config.danger_radius_km));
+        let history_mgr = Arc::new(HistoryManager::new(&config.data_dir));
+        let exchange_mgr = Arc::new(ExchangeLogManager::new(&config.data_dir));
+        let http_client = reqwest::Client::new();
+        let threat_state = Arc::new(tokio::sync::RwLock::new(crate::tracker::ThreatState::default()));
+
+        let app_state = AppState {
+            config: config.clone(),
+            storage,
+            history_mgr,
+            exchange_mgr,
+            detector,
+            http_client,
+            threat_state,
+        };
+
+        let app = api::create_router(app_state);
+
+        let endpoints = vec![
+            ("GET", "/api/v1/health"),
+            ("GET", "/api/v1/unknown_types"),
+            ("GET", "/api/v1/directory"),
+            ("GET", "/api/v1/reference"),
+            ("GET", "/api/v1/regions/geojson"),
+            ("GET", "/api/v1/radar"),
+            ("GET", "/api/v1/map"),
+            ("GET", "/api/v1/history/months"),
+            ("GET", "/api/v1/radar?token=test_api_key_123"),
+            ("GET", "/api/v1/threats?token=test_api_key_123"),
+            ("GET", "/api/v1/map?token=test_api_key_123"),
+            ("GET", "/api/v1/history/months?token=test_api_key_123"),
+            ("GET", "/map"),
+            ("GET", "/replay"),
+        ];
+
+        println!("\n=== ENDPOINT LATENCY BENCHMARK ===");
+        for (meth, path) in endpoints {
+            let mut req = Request::builder()
+                .method(meth)
+                .uri(path)
+                .body(Body::empty())
+                .unwrap();
+            req.extensions_mut().insert(axum::extract::connect_info::ConnectInfo(std::net::SocketAddr::from(([127, 0, 0, 1], 12345))));
+            let start = Instant::now();
+            let res = app.clone().oneshot(req).await.unwrap();
+            let elapsed = start.elapsed();
+            println!("Endpoint {:<28} -> Status: {:<12} Latency: {:>8.2} µs ({:.3} ms)", path, res.status(), elapsed.as_micros() as f64, elapsed.as_secs_f64() * 1000.0);
+            assert!(res.status().is_success() || res.status() == StatusCode::FOUND || res.status() == StatusCode::SEE_OTHER || res.status() == StatusCode::UNAUTHORIZED || res.status() == StatusCode::FORBIDDEN);
+        }
+        let _ = std::fs::remove_dir_all(&config.data_dir);
+    }
+}
