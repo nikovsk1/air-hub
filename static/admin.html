@@ -196,6 +196,8 @@
       <div class="hidden sm:flex items-center gap-2 text-[11px] text-gray-400">
         <span>Швидко:</span>
         <a href="javascript:void(0)" onclick="scrollToFrame('usersFrame')" class="hover:text-orange-400 transition cursor-pointer">Користувачі</a> •
+        <a href="javascript:void(0)" onclick="scrollToFrame('poiFrame')" class="hover:text-orange-400 transition cursor-pointer">Військові POI</a> •
+        <a href="javascript:void(0)" onclick="scrollToFrame('serviceKeysFrame')" class="hover:text-orange-400 transition cursor-pointer">Ключі сервісів</a> •
         <a href="javascript:void(0)" onclick="scrollToFrame('historyFrame')" class="hover:text-orange-400 transition cursor-pointer">Архів історії</a> •
         <a href="javascript:void(0)" onclick="scrollToFrame('directoryFrame')" class="hover:text-orange-400 transition cursor-pointer">Лог обміну</a>
       </div>
@@ -323,6 +325,91 @@
       <!-- МОБІЛЬНИЙ КАРТКОВИЙ СПИСОК (MD:HIDDEN) -->
       <div id="keysMobileList" class="block md:hidden p-3 space-y-3">
         <div class="p-8 text-center text-gray-500">Завантаження даних...</div>
+      </div>
+    </div>
+
+    <!-- ==================== ФРЕЙМ: API КЛЮЧІ СЕРВІСІВ ==================== -->
+    <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] rounded-xl overflow-hidden shadow-xl" id="serviceKeysFrame">
+      <div class="p-4 border-b border-gray-800 flex flex-wrap justify-between items-center gap-3">
+        <div>
+          <h2 class="font-semibold text-white flex items-center gap-2">
+            <span>🛡️ API ключі сервісів</span>
+            <span class="text-xs bg-amber-950 text-amber-400 border border-amber-800 px-2.5 py-0.5 rounded-full font-mono font-medium">Офіційне API & Мапа</span>
+          </h2>
+          <p class="text-xs text-gray-400 mt-0.5">Керування ліцензійними ключами для офіційних тривог (api.ukrainealarm.com) та підложок мапи (CartoDB Dark Matter)</p>
+        </div>
+        <div>
+          <button onclick="loadServiceKeys()" class="h-8 px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition" title="Оновити список ключів">
+            <span>🔄</span><span>Оновити</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ТАБЛИЦЯ СЕРВІСНИХ КЛЮЧІВ -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-gray-950 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
+            <tr>
+              <th class="p-3 w-64">Назва сервісу</th>
+              <th class="p-3 min-w-[300px]">API ключ</th>
+              <th class="p-3 w-60">Відношення</th>
+              <th class="p-3 text-right w-48">Дії</th>
+            </tr>
+          </thead>
+          <tbody id="serviceKeysTableBody" class="divide-y divide-gray-800 text-gray-300">
+            <tr><td colspan="4" class="p-6 text-center text-gray-500">Завантаження сервісних ключів...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ==================== ФРЕЙМ: СТРАТЕГІЧНІ ТА ВІЙСЬКОВІ ОБ'ЄКТИ (POI) ==================== -->
+    <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] rounded-xl overflow-hidden shadow-xl" id="poiFrame">
+      <div class="p-4 border-b border-gray-800 flex flex-wrap justify-between items-center gap-3">
+        <div>
+          <h2 class="font-semibold text-white flex items-center gap-2">
+            <span>📍 Військові та стратегічні об'єкти (POI) України</span>
+            <span id="poiTotalBadge" class="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2.5 py-0.5 rounded-full font-mono font-medium">0 об'єктів</span>
+          </h2>
+          <p class="text-xs text-gray-400 mt-0.5">Військові аеродроми, сектори ППО, енергетичні хаби, заводи ОПК, НПЗ, порти та мости на території України</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <select id="poiCategoryFilter" onchange="filterAdminPois()" class="bg-gray-950 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-orange-500">
+            <option value="all">Усі категорії</option>
+            <option value="airbases">✈️ Військові аеродроми</option>
+            <option value="air_defense">🛡️ Позиції та сектори ППО</option>
+            <option value="energy_hubs">⚡ Енергетичні хаби</option>
+            <option value="fuel_depots">🛢️ Нафтобази та НПЗ</option>
+            <option value="defense_industry">🏭 ОПК та заводи</option>
+            <option value="ports">⚓ Морські та річкові порти</option>
+            <option value="logistics_bridges">🌉 Мости та логістика</option>
+          </select>
+          <button onclick="openPoiModal()" class="h-8 px-3 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow cursor-pointer" title="Додати новий стратегічний об'єкт">
+            <span>➕</span><span>Додати POI</span>
+          </button>
+          <button onclick="loadAdminPois()" class="h-8 px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer" title="Оновити список">
+            <span>🔄</span><span>Оновити</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- POI TABLE -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-gray-950 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
+            <tr>
+              <th class="p-3 w-48">Категорія</th>
+              <th class="p-3 min-w-[220px]">Назва об'єкта</th>
+              <th class="p-3 w-36">Область</th>
+              <th class="p-3 w-40">Координати</th>
+              <th class="p-3 min-w-[240px]">Значення / Статус</th>
+              <th class="p-3 text-right w-36">Дії</th>
+            </tr>
+          </thead>
+          <tbody id="poiTableBody" class="divide-y divide-gray-800 text-gray-300">
+            <tr><td colspan="6" class="p-6 text-center text-gray-500">Завантаження стратегічних об'єктів...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -601,6 +688,155 @@
       }, 100);
     }
 
+    
+    let adminPoiList = [];
+    const ADMIN_POI_CATS = {
+      airbases: { name: "Військові аеродроми", icon: "✈️", color: "#60a5fa" },
+      air_defense: { name: "Сектори та позиції ППО", icon: "🛡️", color: "#34d399" },
+      energy_hubs: { name: "Енергетичні хаби", icon: "⚡", color: "#fbbf24" },
+      fuel_depots: { name: "Нафтобази та НПЗ", icon: "🛢️", color: "#f87171" },
+      defense_industry: { name: "ОПК та заводи", icon: "🏭", color: "#c084fc" },
+      ports: { name: "Морські та річкові порти", icon: "⚓", color: "#38bdf8" },
+      logistics_bridges: { name: "Мости та логістика", icon: "🌉", color: "#fb923c" }
+    };
+
+    async function loadAdminPois() {
+      try {
+        const res = await fetch("/api/v1/admin/poi?admin_key=" + encodeURIComponent(currentAdminKey));
+        if (res.ok) {
+          adminPoiList = await res.json();
+        } else {
+          const res2 = await fetch("/api/v1/client/poi");
+          if (res2.ok) adminPoiList = await res2.json();
+        }
+        renderAdminPoiTable();
+      } catch (err) {
+        console.warn("Could not load POIs:", err);
+      }
+    }
+
+    function renderAdminPoiTable() {
+      const tbody = document.getElementById("poiTableBody");
+      const badge = document.getElementById("poiTotalBadge");
+      const filter = document.getElementById("poiCategoryFilter")?.value || "all";
+      if (!tbody) return;
+
+      const filtered = (filter === "all")
+        ? adminPoiList
+        : adminPoiList.filter(p => p.category === filter);
+
+      if (badge) badge.innerText = `${adminPoiList.length} об'єктів`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-gray-500">Немає об\'єктів у цій категорії</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(p => {
+        const cat = ADMIN_POI_CATS[p.category] || { icon: "📍", name: p.category, color: "#94a3b8" };
+        return `
+          <tr class="hover:bg-gray-800/40 transition">
+            <td class="p-3">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold" style="background:rgba(255,255,255,0.05);color:${cat.color};">
+                <span>${cat.icon}</span>
+                <span>${cat.name}</span>
+              </span>
+            </td>
+            <td class="p-3 font-medium text-white">${p.name}</td>
+            <td class="p-3 text-gray-300 text-xs">${p.oblast} обл.</td>
+            <td class="p-3 font-mono text-xs text-gray-400">${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}</td>
+            <td class="p-3 text-xs text-gray-300">
+              <div class="line-clamp-1">${p.significance}</div>
+              <div class="text-[10px] text-emerald-400 font-mono mt-0.5">${p.status}</div>
+            </td>
+            <td class="p-3 text-right">
+              <button onclick="editPoiItem('${p.id}')" class="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-sky-400 hover:text-sky-300 rounded text-xs font-semibold mr-1 transition cursor-pointer">
+                ✏️
+              </button>
+              <button onclick="deletePoiItem('${p.id}')" class="px-2.5 py-1 bg-gray-800 hover:bg-red-950 text-red-400 hover:text-red-300 rounded text-xs font-semibold transition cursor-pointer">
+                🗑️
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterAdminPois() {
+      renderAdminPoiTable();
+    }
+
+    function openPoiModal(poi = null) {
+      document.getElementById("poiModalTitle").innerText = poi ? "Редагувати об'єкт (POI)" : "Додати стратегічний об'єкт (POI)";
+      document.getElementById("poiFormId").value = poi ? poi.id : "";
+      document.getElementById("poiFormName").value = poi ? poi.name : "";
+      document.getElementById("poiFormCategory").value = poi ? poi.category : "airbases";
+      document.getElementById("poiFormOblast").value = poi ? poi.oblast : "";
+      document.getElementById("poiFormLat").value = poi ? poi.lat : "";
+      document.getElementById("poiFormLon").value = poi ? poi.lon : "";
+      document.getElementById("poiFormSignificance").value = poi ? poi.significance : "";
+      document.getElementById("poiFormStatus").value = poi ? poi.status : "Активний захищений сектор";
+      document.getElementById("poiModal").classList.remove("hidden");
+    }
+
+    function closePoiModal() {
+      document.getElementById("poiModal").classList.add("hidden");
+    }
+
+    function editPoiItem(id) {
+      const poi = adminPoiList.find(p => p.id === id);
+      if (poi) openPoiModal(poi);
+    }
+
+    async function deletePoiItem(id) {
+      if (!confirm("Ви дійсно бажаєте видалити цей стратегічний об'єкт?")) return;
+      try {
+        const res = await fetch("/api/v1/admin/poi/" + encodeURIComponent(id) + "?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "DELETE"
+        });
+        if (res.ok) {
+          adminPoiList = adminPoiList.filter(p => p.id !== id);
+          renderAdminPoiTable();
+        } else {
+          adminPoiList = adminPoiList.filter(p => p.id !== id);
+          renderAdminPoiTable();
+        }
+      } catch (err) {
+        adminPoiList = adminPoiList.filter(p => p.id !== id);
+        renderAdminPoiTable();
+      }
+    }
+
+    async function handleSavePoiForm(event) {
+      event.preventDefault();
+      const id = document.getElementById("poiFormId").value || ("poi_" + Date.now());
+      const poiData = {
+        id,
+        name: document.getElementById("poiFormName").value.trim(),
+        category: document.getElementById("poiFormCategory").value,
+        oblast: document.getElementById("poiFormOblast").value.trim(),
+        lat: parseFloat(document.getElementById("poiFormLat").value),
+        lon: parseFloat(document.getElementById("poiFormLon").value),
+        significance: document.getElementById("poiFormSignificance").value.trim(),
+        status: document.getElementById("poiFormStatus").value.trim()
+      };
+
+      try {
+        await fetch("/api/v1/admin/poi?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(poiData)
+        });
+      } catch (e) {}
+
+      const idx = adminPoiList.findIndex(p => p.id === id);
+      if (idx >= 0) adminPoiList[idx] = poiData;
+      else adminPoiList.unshift(poiData);
+
+      closePoiModal();
+      renderAdminPoiTable();
+    }
+
     function handleLogout() {
       localStorage.removeItem("hub_admin_key");
       sessionStorage.removeItem("hub_admin_key");
@@ -739,9 +975,243 @@
         const data = await res.json();
         document.getElementById("statKeysCount").innerText = (data.users || []).length;
         renderKeysTable(data.users || []);
+        loadServiceKeys();
+        loadAdminPois();
         loadExchangeLog();
       } catch(e) {
         alert("Помилка завантаження списку ключів: " + e);
+      }
+    }
+
+    let currentServiceKeysData = null;
+    let serviceKeyVisibility = {
+      ukrainealarm: false,
+      cartodb: false
+    };
+
+    async function loadServiceKeys() {
+      if (!currentAdminKey) return;
+      const tbody = document.getElementById("serviceKeysTableBody");
+      if (!tbody) return;
+
+      try {
+        const res = await fetch("/api/v1/admin/service_keys?admin_key=" + encodeURIComponent(currentAdminKey));
+        if (res.status === 403) return;
+        const data = await res.json();
+        if (data.status === "ok" && data.service_keys) {
+          currentServiceKeysData = data.service_keys;
+          renderServiceKeysTable();
+        }
+      } catch(e) {
+        console.warn("Could not load service keys:", e);
+      }
+    }
+
+    function renderServiceKeysTable() {
+      const tbody = document.getElementById("serviceKeysTableBody");
+      if (!tbody || !currentServiceKeysData) return;
+
+      const ua = currentServiceKeysData.ukrainealarm || {};
+      const carto = currentServiceKeysData.cartodb || {};
+
+      // UkraineAlarm
+      const uaVisible = !!serviceKeyVisibility.ukrainealarm;
+      const uaVal = ua.key || "";
+
+      // CartoDB
+      const cartoVisible = !!serviceKeyVisibility.cartodb;
+      const relSelectEl = document.getElementById("cartodbRelationSelect");
+      const relSelectVal = relSelectEl ? relSelectEl.value : "Загальна мапа";
+      
+      let cartoVal = "";
+      if (relSelectVal === "Загальна мапа") {
+        cartoVal = carto.global_key || "";
+      } else {
+        cartoVal = (carto.user_keys && carto.user_keys[relSelectVal]) ? carto.user_keys[relSelectVal] : "";
+      }
+
+      // Options for cartodb relation
+      const relations = carto.available_relations || ["Загальна мапа"];
+      let relOptionsHtml = "";
+      relations.forEach(r => {
+        const sel = (r === relSelectVal) ? "selected" : "";
+        relOptionsHtml += `<option value="${escapeHtml(r)}" ${sel}>${escapeHtml(r)}</option>`;
+      });
+
+      tbody.innerHTML = `
+        <tr class="hover:bg-gray-900/60 transition">
+          <td class="p-3">
+            <div class="font-bold text-white flex items-center gap-2">
+              <span>🚨</span>
+              <span>${escapeHtml(ua.name || "UkraineAlarm Офіційний API v3")}</span>
+            </div>
+            <div class="text-[11px] text-orange-400 mt-0.5">Мапа тривог (Офіційні сирени / Smart Polling)</div>
+          </td>
+          <td class="p-3">
+            <div class="flex items-center gap-2 max-w-md">
+              <div class="relative flex-1">
+                <input type="${uaVisible ? 'text' : 'password'}" id="ukrainealarmKeyInput" 
+                       value="${escapeHtml(uaVal)}" 
+                       placeholder="Введіть офіційний API-токен (з @UkraineAlarmStateBot)..." 
+                       class="w-full bg-gray-950 border border-gray-700 px-3 py-1.5 rounded-lg text-xs text-white font-mono focus:border-orange-500 focus:outline-none pr-9">
+                <button type="button" onclick="toggleServiceKeyEye('ukrainealarm')" 
+                        class="absolute right-2.5 top-1.5 text-gray-400 hover:text-gray-200 text-xs" 
+                        title="${uaVisible ? 'Приховати токен' : 'Показати токен'}">
+                  ${uaVisible ? '👁️' : '🔒'}
+                </button>
+              </div>
+              ${uaVal ? '<span class="text-[11px] text-emerald-400 shrink-0 font-medium bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">Активний</span>' : '<span class="text-[11px] text-amber-400 shrink-0 font-medium bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800">Neptun Fallback</span>'}
+            </div>
+          </td>
+          <td class="p-3">
+            <span class="inline-flex items-center gap-1.5 bg-[#282227] text-[#cf9b6d] border border-[#6d5b57] px-2.5 py-1 rounded-lg text-xs font-semibold">
+              <span>🌐</span><span>Загальна мапа</span>
+            </span>
+          </td>
+          <td class="p-3 text-right space-x-1.5">
+            <button onclick="saveServiceKey('ukrainealarm')" class="h-8 px-3 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition shadow">
+              <span>💾</span><span>Зберегти</span>
+            </button>
+            <button onclick="deleteServiceKey('ukrainealarm')" class="h-8 px-2.5 bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 rounded-lg text-xs font-medium inline-flex items-center gap-1 transition">
+              <span>🗑️</span><span>Видалити</span>
+            </button>
+          </td>
+        </tr>
+
+        <tr class="hover:bg-gray-900/60 transition">
+          <td class="p-3">
+            <div class="font-bold text-white flex items-center gap-2">
+              <span>🗺️</span>
+              <span>${escapeHtml(carto.name || "CartoDB Dark Matter")}</span>
+            </div>
+            <div class="text-[11px] text-sky-400 mt-0.5">Підложка мапи (CARTO Basemaps API)</div>
+          </td>
+          <td class="p-3">
+            <div class="flex items-center gap-2 max-w-md">
+              <div class="relative flex-1">
+                <input type="${cartoVisible ? 'text' : 'password'}" id="cartodbKeyInput" 
+                       value="${escapeHtml(cartoVal)}" 
+                       placeholder="Введіть CARTO API ключ (напр. pk.eyJ1...)..." 
+                       class="w-full bg-gray-950 border border-gray-700 px-3 py-1.5 rounded-lg text-xs text-white font-mono focus:border-sky-500 focus:outline-none pr-9">
+                <button type="button" onclick="toggleServiceKeyEye('cartodb')" 
+                        class="absolute right-2.5 top-1.5 text-gray-400 hover:text-gray-200 text-xs" 
+                        title="${cartoVisible ? 'Приховати токен' : 'Показати токен'}">
+                  ${cartoVisible ? '👁️' : '🔒'}
+                </button>
+              </div>
+              ${cartoVal ? '<span class="text-[11px] text-emerald-400 shrink-0 font-medium bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">Встановлено</span>' : '<span class="text-[11px] text-gray-400 shrink-0 font-medium bg-gray-900 px-2 py-0.5 rounded border border-gray-800">Не задано</span>'}
+            </div>
+          </td>
+          <td class="p-3">
+            <select id="cartodbRelationSelect" onchange="onCartodbRelationChange(this.value)" class="bg-gray-950 border border-gray-700 text-xs text-white rounded-lg px-2.5 py-1.5 focus:border-sky-500 focus:outline-none w-full max-w-[200px]">
+              ${relOptionsHtml}
+            </select>
+          </td>
+          <td class="p-3 text-right space-x-1.5">
+            <button onclick="saveServiceKey('cartodb')" class="h-8 px-3 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition shadow">
+              <span>💾</span><span>Зберегти</span>
+            </button>
+            <button onclick="deleteServiceKey('cartodb')" class="h-8 px-2.5 bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 rounded-lg text-xs font-medium inline-flex items-center gap-1 transition">
+              <span>🗑️</span><span>Видалити</span>
+            </button>
+          </td>
+        </tr>
+      `;
+    }
+
+    function onCartodbRelationChange(rel) {
+      if (!currentServiceKeysData || !currentServiceKeysData.cartodb) return;
+      const carto = currentServiceKeysData.cartodb;
+      let val = "";
+      if (rel === "Загальна мапа") {
+        val = carto.global_key || "";
+      } else {
+        val = (carto.user_keys && carto.user_keys[rel]) ? carto.user_keys[rel] : "";
+      }
+      const inp = document.getElementById("cartodbKeyInput");
+      if (inp) {
+        inp.value = val;
+      }
+    }
+
+    function toggleServiceKeyEye(service) {
+      serviceKeyVisibility[service] = !serviceKeyVisibility[service];
+      const isVis = serviceKeyVisibility[service];
+      const inpId = service === 'ukrainealarm' ? 'ukrainealarmKeyInput' : 'cartodbKeyInput';
+      const inp = document.getElementById(inpId);
+      if (inp) {
+        inp.type = isVis ? 'text' : 'password';
+      }
+      renderServiceKeysTable();
+    }
+
+    async function saveServiceKey(service) {
+      if (!currentAdminKey) return showLoginScreen();
+      let keyVal = "";
+      let relVal = "Загальна мапа";
+
+      if (service === "ukrainealarm") {
+        const inp = document.getElementById("ukrainealarmKeyInput");
+        keyVal = inp ? inp.value.trim() : "";
+      } else if (service === "cartodb") {
+        const inp = document.getElementById("cartodbKeyInput");
+        keyVal = inp ? inp.value.trim() : "";
+        const relSel = document.getElementById("cartodbRelationSelect");
+        if (relSel) relVal = relSel.value;
+      }
+
+      try {
+        const res = await fetch("/api/v1/admin/service_keys?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            service,
+            relation: relVal,
+            key: keyVal
+          })
+        });
+        const resp = await res.json();
+        if (res.ok && resp.status === "ok") {
+          alert(`✅ Ключ для ${service === 'ukrainealarm' ? 'UkraineAlarm' : 'CartoDB (' + relVal + ')'} успішно збережено!`);
+          await loadServiceKeys();
+        } else {
+          alert("Помилка збереження ключа: " + (resp.message || "Невідома помилка"));
+        }
+      } catch(e) {
+        alert("Помилка мережі при збереженні ключа: " + e);
+      }
+    }
+
+    async function deleteServiceKey(service) {
+      if (!currentAdminKey) return showLoginScreen();
+      let relVal = "Загальна мапа";
+      if (service === "cartodb") {
+        const relSel = document.getElementById("cartodbRelationSelect");
+        if (relSel) relVal = relSel.value;
+      }
+
+      if (!confirm(`Ви дійсно бажаєте видалити збережений API-ключ для ${service === 'ukrainealarm' ? 'UkraineAlarm' : 'CartoDB (' + relVal + ')'}?`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/v1/admin/service_keys?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            service,
+            relation: relVal
+          })
+        });
+        const resp = await res.json();
+        if (res.ok && resp.status === "ok") {
+          alert(`🗑️ Ключ для ${service === 'ukrainealarm' ? 'UkraineAlarm' : 'CartoDB (' + relVal + ')'} видалено!`);
+          await loadServiceKeys();
+        } else {
+          alert("Помилка видалення ключа: " + (resp.message || "Невідома помилка"));
+        }
+      } catch(e) {
+        alert("Помилка мережі при видаленні ключа: " + e);
       }
     }
 
@@ -2031,6 +2501,77 @@ ${resp.api_key}
           <span>🎯</span><span>Відкрити радар</span>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНЕ ВІКНО: СТВОРЕННЯ / РЕДАГУВАННЯ POI -->
+  <div id="poiModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl max-w-lg w-full shadow-2xl p-5 space-y-4">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📍</span>
+          <h3 id="poiModalTitle" class="font-bold text-white text-base">Додати стратегічний об'єкт (POI)</h3>
+        </div>
+        <button onclick="closePoiModal()" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition cursor-pointer">✕</button>
+      </div>
+
+      <form id="poiForm" onsubmit="handleSavePoiForm(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="poiFormId">
+
+        <div>
+          <label class="block text-gray-300 font-medium mb-1">Назва об'єкта *</label>
+          <input type="text" id="poiFormName" required placeholder="напр. Авіабаза Старокостянтинів" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-orange-500">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-gray-300 font-medium mb-1">Категорія *</label>
+            <select id="poiFormCategory" required class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-orange-500">
+              <option value="airbases">✈️ Військові аеродроми</option>
+              <option value="air_defense">🛡️ Позиції та сектори ППО</option>
+              <option value="energy_hubs">⚡ Енергетичні хаби</option>
+              <option value="fuel_depots">🛢️ Нафтобази та НПЗ</option>
+              <option value="defense_industry">🏭 ОПК та заводи</option>
+              <option value="ports">⚓ Морські та річкові порти</option>
+              <option value="logistics_bridges">🌉 Мости та логістика</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-gray-300 font-medium mb-1">Область *</label>
+            <input type="text" id="poiFormOblast" required placeholder="напр. Хмельницька" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-orange-500">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-gray-300 font-medium mb-1">Широта (Lat) *</label>
+            <input type="number" step="any" id="poiFormLat" required placeholder="напр. 49.7497" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-white font-mono focus:outline-none focus:border-orange-500">
+          </div>
+          <div>
+            <label class="block text-gray-300 font-medium mb-1">Довгота (Lon) *</label>
+            <input type="number" step="any" id="poiFormLon" required placeholder="напр. 27.2725" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-white font-mono focus:outline-none focus:border-orange-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-gray-300 font-medium mb-1">Значення / Опис</label>
+          <input type="text" id="poiFormSignificance" placeholder="напр. Базування тактичної авіації (Су-24М/МР, F-16)" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-orange-500">
+        </div>
+
+        <div>
+          <label class="block text-gray-300 font-medium mb-1">Статус об'єкта</label>
+          <input type="text" id="poiFormStatus" placeholder="напр. Активний захищений сектор" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-orange-500">
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-gray-800">
+          <button type="button" onclick="closePoiModal()" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg font-semibold transition cursor-pointer">
+            Скасувати
+          </button>
+          <button type="submit" class="px-4 py-2 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg transition shadow cursor-pointer">
+            💾 Зберегти
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

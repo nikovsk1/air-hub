@@ -91,7 +91,7 @@ pub struct RegionFeatureData {
     pub bbox: (f64, f64, f64, f64), // (min_lon, min_lat, max_lon, max_lat)
     pub center: (f64, f64),         // (lat, lon)
     #[serde(skip)]
-    pub polygons: Vec<Vec<(f64, f64)>>, // [ [ (lon, lat) ] ]
+    pub polygons: Vec<Vec<Vec<(f64, f64)>>>, // [ Polygon[ Ring[ (lon, lat) ] ] ]
 }
 
 #[derive(Clone, Default)]
@@ -225,7 +225,7 @@ impl OblastDetector {
         Ok(detector)
     }
 
-    /// 2D Ray-Casting алгоритм перевірки належності точки полігону
+    /// 2D Ray-Casting алгоритм перевірки належності точки контуру
     pub fn point_in_polygon(x: f64, y: f64, poly: &[(f64, f64)]) -> bool {
         let n = poly.len();
         if n < 3 {
@@ -250,6 +250,23 @@ impl OblastDetector {
         inside
     }
 
+    /// Перевірка точки у полігоні з урахуванням внутрішніх отворів/анклавів (holes)
+    /// poly[0] - зовнішній периметр, poly[1..] - внутрішні дірки (анклави/озера)
+    pub fn point_in_polygon_with_holes(x: f64, y: f64, poly: &[Vec<(f64, f64)>]) -> bool {
+        if poly.is_empty() {
+            return false;
+        }
+        if !Self::point_in_polygon(x, y, &poly[0]) {
+            return false;
+        }
+        for hole in &poly[1..] {
+            if Self::point_in_polygon(x, y, hole) {
+                return false;
+            }
+        }
+        true
+    }
+
     /// Точне географічне визначення локації:
     /// 1. Місто Київ (ID 31) перевіряється першим (анклав всередині Київської області)
     /// 2. Райони (Rank 2) перевіряються другими
@@ -259,8 +276,8 @@ impl OblastDetector {
         if let Some(kyiv) = self.oblasts_by_id.get("31") {
             let b = kyiv.bbox;
             if lon >= b.0 && lon <= b.2 && lat >= b.1 && lat <= b.3 {
-                for ring in &kyiv.polygons {
-                    if Self::point_in_polygon(lon, lat, ring) {
+                for poly in &kyiv.polygons {
+                    if Self::point_in_polygon_with_holes(lon, lat, poly) {
                         return LocationInfo {
                             oblast: "м. Київ".to_string(),
                             oblast_id: "31".to_string(),
@@ -278,8 +295,8 @@ impl OblastDetector {
         for ra in &self.raion_regions {
             let b = ra.bbox;
             if lon >= b.0 && lon <= b.2 && lat >= b.1 && lat <= b.3 {
-                for ring in &ra.polygons {
-                    if Self::point_in_polygon(lon, lat, ring) {
+                for poly in &ra.polygons {
+                    if Self::point_in_polygon_with_holes(lon, lat, poly) {
                         let ob_id = &ra.oblast_id;
                         let ob_name = self.oblasts_by_id.get(ob_id)
                             .map(|o| o.name.clone())
@@ -305,8 +322,8 @@ impl OblastDetector {
             }
             let b = ob.bbox;
             if lon >= b.0 && lon <= b.2 && lat >= b.1 && lat <= b.3 {
-                for ring in &ob.polygons {
-                    if Self::point_in_polygon(lon, lat, ring) {
+                for poly in &ob.polygons {
+                    if Self::point_in_polygon_with_holes(lon, lat, poly) {
                         return LocationInfo {
                             oblast: ob.name.clone(),
                             oblast_id: ob.id.clone(),
@@ -387,7 +404,7 @@ impl OblastDetector {
     }
 }
 
-fn extract_polygons(geom_val: Option<&Value>) -> Vec<Vec<(f64, f64)>> {
+fn extract_polygons(geom_val: Option<&Value>) -> Vec<Vec<Vec<(f64, f64)>>> {
     let mut res = Vec::new();
     let geom = match geom_val {
         Some(g) => g,
@@ -397,46 +414,49 @@ fn extract_polygons(geom_val: Option<&Value>) -> Vec<Vec<(f64, f64)>> {
     let g_type = geom.get("type").and_then(|t| t.as_str()).unwrap_or("");
     let coords = geom.get("coordinates");
 
-    if g_type == "Polygon" {
-        if let Some(poly_arr) = coords.and_then(|c| c.as_array()) {
-            for ring_val in poly_arr {
-                if let Some(ring) = ring_val.as_array() {
-                    let mut pts = Vec::with_capacity(ring.len());
-                    for pt in ring {
-                        if let Some(p) = pt.as_array() {
-                            if p.len() >= 2 {
-                                if let (Some(x), Some(y)) = (p[0].as_f64(), p[1].as_f64()) {
-                                    pts.push((x, y));
-                                }
-                            }
+    fn parse_ring(ring_val: &Value) -> Vec<(f64, f64)> {
+        let mut pts = Vec::new();
+        if let Some(ring) = ring_val.as_array() {
+            pts.reserve(ring.len());
+            for pt in ring {
+                if let Some(p) = pt.as_array() {
+                    if p.len() >= 2 {
+                        if let (Some(x), Some(y)) = (p[0].as_f64(), p[1].as_f64()) {
+                            pts.push((x, y));
                         }
                     }
-                    if !pts.is_empty() {
-                        res.push(pts);
-                    }
                 }
+            }
+        }
+        pts
+    }
+
+    if g_type == "Polygon" {
+        if let Some(poly_arr) = coords.and_then(|c| c.as_array()) {
+            let mut rings = Vec::new();
+            for ring_val in poly_arr {
+                let ring = parse_ring(ring_val);
+                if !ring.is_empty() {
+                    rings.push(ring);
+                }
+            }
+            if !rings.is_empty() {
+                res.push(rings);
             }
         }
     } else if g_type == "MultiPolygon" {
         if let Some(mpoly_arr) = coords.and_then(|c| c.as_array()) {
             for poly_val in mpoly_arr {
                 if let Some(poly_arr) = poly_val.as_array() {
+                    let mut rings = Vec::new();
                     for ring_val in poly_arr {
-                        if let Some(ring) = ring_val.as_array() {
-                            let mut pts = Vec::with_capacity(ring.len());
-                            for pt in ring {
-                                if let Some(p) = pt.as_array() {
-                                    if p.len() >= 2 {
-                                        if let (Some(x), Some(y)) = (p[0].as_f64(), p[1].as_f64()) {
-                                            pts.push((x, y));
-                                        }
-                                    }
-                                }
-                            }
-                            if !pts.is_empty() {
-                                res.push(pts);
-                            }
+                        let ring = parse_ring(ring_val);
+                        if !ring.is_empty() {
+                            rings.push(ring);
                         }
+                    }
+                    if !rings.is_empty() {
+                        res.push(rings);
                     }
                 }
             }
@@ -446,18 +466,20 @@ fn extract_polygons(geom_val: Option<&Value>) -> Vec<Vec<(f64, f64)>> {
     res
 }
 
-fn calculate_bbox(polygons: &[Vec<(f64, f64)>]) -> (f64, f64, f64, f64) {
+fn calculate_bbox(polygons: &[Vec<Vec<(f64, f64)>>]) -> (f64, f64, f64, f64) {
     let mut min_lon = f64::INFINITY;
     let mut max_lon = f64::NEG_INFINITY;
     let mut min_lat = f64::INFINITY;
     let mut max_lat = f64::NEG_INFINITY;
 
-    for ring in polygons {
-        for &(lon, lat) in ring {
-            if lon < min_lon { min_lon = lon; }
-            if lon > max_lon { max_lon = lon; }
-            if lat < min_lat { min_lat = lat; }
-            if lat > max_lat { max_lat = lat; }
+    for poly in polygons {
+        for ring in poly {
+            for &(lon, lat) in ring {
+                if lon < min_lon { min_lon = lon; }
+                if lon > max_lon { max_lon = lon; }
+                if lat < min_lat { min_lat = lat; }
+                if lat > max_lat { max_lat = lat; }
+            }
         }
     }
 

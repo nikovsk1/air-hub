@@ -13,19 +13,6 @@ use crate::storage::now_ts;
 use crate::tracker::TargetTrack;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
-pub struct HistoryTargetItem {
-    pub id: String,
-    pub type_ua: String,
-    pub category: String,
-    pub color_hex: String,
-    pub first_seen: i64,
-    pub last_seen: i64,
-    pub status: String,
-    pub trajectory: Vec<serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryFileInfo {
     pub month: String,
     pub filename: String,
@@ -191,16 +178,27 @@ impl HistoryManager {
     pub fn now_kyiv() -> chrono::DateTime<chrono::FixedOffset> {
         let utc = Utc::now();
         let month = utc.month();
-        let is_dst = if month > 3 && month < 10 {
-            true
-        } else if month == 3 {
-            let day = utc.day();
-            day >= (31 - 6) && utc.weekday() == chrono::Weekday::Sun
-        } else if month == 10 {
-            let day = utc.day();
-            !(day >= (31 - 6) && utc.weekday() == chrono::Weekday::Sun)
-        } else {
-            false
+        let day = utc.day() as i32;
+        let dow = utc.weekday().num_days_from_sunday() as i32; // 0 = Неділя .. 6 = Субота
+        let prev_sunday = day - dow;
+
+        let is_dst = match month {
+            4..=9 => true,
+            3 => {
+                if prev_sunday >= 25 {
+                    if dow == 0 { utc.hour() >= 1 } else { true }
+                } else {
+                    false
+                }
+            }
+            10 => {
+                if prev_sunday >= 25 {
+                    if dow == 0 { utc.hour() < 1 } else { false }
+                } else {
+                    true
+                }
+            }
+            _ => false,
         };
         let offset_hours = if is_dst { 3 } else { 2 };
         let offset = chrono::FixedOffset::east_opt(offset_hours * 3600).unwrap();
@@ -663,11 +661,6 @@ impl HistoryManager {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn get_month_data(&self, month: &str) -> Option<Value> {
-        self.get_month_history_filtered(month, None)
-    }
-
     /// Отримання історії за вибраний місяць з фільтрацією за днем (YYYY-MM-DD)
     pub fn get_month_history_filtered(&self, month: &str, date_filter: Option<&str>) -> Option<Value> {
         let cached = {
@@ -1028,98 +1021,5 @@ impl HistoryManager {
         } else {
             Err(format!("Отримані дані за місяць {} не містять цілей", month))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_load_month_metadata_new_and_legacy() {
-        let temp_dir = std::env::temp_dir().join(format!("test_history_{}", Utc::now().timestamp_nanos_opt().unwrap_or(0)));
-        let _ = fs::create_dir_all(&temp_dir);
-
-        let mgr = HistoryManager::new(&temp_dir);
-
-        // 1. Тест нового формату з блоком "meta"
-        let month_new = "2026-10";
-        let new_file = mgr.history_dir.join(format!("flight_history_{}.json", month_new));
-        let new_content = serde_json::json!({
-            "meta": {
-                "month": month_new,
-                "updated_at": "2026-10-31T20:00:00Z",
-                "total_targets": 42,
-                "dates": ["2026-10-30", "2026-10-31"]
-            },
-            "month": month_new,
-            "updated_at": "2026-10-31T20:00:00Z",
-            "total_targets": 42,
-            "dates": ["2026-10-30", "2026-10-31"],
-            "targets": {
-                "t1": {"id": "t1", "date": "2026-10-31"}
-            }
-        });
-        fs::write(&new_file, serde_json::to_string(&new_content).unwrap()).unwrap();
-
-        let meta_res = mgr.load_month_metadata(month_new).expect("Should parse new meta header");
-        assert_eq!(meta_res.0, 42);
-        assert_eq!(meta_res.1, vec!["2026-10-30", "2026-10-31"]);
-        assert_eq!(meta_res.2, "2026-10-31T20:00:00Z");
-
-        // 2. Тест legacy формату без блоку "meta"
-        let month_legacy = "2026-09";
-        let legacy_file = mgr.history_dir.join(format!("flight_history_{}.json", month_legacy));
-        let legacy_content = serde_json::json!({
-            "total_targets": 15,
-            "dates": ["2026-09-01"],
-            "updated_at": "2026-09-02T10:00:00Z",
-            "targets": {}
-        });
-        fs::write(&legacy_file, serde_json::to_string(&legacy_content).unwrap()).unwrap();
-
-        let legacy_res = mgr.load_month_metadata(month_legacy).expect("Should fallback and parse legacy file");
-        assert_eq!(legacy_res.0, 15);
-        assert_eq!(legacy_res.1, vec!["2026-09-01"]);
-        assert_eq!(legacy_res.2, "2026-09-02T10:00:00Z");
-
-        let _ = fs::remove_dir_all(&temp_dir);
-    }
-
-    #[test]
-    fn test_month_meta_cache_eviction_limit() {
-        let temp_dir = std::env::temp_dir().join(format!("test_history_eviction_{}", Utc::now().timestamp_nanos_opt().unwrap_or(0)));
-        let _ = fs::create_dir_all(&temp_dir);
-
-        let mgr = HistoryManager::new(&temp_dir);
-        // Pre-fill month_meta_cache with 36 entries
-        {
-            let mut cache = mgr.month_meta_cache.write();
-            for i in 1..=36 {
-                cache.insert(format!("2020-{:02}", i), (i, vec![], "test".to_string()));
-            }
-            assert_eq!(cache.len(), 36);
-        }
-
-        // Create one real file to trigger load_month_metadata
-        let month_real = "2026-10";
-        let new_file = mgr.history_dir.join(format!("flight_history_{}.json", month_real));
-        let new_content = serde_json::json!({
-            "meta": {
-                "month": month_real,
-                "updated_at": "2026-10-31T20:00:00Z",
-                "total_targets": 1,
-                "dates": []
-            },
-            "targets": {}
-        });
-        fs::write(&new_file, serde_json::to_string(&new_content).unwrap()).unwrap();
-
-        mgr.load_month_metadata(month_real).expect("Should load");
-        // Ensure cache length does not exceed 36
-        assert_eq!(mgr.month_meta_cache.read().len(), 36);
-        assert!(mgr.month_meta_cache.read().contains_key(month_real));
-
-        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

@@ -1,4 +1,4 @@
-﻿use std::collections::HashMap;
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -79,6 +79,16 @@ fn default_react_threats() -> Vec<String> {
     ]
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ServiceKeysConfig {
+    #[serde(default)]
+    pub ukrainealarm_api_token: Option<String>,
+    #[serde(default)]
+    pub cartodb_global_api_key: Option<String>,
+    #[serde(default)]
+    pub cartodb_user_keys: HashMap<String, String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HubConfigData {
     pub users: HashMap<String, User>,
@@ -91,6 +101,8 @@ pub struct HubConfigData {
     #[serde(default = "default_sync_hours")]
     pub gdrive_auto_sync_hours: u32,
     pub last_gdrive_sync_ts: Option<i64>,
+    #[serde(default)]
+    pub service_keys: ServiceKeysConfig,
 }
 
 fn default_sync_hours() -> u32 { 12 }
@@ -105,20 +117,55 @@ impl Default for HubConfigData {
             gdrive_folder_url: None,
             gdrive_auto_sync_hours: 12,
             last_gdrive_sync_ts: None,
+            service_keys: ServiceKeysConfig::default(),
         }
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PoiItem {
+    pub id: String,
+    pub category: String,
+    pub name: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub oblast: String,
+    pub significance: String,
+    pub status: String,
+}
+
 pub struct StorageManager {
     file_path: PathBuf,
+    poi_path: PathBuf,
     default_danger_km: f64,
     data: RwLock<HubConfigData>,
+    poi_items: RwLock<Vec<PoiItem>>,
 }
 
 impl StorageManager {
     pub fn new(data_dir: &Path, initial_users: &[(String, String)], detector: &OblastDetector, default_danger_km: f64) -> Self {
         let file_path = data_dir.join("hub_config.json");
         let mut loaded = HubConfigData::default();
+
+        let poi_path = data_dir.join("poi.json");
+        let mut loaded_pois = Vec::new();
+        if poi_path.exists() {
+            if let Ok(content) = fs::read_to_string(&poi_path) {
+                if let Ok(parsed) = serde_json::from_str::<Vec<PoiItem>>(&content) {
+                    loaded_pois = parsed;
+                }
+            }
+        }
+        if loaded_pois.is_empty() {
+            let default_poi_path = PathBuf::from("data_defaults").join("poi.json");
+            if default_poi_path.exists() {
+                if let Ok(content) = fs::read_to_string(&default_poi_path) {
+                    if let Ok(parsed) = serde_json::from_str::<Vec<PoiItem>>(&content) {
+                        loaded_pois = parsed;
+                    }
+                }
+            }
+        }
 
         if file_path.exists() {
             if let Ok(content) = fs::read_to_string(&file_path) {
@@ -172,11 +219,58 @@ impl StorageManager {
 
         let mgr = Self {
             file_path,
+            poi_path,
             default_danger_km,
             data: RwLock::new(loaded),
+            poi_items: RwLock::new(loaded_pois),
         };
         let _ = mgr.save_atomic();
+        let _ = mgr.save_pois_atomic();
         mgr
+    }
+
+    pub fn get_pois(&self) -> Vec<PoiItem> {
+        self.poi_items.read().clone()
+    }
+
+    pub fn save_poi(&self, item: PoiItem) -> Result<(), String> {
+        let mut guard = self.poi_items.write();
+        if let Some(pos) = guard.iter().position(|p| p.id == item.id) {
+            guard[pos] = item;
+        } else {
+            guard.push(item);
+        }
+        drop(guard);
+        self.save_pois_atomic()
+    }
+
+    pub fn delete_poi(&self, id: &str) -> Result<bool, String> {
+        let mut guard = self.poi_items.write();
+        let prev_len = guard.len();
+        guard.retain(|p| p.id != id);
+        let removed = guard.len() < prev_len;
+        drop(guard);
+        if removed {
+            let _ = self.save_pois_atomic();
+        }
+        Ok(removed)
+    }
+
+    pub fn save_pois_atomic(&self) -> Result<(), String> {
+        let json_str = {
+            let guard = self.poi_items.read();
+            serde_json::to_string_pretty(&*guard).map_err(|e| e.to_string())?
+        };
+        let pid = std::process::id();
+        let ts = now_ts();
+        let tmp_path = self.poi_path.with_extension(format!("tmp.{}_{}", pid, ts));
+        {
+            let mut f = File::create(&tmp_path).map_err(|e| e.to_string())?;
+            f.write_all(json_str.as_bytes()).map_err(|e| e.to_string())?;
+            f.sync_all().map_err(|e| e.to_string())?;
+        }
+        let _ = fs::rename(&tmp_path, &self.poi_path);
+        Ok(())
     }
 
     /// Атомарний запис конфігурації (.tmp.{pid}_{ts} -> rename)
@@ -311,7 +405,11 @@ impl StorageManager {
         Ok(updated_user)
     }
 
-    pub fn restore_users(&self, payload: &serde_json::Value) -> Result<usize, String> {
+    pub fn is_history_recording_enabled(&self) -> bool {
+        self.data.read().history_recording
+    }
+
+    pub fn restore_backup(&self, payload: &serde_json::Value) -> Result<usize, String> {
         let users_val = if let Some(u) = payload.get("users") {
             u
         } else {
@@ -339,13 +437,68 @@ impl StorageManager {
                         restored += 1;
                     }
                 }
-            } else {
+            } else if payload.get("service_keys").is_none() {
                 return Err("Invalid backup format: users must be an array or an object".to_string());
+            }
+
+            // Відновлення сервісних API ключів (якщо присутні в бекапі)
+            if let Some(sk_val) = payload.get("service_keys") {
+                if let Ok(sk) = serde_json::from_value::<ServiceKeysConfig>(sk_val.clone()) {
+                    guard.service_keys = sk;
+                }
             }
         }
 
         self.save_atomic()?;
         Ok(restored)
+    }
+
+    pub fn get_service_keys(&self) -> ServiceKeysConfig {
+        let guard = self.data.read();
+        guard.service_keys.clone()
+    }
+
+    pub fn set_service_key(&self, service: &str, relation: &str, key: Option<String>) -> Result<(), String> {
+        let clean_key = key.and_then(|k| {
+            let trimmed = k.trim().to_string();
+            if trimmed.is_empty() { None } else { Some(trimmed) }
+        });
+
+        {
+            let mut guard = self.data.write();
+            let s_lower = service.to_lowercase();
+            if s_lower.contains("ukrainealarm") {
+                guard.service_keys.ukrainealarm_api_token = clean_key;
+            } else if s_lower.contains("cartodb") {
+                let rel = relation.trim();
+                if rel.is_empty() || rel.eq_ignore_ascii_case("global") || rel == "Загальна мапа" {
+                    guard.service_keys.cartodb_global_api_key = clean_key;
+                } else if let Some(k) = clean_key {
+                    guard.service_keys.cartodb_user_keys.insert(rel.to_string(), k);
+                } else {
+                    guard.service_keys.cartodb_user_keys.remove(rel);
+                }
+            } else {
+                return Err(format!("Unknown service: {}", service));
+            }
+        }
+        self.save_atomic()
+    }
+
+    pub fn delete_service_key(&self, service: &str, relation: &str) -> Result<bool, String> {
+        self.set_service_key(service, relation, None)?;
+        Ok(true)
+    }
+
+    pub fn get_cartodb_key(&self, relation: &str) -> Option<String> {
+        let guard = self.data.read();
+        let rel = relation.trim();
+        if !rel.is_empty() && rel != "Загальна мапа" && !rel.eq_ignore_ascii_case("global") {
+            if let Some(k) = guard.service_keys.cartodb_user_keys.get(rel) {
+                return Some(k.clone());
+            }
+        }
+        guard.service_keys.cartodb_global_api_key.clone()
     }
 
     pub fn create_user(&self, owner: &str) -> Result<User, String> {

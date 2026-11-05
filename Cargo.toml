@@ -8,10 +8,10 @@ description = "High-performance asynchronous Rust backend for Air Alert Hub (SON
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["ws", "macros", "multipart"] }
-tower = { version = "0.4", features = ["util"] }
-tower-http = { version = "0.5", features = ["cors", "fs", "trace", "compression-gzip"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["cors", "fs", "trace", "compression-gzip"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "socks", "rustls-tls", "http2"] }
-tokio-tungstenite = { version = "0.23", default-features = false, features = ["connect", "rustls-tls-webpki-roots", "handshake"] }
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "rustls-tls-webpki-roots", "handshake"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 futures-util = "0.3"
 serde = { version = "1.0", features = ["derive"] }
@@ -29,7 +29,7 @@ flate2 = "1.0"
 
 [profile.release]
 opt-level = 3
-lto = false
+lto = "thin"
 codegen-units = 1
 panic = "abort"
 strip = true

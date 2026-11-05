@@ -1,3 +1,3 @@
 pub mod ukrainealarm_ws;
-pub mod official_alerts;
+pub mod alerts_collector;
 pub mod neptun_failover;

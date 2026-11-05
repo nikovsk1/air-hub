@@ -447,18 +447,75 @@
       -webkit-backdrop-filter: blur(16px);
       border: 1px solid rgba(128, 149, 158, 0.16);
       border-radius: var(--radius-lg);
-      padding: 0 12px; pointer-events: auto;
+      padding: 0 10px 0 6px; pointer-events: auto;
       box-shadow: var(--shadow-card), var(--shadow-inset-top);
-      display: inline-flex; align-items: center; gap: 8px;
+      display: inline-flex; align-items: center; gap: 6px;
       font-size: 12px; font-weight: 600;
       box-sizing: border-box;
-      transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
     }
-
     .hud-card:hover {
       border-color: rgba(207, 155, 109, 0.45);
-      transform: translateY(-1px);
     }
+    .hud-card.hud-collapsed {
+      cursor: pointer;
+    }
+
+    /* Subframe for Diagonal Expand/Collapse Arrows */
+    .hud-subframe {
+      width: 24px;
+      height: 24px;
+      min-width: 24px;
+      border-radius: var(--radius-xs);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      flex-shrink: 0;
+      margin-right: 2px;
+    }
+    .hud-subframe:hover {
+      transform: scale(1.08);
+    }
+    /* Section 1: Threats (Danger Carmine / Red) */
+    .hud-subframe-threats {
+      background: rgba(255, 51, 102, 0.12);
+      border: 1px solid rgba(255, 51, 102, 0.4);
+      color: #ff4d79;
+      box-shadow: 0 0 6px rgba(255, 51, 102, 0.18);
+    }
+    .hud-subframe-threats:hover {
+      background: rgba(255, 51, 102, 0.24);
+      box-shadow: 0 0 10px rgba(255, 51, 102, 0.38);
+    }
+    /* Section 2: Slot (Cyan / Sky Blue) */
+    .hud-subframe-slot {
+      background: rgba(14, 165, 233, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+      box-shadow: 0 0 6px rgba(14, 165, 233, 0.18);
+    }
+    .hud-subframe-slot:hover {
+      background: rgba(14, 165, 233, 0.24);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.38);
+    }
+    /* Section 3: Closest (Warm Sand / Tactical Amber) */
+    .hud-subframe-closest {
+      background: rgba(207, 155, 109, 0.14);
+      border: 1px solid rgba(207, 155, 109, 0.45);
+      color: #e2b184;
+      box-shadow: 0 0 6px rgba(207, 155, 109, 0.2);
+    }
+    .hud-subframe-closest:hover {
+      background: rgba(207, 155, 109, 0.26);
+      box-shadow: 0 0 10px rgba(207, 155, 109, 0.4);
+    }
+    .hud-card.hud-collapsed .hud-subframe .icon-expand { display: block; }
+    .hud-card.hud-collapsed .hud-subframe .icon-collapse { display: none; }
+    .hud-card.hud-expanded .hud-subframe .icon-expand { display: none; }
+    .hud-card.hud-expanded .hud-subframe .icon-collapse { display: block; }
 
 
 
@@ -2074,46 +2131,25 @@
 
 
     .sidebar-toggle-fab {
-
-
-
-      position: absolute; top: 12px; left: 12px; z-index: 1100;
-
-
-
-      width: 40px; height: 40px; border-radius: 10px;
-
-
-
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(11, 15, 25, 0.7);
-
-
-
+      position: absolute; top: 15px; left: 16px; z-index: 1200;
+      width: 32px; height: 32px; border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(26, 31, 41, 0.95);
       backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-
-
-
       border: 1px solid var(--glass-border); color: var(--accent-orange-light);
-
-
-
-      display: none; align-items: center; justify-content: center;
-
-
-
-      cursor: pointer; font-size: 18px; box-shadow: var(--glass-shadow);
-
-
-
-      pointer-events: auto; transition: all 0.2s;
-
-
-
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 16px; box-shadow: var(--shadow-card);
+      pointer-events: auto; transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
     }
-
-
-
-    .sidebar-toggle-fab:hover { background: rgba(30, 41, 59, 0.9); transform: scale(1.05); }
+    .sidebar-toggle-fab:hover {
+      background: rgba(42, 50, 64, 0.95);
+      border-color: rgba(207, 155, 109, 0.45);
+      transform: scale(1.05);
+    }
+    .sidebar-toggle-fab.is-open {
+      color: #f87171;
+      border-color: rgba(248, 113, 113, 0.35);
+    }
 
 
 
@@ -2155,1804 +2191,13 @@
 
 
     .sidebar-tabs {
-
-
-
       height: 38px;
-
-
-
-      display: flex; align-items: center; justify-content: space-between;
-
-
-
+      display: flex; align-items: center; justify-content: flex-start;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-
-
-
-      background: rgba(8, 10, 16, 0.45); padding: 0 6px;
-
-
-
-      gap: 3px; flex-wrap: nowrap; overflow: hidden;
-
-
-
-      box-sizing: border-box;
-
-
-
+      background: rgba(8, 10, 16, 0.45);
+      padding: 0 8px 0 44px;
+      gap: 4px; flex-wrap: nowrap; overflow: hidden;
     }
-
-
-
-    .tab-btn {
-
-
-
-      height: 100%;
-
-
-
-      flex: 1 1 0; min-width: 0; background: transparent; border: none; outline: none;
-
-
-
-      color: var(--text-gray); font-size: 11px; font-weight: 800; letter-spacing: 0.2px;
-
-
-
-      padding: 0 4px; cursor: pointer; text-transform: uppercase;
-
-
-
-      border-bottom: 2px solid transparent; transition: all 0.2s;
-
-
-
-      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-
-
-
-      white-space: nowrap; font-family: inherit;
-
-
-
-      box-sizing: border-box;
-
-
-
-    }
-
-
-
-    .tab-btn:hover { color: #f8fafc; }
-
-
-
-    .tab-btn.active {
-
-
-
-      color: #fff; border-bottom-color: var(--accent-orange-light);
-
-
-
-    }
-
-
-
-    .sidebar-collapse-btn {
-
-
-
-      flex: 0 0 24px; background: transparent; border: none; color: var(--text-dim);
-
-
-
-      font-size: 11px; cursor: pointer; padding: 6px 4px; border-radius: 6px;
-
-
-
-      display: flex; align-items: center; justify-content: center;
-
-
-
-    }
-
-
-
-    .sidebar-collapse-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
-
-
-
-
-
-
-
-    /* Tab Contents */
-
-
-
-    .tab-content {
-
-
-
-      display: none; flex: 1; overflow-y: auto; overflow-x: hidden;
-
-
-
-      padding: 10px 6px 10px 10px; gap: 10px; flex-direction: column;
-
-
-
-      scrollbar-gutter: stable;
-
-
-
-    }
-
-
-
-    .tab-content.active { display: flex; }
-
-
-
-
-
-
-
-    .panel-section {
-      background: rgba(30, 35, 45, 0.65);
-      border: 1px solid rgba(128, 149, 158, 0.14);
-      border-radius: var(--radius-md); padding: 10px; display: flex; flex-direction: column; gap: 8px;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-      transition: border-color 0.2s ease;
-    }
-    .panel-section:hover {
-      border-color: rgba(207, 155, 109, 0.28);
-    }
-
-
-
-    .section-header {
-
-
-
-      display: flex; justify-content: space-between; align-items: center;
-
-
-
-      font-size: 11px; font-weight: 800; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.4px;
-
-
-
-    }
-
-
-
-    .field-label { font-size: 11px; font-weight: 600; color: var(--text-gray); }
-
-
-
-
-
-
-
-    /* Filter Rows with Category Color Border (Item 3) */
-
-
-
-    .threat-filter-list {
-
-
-
-      display: flex; flex-direction: column; gap: 5px; max-height: 290px;
-
-
-
-      overflow-y: auto; overflow-x: hidden;
-
-
-
-      padding-right: 6px;
-
-
-
-      scrollbar-gutter: stable;
-
-
-
-      transition: max-height 0.25s ease, opacity 0.2s ease;
-
-
-
-    }
-
-
-
-    .threat-filter-row {
-
-
-
-      display: flex; justify-content: space-between; align-items: center;
-
-
-
-      padding: 6px 9px; border-radius: 8px; background: rgba(255, 255, 255, 0.03);
-
-
-
-      cursor: pointer; transition: all 0.15s;
-
-
-
-    }
-
-
-
-    .threat-filter-row:hover { background: rgba(255, 255, 255, 0.06); transform: translateX(1px); }
-
-
-
-    .threat-filter-left { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; }
-
-
-
-    .threat-filter-left input[type="checkbox"] { accent-color: var(--accent-orange); cursor: pointer; }
-
-
-
-    .threat-icon {
-
-
-
-      width: 22px; height: 22px;
-
-
-
-      display: inline-flex; align-items: center; justify-content: center;
-
-
-
-      flex-shrink: 0;
-
-
-
-    }
-
-
-
-    .threat-icon svg {
-
-
-
-      width: 20px !important; height: 20px !important;
-
-
-
-      max-width: 100%; max-height: 100%;
-
-
-
-      display: block;
-
-
-
-    }
-
-
-
-
-
-
-
-    .threat-count-pill {
-
-
-
-      font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px;
-
-
-
-      background: rgba(255, 255, 255, 0.06); color: var(--text-gray);
-
-
-
-    }
-
-
-
-    .threat-count-pill.has-targets {
-
-
-
-      background: rgba(239, 68, 68, 0.2); color: #f87171;
-
-
-
-    }
-
-
-
-
-
-
-
-    /* Centered Chevron Collapse Button (Item 2) */
-
-
-
-    .filter-collapse-tab {
-
-
-
-      display: flex; align-items: center; justify-content: center;
-
-
-
-      margin-top: 2px; padding: 3px 0 1px 0; cursor: pointer;
-
-
-
-      color: var(--text-dim); transition: all 0.2s; font-size: 10px;
-
-
-
-      border-top: 1px solid rgba(255, 255, 255, 0.06);
-
-
-
-    }
-
-
-
-    .filter-collapse-tab:hover {
-
-
-
-      color: var(--accent-orange-light); background: rgba(255, 255, 255, 0.03);
-
-
-
-    }
-
-
-
-
-
-
-
-    /* Left-aligned Toggles for Map Visuals & Options */
-
-
-
-    .toggle-row, .toggle-row-left {
-
-
-
-      display: flex; align-items: center; gap: 9px;
-
-
-
-      font-size: 11.5px; font-weight: 500; color: #cbd5e1; cursor: pointer; padding: 3px 0;
-
-
-
-      transition: color 0.15s ease;
-
-
-
-    }
-
-
-
-    .toggle-row:hover, .toggle-row-left:hover {
-
-
-
-      color: #ffffff;
-
-
-
-    }
-
-
-
-    .toggle-row input[type="checkbox"], .toggle-row-left input[type="checkbox"] {
-
-
-
-      accent-color: var(--accent-orange); cursor: pointer; width: 15px; height: 15px; flex-shrink: 0;
-
-
-
-    }
-
-
-
-
-
-
-
-    /* Inputs, Buttons & Sliders */
-
-
-
-    .ctrl-input {
-
-
-
-      width: 100%; background: rgba(10, 14, 24, 0.6); border: 1px solid rgba(255, 255, 255, 0.1);
-
-
-
-      color: #fff; padding: 6px 9px; border-radius: 7px; font-size: 11.5px; outline: none;
-
-
-
-      font-family: inherit; transition: border-color 0.2s;
-
-
-
-    }
-
-
-
-    .ctrl-input:focus { border-color: var(--accent-orange-light); }
-
-
-
-
-
-
-
-    .date-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-
-
-
-    .preset-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
-
-
-
-    .preset-btn {
-
-
-
-      background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);
-
-
-
-      color: var(--text-gray); border-radius: 6px; padding: 5px 2px; font-size: 10.5px; font-weight: 700;
-
-
-
-      cursor: pointer; text-align: center; transition: all 0.15s; font-family: inherit;
-
-
-
-    }
-
-
-
-    .preset-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
-
-
-
-    .preset-btn.active {
-
-
-
-      background: var(--accent-orange) !important; color: #fff !important;
-
-
-
-      border-color: var(--accent-orange-light) !important;
-
-
-
-    }
-
-
-
-
-
-
-
-    .primary-action-btn {
-
-
-
-      width: 100%; background: linear-gradient(135deg, var(--accent-orange) 0%, #c2410c 100%);
-
-
-
-      color: #fff; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px;
-
-
-
-      padding: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
-
-
-
-      display: flex; align-items: center; justify-content: center; gap: 6px;
-
-
-
-      box-shadow: 0 4px 16px rgba(234, 88, 12, 0.35); transition: all 0.2s; font-family: inherit;
-
-
-
-    }
-
-
-
-    .primary-action-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(234, 88, 12, 0.5); }
-
-
-
-    .secondary-action-btn {
-
-
-
-      width: 100%; background: rgba(255, 255, 255, 0.05); color: #cbd5e1;
-
-
-
-      border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px;
-
-
-
-      padding: 7px; font-size: 11.5px; font-weight: 600; cursor: pointer;
-
-
-
-      display: flex; align-items: center; justify-content: center; gap: 6px;
-
-
-
-      transition: all 0.2s; font-family: inherit;
-
-
-
-    }
-
-
-
-    .secondary-action-btn:hover { background: rgba(255, 255, 255, 0.09); color: #fff; }
-
-
-
-
-
-
-
-    /* Stats Grid & Hourly Chart */
-
-
-
-    .stats-cards-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-
-
-
-    .stat-box {
-
-
-
-      background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05);
-
-
-
-      border-radius: 8px; padding: 6px; text-align: center;
-
-
-
-    }
-
-
-
-    .stat-num { font-size: 16px; font-weight: 800; }
-
-
-
-    .stat-lbl { font-size: 9.5px; color: var(--text-gray); text-transform: uppercase; font-weight: 700; margin-top: 1px; }
-
-
-
-
-
-
-
-    .hourly-chart {
-
-
-
-      display: flex; align-items: flex-end; gap: 2px; height: 48px;
-
-
-
-      background: rgba(10, 14, 24, 0.55); padding: 4px; border-radius: 6px;
-
-
-
-      border: 1px solid rgba(255, 255, 255, 0.05); margin-top: 4px;
-
-
-
-    }
-
-
-
-    .hour-bar-wrap { flex: 1; height: 100%; display: flex; align-items: flex-end; cursor: pointer; }
-
-
-
-    .hour-bar {
-
-
-
-      width: 100%; background: linear-gradient(180deg, var(--accent-orange-light) 0%, var(--accent-orange) 100%);
-
-
-
-      border-radius: 2px 2px 0 0; min-height: 2px; transition: height 0.3s;
-
-
-
-    }
-
-
-
-    .hour-bar-wrap:hover .hour-bar { background: #fff; }
-
-
-
-    .hourly-labels {
-
-
-
-      display: flex; justify-content: space-between; font-size: 9px; color: var(--text-dim); margin-top: 2px;
-
-
-
-    }
-
-
-
-
-
-
-
-    /* ================= BOTTOM TIMELINE SCRUBBER BAR ================= */
-
-
-
-    .bottom-timeline-bar {
-      position: absolute; bottom: 12px; left: 12px; right: 12px;
-      height: 48px; border-radius: var(--radius-lg);
-      background: linear-gradient(180deg, rgba(42, 50, 64, 0.94) 0%, rgba(28, 33, 44, 0.96) 100%);
-      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-      border: 1px solid rgba(128, 149, 158, 0.16);
-      box-shadow: var(--shadow-elevation), var(--shadow-inset-top);
-      z-index: 1000; display: flex; align-items: center; padding: 0 14px; gap: 12px;
-      transition: all 0.2s ease;
-    }
-
-
-
-
-
-
-
-    .live-pill-btn {
-
-
-
-      background: rgba(255, 255, 255, 0.06); color: var(--text-gray);
-
-
-
-      border: 1px solid rgba(255, 255, 255, 0.12);
-
-
-
-      padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 800;
-
-
-
-      cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;
-
-
-
-      outline: none; font-family: inherit;
-
-
-
-    }
-
-
-
-    .live-pill-btn:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
-
-
-
-    .live-pill-btn.active {
-
-
-
-      background: rgba(239, 68, 68, 0.22); color: #f87171; border-color: rgba(239, 68, 68, 0.6);
-
-
-
-      box-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
-
-
-
-    }
-
-
-
-    .live-dot {
-
-
-
-      width: 7px; height: 7px; border-radius: 50%; background: #64748b;
-
-
-
-    }
-
-
-
-    .live-pill-btn.active .live-dot {
-
-
-
-      background: #ef4444; box-shadow: 0 0 8px #ef4444; animation: pulseRed 1.6s infinite;
-
-
-
-    }
-
-
-
-    @keyframes pulseRed {
-
-
-
-      0%, 100% { transform: scale(1); opacity: 1; }
-
-
-
-      50% { transform: scale(1.35); opacity: 0.65; }
-
-
-
-    }
-
-
-
-
-
-
-
-    .play-circle-btn {
-
-
-
-      width: 32px; height: 32px; border-radius: 50%;
-
-
-
-      background: var(--accent-orange); color: #fff; border: none; outline: none;
-
-
-
-      cursor: pointer; display: flex; align-items: center; justify-content: center;
-
-
-
-      box-shadow: 0 2px 10px rgba(249, 115, 22, 0.4);
-
-
-
-      flex-shrink: 0;
-
-
-
-      position: relative;
-
-
-
-      padding: 0;
-
-
-
-      line-height: 0;
-
-
-
-    }
-
-
-
-    .play-circle-btn:hover { transform: scale(1.08); background: var(--accent-orange-light); }
-
-
-
-    .play-circle-btn.playing { background: var(--accent-violet); box-shadow: 0 2px 10px rgba(139, 92, 246, 0.4); }
-
-
-
-
-
-
-
-    .timeline-controls-group {
-
-
-
-      display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
-
-
-
-    }
-
-
-
-
-
-
-
-    .speed-pill-select {
-
-
-
-      background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1);
-
-
-
-      color: #cbd5e1; border-radius: 6px; padding: 4px 6px; font-size: 11px; font-weight: 700;
-
-
-
-      outline: none; cursor: pointer; font-family: inherit;
-
-
-
-    }
-
-
-
-
-
-
-
-    .timeline-scrubber-wrap { flex: 1; display: flex; align-items: center; padding: 0 4px; }
-
-
-
-    .timeline-scrubber {
-
-
-
-      width: 100%; height: 5px; -webkit-appearance: none; appearance: none;
-
-
-
-      background: rgba(255, 255, 255, 0.12); border-radius: 3px; outline: none; cursor: pointer;
-
-
-
-    }
-
-
-
-    .timeline-scrubber::-webkit-slider-thumb {
-
-
-
-      -webkit-appearance: none; appearance: none; width: 14px; height: 14px;
-
-
-
-      border-radius: 50%; background: var(--accent-orange-light);
-
-
-
-      border: 2px solid #fff; box-shadow: 0 0 6px rgba(0,0,0,0.8); cursor: pointer;
-
-
-
-    }
-
-
-
-
-
-
-
-    .timeline-clock {
-
-
-
-      display: flex; flex-direction: column; align-items: flex-end; justify-content: center;
-
-
-
-      line-height: 1.1; min-width: 65px;
-
-
-
-    }
-
-
-
-    .clock-time { font-size: 13px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; }
-
-
-
-    .clock-date { font-size: 10px; font-weight: 600; color: var(--text-gray); }
-
-
-
-
-
-
-
-    /* ================= MAP MARKERS & LABELS ================= */
-
-
-
-    .target-marker { background: transparent; border: none; }
-
-
-
-    .target-group-badge {
-
-      position: absolute;
-
-      right: -3px;
-
-      bottom: -3px;
-
-      min-width: 17px;
-
-      height: 17px;
-
-      padding: 0 3px;
-
-      border-radius: 9px;
-
-      background: #dc2626;
-
-      border: 2px solid var(--group-color, #ffffff);
-
-      color: #ffffff;
-
-      font-family: 'Satoshi', -apple-system, sans-serif;
-
-      font-size: 10px;
-
-      font-weight: 900;
-
-      line-height: 1;
-
-      display: flex;
-
-      align-items: center;
-
-      justify-content: center;
-
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
-
-      pointer-events: none;
-
-      z-index: 10;
-
-    }
-
-
-
-    body.hide-target-names .target-label-tag {
-
-      display: none !important;
-
-    }
-
-
-
-    .target-label-tag {
-
-
-
-      position: absolute; left: 34px; top: 6px; white-space: nowrap;
-
-
-
-      background: rgba(12, 16, 26, 0.88); backdrop-filter: blur(8px);
-
-
-
-      border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 5px;
-
-
-
-      padding: 2px 6px; font-size: 10.5px; font-weight: 700; color: #f8fafc;
-
-
-
-      pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,0.6);
-
-
-
-    }
-
-
-
-    .impact-marker-circle {
-
-
-
-      width: 22px; height: 22px; border-radius: 50%;
-
-
-
-      display: flex; align-items: center; justify-content: center;
-
-
-
-      color: #fff; font-size: 11px; font-weight: 900;
-
-
-
-      border: 1.5px solid rgba(255, 255, 255, 0.85); box-shadow: 0 0 8px rgba(0,0,0,0.8);
-
-
-
-    }
-
-
-
-
-
-
-
-    /* ETA Micro-dot Marker on Vector */
-
-
-
-    .eta-dot-marker {
-
-
-
-      background: transparent; border: none;
-
-
-
-    }
-
-
-
-    .eta-micro-tag {
-
-
-
-      background: rgba(10, 14, 24, 0.9);
-
-
-
-      border: 1px solid rgba(255, 255, 255, 0.2);
-
-
-
-      border-radius: 4px; padding: 1px 4px;
-
-
-
-      font-size: 9.5px; font-weight: 700; color: #f8fafc;
-
-
-
-      white-space: nowrap; pointer-events: none;
-
-
-
-      box-shadow: 0 1px 4px rgba(0,0,0,0.8);
-
-
-
-    }
-
-
-
-
-
-
-
-    /* Popup Styling */
-
-
-
-    .leaflet-popup-content-wrapper {
-
-
-
-      background: rgba(12, 16, 26, 0.94) !important;
-
-
-
-      backdrop-filter: blur(14px) !important;
-
-
-
-      border: 1px solid var(--glass-border) !important;
-
-
-
-      border-radius: 10px !important;
-
-
-
-      color: #f8fafc !important;
-
-
-
-      box-shadow: 0 12px 32px rgba(0,0,0,0.7) !important;
-
-
-
-      font-family: inherit !important;
-
-
-
-    }
-
-
-
-    .leaflet-popup-tip { background: rgba(12, 16, 26, 0.94) !important; }
-
-
-
-
-
-
-
-    /* Прибираємо браузерну рамку фокусу (bounding box outline) при кліку на контури карти */
-
-
-
-    path.leaflet-interactive,
-
-
-
-    path.leaflet-interactive:focus,
-
-
-
-    path.leaflet-interactive:focus-visible,
-
-
-
-    .leaflet-container path:focus,
-
-
-
-    .leaflet-container svg:focus {
-
-
-
-      outline: none !important;
-
-
-
-    }
-
-
-
-
-
-
-
-    /* Стилізація підказок Leaflet під Dark Glass UI */
-
-
-
-    .leaflet-tooltip {
-
-
-
-      background: rgba(12, 16, 26, 0.94) !important;
-
-
-
-      backdrop-filter: blur(12px) !important;
-
-
-
-      border: 1px solid var(--glass-border) !important;
-
-
-
-      border-radius: 8px !important;
-
-
-
-      color: #f8fafc !important;
-
-
-
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
-
-
-
-      font-family: inherit !important;
-
-
-
-      font-size: 11.5px !important;
-
-
-
-      font-weight: 600 !important;
-
-
-
-      padding: 4px 10px !important;
-
-
-
-    }
-
-
-
-    .leaflet-tooltip-top:before { border-top-color: rgba(12, 16, 26, 0.94) !important; }
-
-
-
-    .leaflet-tooltip-bottom:before { border-bottom-color: rgba(12, 16, 26, 0.94) !important; }
-
-
-
-    .leaflet-tooltip-left:before { border-left-color: rgba(12, 16, 26, 0.94) !important; }
-
-
-
-    .leaflet-tooltip-right:before { border-right-color: rgba(12, 16, 26, 0.94) !important; }
-
-
-
-    .popup-title { font-size: 13px; font-weight: 800; margin-bottom: 6px; color: #fff; }
-
-
-
-    .popup-row { display: flex; justify-content: space-between; font-size: 11.5px; gap: 12px; margin-bottom: 3px; color: #cbd5e1; }
-
-
-
-    .popup-val { font-weight: 700; color: #fff; }
-
-
-
-
-
-
-
-    /* Mobile Backdrop Overlay */
-
-
-
-    .mobile-backdrop {
-
-
-
-      display: none; position: fixed; inset: 0;
-
-
-
-      background: rgba(0, 0, 0, 0.65);
-
-
-
-      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-
-
-
-      z-index: 1040; opacity: 0; transition: opacity 0.25s ease;
-
-
-
-      pointer-events: none;
-
-
-
-    }
-
-
-
-    .mobile-backdrop.active {
-
-
-
-      display: block; opacity: 1; pointer-events: auto;
-
-
-
-    }
-
-
-
-
-
-
-
-    /* ================= RESPONSIVE MOBILE (PORTRAIT) OPTIMIZATION ================= */
-
-
-
-    @media (max-width: 768px) {
-
-
-
-      /* Top HUD: Compact single row with horizontal scroll if needed */
-
-
-
-      .hud-top {
-
-
-
-        left: 52px; right: 8px; top: max(8px, env(safe-area-inset-top));
-
-
-
-        gap: 5px; justify-content: flex-start;
-
-
-
-        flex-wrap: nowrap;
-
-
-
-        overflow-x: auto;
-
-
-
-        -webkit-overflow-scrolling: touch;
-
-
-
-        scrollbar-width: none;
-
-
-
-      }
-
-
-
-      .slot-dropdown-popover, .closest-popover {
-
-
-
-        position: fixed !important;
-
-
-
-        left: 10px !important;
-
-
-
-        right: 10px !important;
-
-
-
-        top: 52px !important;
-
-
-
-        max-width: none !important;
-
-
-
-        width: calc(100vw - 20px) !important;
-
-
-
-        box-sizing: border-box !important;
-
-
-
-      }
-
-
-
-      .hud-top::-webkit-scrollbar { display: none; }
-
-
-
-      .hud-top.sidebar-collapsed {
-
-
-
-        left: 52px;
-
-
-
-      }
-
-
-
-      .hud-group {
-
-
-
-        gap: 5px; flex-wrap: nowrap; width: auto;
-
-
-
-      }
-
-
-
-      .hud-card {
-
-
-
-        padding: 4px 8px; font-size: 11px; gap: 5px; border-radius: 8px;
-
-
-
-        flex-shrink: 0; height: 34px;
-
-
-
-      }
-
-
-
-      .badge {
-
-
-
-        padding: 2px 6px; font-size: 10px;
-
-
-
-      }
-
-
-
-      .hud-icon-btn {
-
-
-
-        width: 26px; height: 26px; font-size: 12px;
-
-
-
-      }
-
-
-
-      #closestCard {
-
-
-
-        padding: 4px 8px; font-size: 11px; border-radius: 8px;
-
-
-
-        max-width: 210px; flex-shrink: 0;
-
-
-
-      }
-
-
-
-      .closest-label, .closest-val {
-
-
-
-        font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-
-
-
-      }
-
-
-
-      .closest-popover {
-
-
-
-        min-width: 270px;
-
-
-
-        max-width: calc(100vw - 24px);
-
-
-
-        left: auto;
-
-
-
-        right: 0;
-
-
-
-      }
-
-
-
-      .slot-dropdown-popover {
-
-
-
-        min-width: 200px;
-
-
-
-        max-width: calc(100vw - 24px);
-
-
-
-      }
-
-
-
-
-
-
-
-      /* Sidebar: Full vertical mobile drawer with Safe Area */
-
-
-
-      .sidebar-panel {
-
-
-
-        top: 0; bottom: 0; left: 0; right: 0;
-
-
-
-        width: 100%; max-width: 100%;
-
-
-
-        z-index: 1200; border-radius: 0;
-
-
-
-        padding-top: max(8px, env(safe-area-inset-top));
-
-
-
-        padding-bottom: max(12px, env(safe-area-inset-bottom));
-
-
-
-      }
-
-
-
-      .sidebar-panel.collapsed {
-
-
-
-        transform: translateX(-110%);
-
-
-
-      }
-
-
-
-      .sidebar-toggle-fab {
-
-
-
-        top: max(8px, env(safe-area-inset-top)); left: 8px;
-
-
-
-        width: 38px; height: 38px; font-size: 16px;
-
-
-
-        z-index: 1100;
-
-
-
-      }
-
-
-
-      .sidebar-collapse-btn {
-
-
-
-        min-width: 40px; height: 36px; font-size: 16px;
-
-
-
-      }
-
-
-
-      .sidebar-tabs {
-
-
-
-        padding: 6px 4px 0 4px;
-
-
-
-      }
-
-
-
-      .tab-btn {
-
-
-
-        padding: 8px 2px; font-size: 11px;
-
-
-
-      }
-
-
-
-
-
-
-
-      /* Today Gauge: Responsive SVG */
-
-
-
-      #todayGaugeContainer svg {
-        width: 100%;
-        max-width: 220px;
-        height: auto;
-        display: block;
-        margin: 0 auto;
-      }
-
-
-
-
-
-
-
-      /* Bottom Timeline Bar: Compact capsule in LIVE mode, Expands on tap / Replay */
-
-
-
-      .bottom-timeline-bar {
-
-
-
-        bottom: max(12px, calc(env(safe-area-inset-bottom) + 8px));
-
-
-
-        left: 50%; right: auto;
-
-
-
-        transform: translateX(-50%);
-
-
-
-        width: auto; max-width: calc(100% - 20px);
-
-
-
-        height: 38px; padding: 0 6px; gap: 6px;
-
-
-
-        border-radius: 19px;
-
-
-
-        transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-
-
-
-      }
-
-
-
-      .bottom-timeline-bar.expanded {
-
-
-
-        left: 8px; right: 8px;
-
-
-
-        transform: none;
-
-
-
-        width: calc(100% - 16px);
-
-
-
-        max-width: none;
-
-
-
-        height: 44px;
-
-
-
-        border-radius: 12px;
-
-
-
-        padding: 0 8px;
-
-
-
-      }
-
-
-
-
-
-
-
-      /* In compact LIVE mode hide playback controls, show on .expanded */
-
-
-
-      .timeline-controls-group {
-
-
-
-        display: none;
-
-
-
-      }
-
-
-
-      .bottom-timeline-bar.expanded .timeline-controls-group {
-
-
-
-        display: flex;
-
-
-
-        align-items: center;
-
-
-
-        gap: 6px;
-
-
-
-        flex: 1;
-
-
-
-        min-width: 0;
-
-
-
-        overflow: hidden;
-
-
-
-      }
 
 
 
@@ -4040,10 +2285,106 @@
 
 
 
+      
+      .bottom-timeline-bar {
+        position: fixed;
+        bottom: max(16px, calc(env(safe-area-inset-bottom) + 12px));
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 6px 14px;
+        background: rgba(19, 22, 28, 0.88);
+        border: 1px solid rgba(128, 149, 158, 0.22);
+        border-radius: 20px;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        width: min(92vw, 840px);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .timeline-controls-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+      }
+      .timeline-scrubber-wrap {
+        position: relative;
+        flex: 1;
+        min-width: 140px;
+        height: 38px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+      }
+      .timeline-density-canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 24px;
+        pointer-events: none;
+        z-index: 1;
+      }
+      .timeline-scrubber {
+        position: relative;
+        z-index: 2;
+        width: 100%;
+        height: 6px;
+        margin: 0;
+        padding: 0;
+      }
+      .tactical-poi-tooltip {
+        position: absolute;
+        z-index: 9999;
+        pointer-events: none;
+        background: rgba(15, 23, 42, 0.94);
+        border: 1px solid rgba(207, 155, 109, 0.5);
+        border-radius: 8px;
+        padding: 8px 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), 0 0 10px rgba(207, 155, 109, 0.2);
+        color: #f8fafc;
+        font-family: 'Satoshi', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 11px;
+        max-width: 290px;
+        backdrop-filter: blur(10px);
+        transform: translate(-50%, -120%);
+        transition: opacity 0.15s ease;
+      }
+      .tactical-poi-tooltip .poi-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 3px;
+      }
+      .tactical-poi-tooltip .poi-title {
+        font-weight: 700;
+        font-size: 12px;
+        color: #ffffff;
+      }
+      .tactical-poi-tooltip .poi-cat {
+        font-size: 10px;
+        color: #cf9b6d;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .tactical-poi-tooltip .poi-desc {
+        font-size: 10.5px;
+        color: #cbd5e1;
+        line-height: 1.35;
+      }
+      .tactical-poi-tooltip .poi-status {
+        margin-top: 4px;
+        font-size: 9.5px;
+        color: #34d399;
+        font-family: monospace;
+      }
+
+      /* Leaflet Zoom Buttons: move to bottom-right out of the way of top HUD */
       .leaflet-top.leaflet-right {
-
-
-
         top: auto !important;
 
 
@@ -4295,21 +2636,76 @@
 
     @media (max-width: 768px) {
       .sidebar-toggle-fab {
-        width: 34px !important;
-        height: 34px !important;
-        min-width: 34px !important;
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important;
         font-size: 15px !important;
-        top: max(8px, env(safe-area-inset-top)) !important;
-        left: 8px !important;
-      }
-      .hud-card {
-        height: 34px !important;
-        padding: 0 7px !important;
-        font-size: 11px !important;
+        top: max(10px, env(safe-area-inset-top)) !important;
+        left: 10px !important;
+        z-index: 1250 !important;
       }
       .hud-top {
         left: 48px !important;
+        right: 8px !important;
         top: max(8px, env(safe-area-inset-top)) !important;
+        gap: 6px !important;
+        justify-content: flex-start !important;
+        flex-wrap: wrap !important;
+        width: calc(100% - 56px) !important;
+      }
+      .hud-top.sidebar-collapsed {
+        left: 48px !important;
+      }
+      .hud-group {
+        gap: 6px !important;
+        flex-wrap: wrap !important;
+        width: 100% !important;
+      }
+      .hud-card {
+        height: 34px !important;
+        padding: 0 6px 0 5px !important;
+        font-size: 11px !important;
+        border-radius: var(--radius-md) !important;
+        box-sizing: border-box !important;
+        transition: all 0.32s cubic-bezier(0.16, 1, 0.3, 1) !important;
+      }
+      /* Collapsed cards share row when 2 or 3 are collapsed */
+      .hud-card.hud-collapsed {
+        flex: 1 1 calc((100% - 14px) / 3) !important;
+        min-width: 58px !important;
+        max-width: 100% !important;
+      }
+      /* Expanded card occupies 100% width (entire row) */
+      .hud-card.hud-expanded {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+      /* In-flow menu/popover expansion downwards */
+      .hud-card.dropdown-open,
+      .hud-card.popover-open {
+        height: auto !important;
+        min-height: 34px !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        padding-bottom: 8px !important;
+      }
+      .hud-card.dropdown-open .hud-full-view,
+      .hud-card.popover-open .hud-full-view {
+        width: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+      }
+      .slot-dropdown-popover, .closest-popover {
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin-top: 6px !important;
+        box-sizing: border-box !important;
       }
     }
 
@@ -4438,6 +2834,14 @@
       transform: translateY(-1px);
     }
 
+    body.hide-target-names .target-label-tag {
+      display: none !important;
+    }
+
+    .target-group-badge {
+      border: 2px solid var(--group-color, #ffffff);
+    }
+
   </style>
 
 
@@ -4462,18 +2866,9 @@
 
 
 
-  <!-- SIDEBAR TOGGLE (MOBILE / COLLAPSED) -->
-
-
-
-  <button class="sidebar-toggle-fab" id="btnOpenSidebar" onclick="toggleSidebar()" title="Меню Радара та Аналітики">
-
-
-
-    ☰
-
-
-
+  <!-- SIDEBAR TOGGLE (DESKTOP & MOBILE INTEGRATED) -->
+  <button class="sidebar-toggle-fab" id="btnOpenSidebar" onclick="toggleSidebar()" aria-label="Меню">
+    <span id="burgerIconGlyph" class="burger-glyph">☰</span>
   </button>
 
 
@@ -4488,24 +2883,51 @@
 
   <div class="hud-top" id="hudTopBar">
     <div class="hud-group">
-      <!-- 1. Threats & MiG Card (Accordion Pill) -->
+      <!-- 1. Threats & MiG Card (Danger Carmine Theme) -->
       <div class="hud-card hud-collapsed" id="threatsCard" onclick="handleCardClick('threats', event)">
+        <div class="hud-subframe hud-subframe-threats" onclick="toggleHudCard('threats', event)" title="Розгорнути / згорнути цілі">
+          <svg class="hud-subframe-icon icon-expand" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          <svg class="hud-subframe-icon icon-collapse" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline points="14 4 14 10 20 10"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <polyline points="10 20 10 14 4 14"></polyline>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          <span class="sr-contract-indicator" style="display:none;">▸◂</span>
+        </div>
         <div class="hud-mini-view">
           <span id="threatsBadgeMini" class="badge badge-green"><span class="status-indicator-dot idle-clear"></span>Цілей: 0</span>
-          <span class="accordion-arrow" title="Розгорнути праворуч">▸</span>
         </div>
         <div class="hud-full-view">
           <span id="threatsBadge" class="badge badge-green"><span class="status-indicator-dot idle-clear"></span>Цілей: 0</span>
           <span id="migBadge" class="badge badge-green">МіГ-31К: Чисто</span>
-          <span class="accordion-arrow" onclick="toggleHudCard('threats', event)" title="Згорнути ліворуч">◂</span>
         </div>
       </div>
 
-      <!-- 2. Slot Selector Card (Accordion Pill) -->
+      <!-- 2. Slot Selector Card (Cyan / Sky Blue Theme) -->
       <div class="hud-card hud-collapsed" id="slotSelectorCard" onclick="handleCardClick('slot', event)" style="position:relative;">
+        <div class="hud-subframe hud-subframe-slot" onclick="toggleHudCard('slot', event)" title="Розгорнути / згорнути точки">
+          <svg class="hud-subframe-icon icon-expand" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          <svg class="hud-subframe-icon icon-collapse" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline points="14 4 14 10 20 10"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <polyline points="10 20 10 14 4 14"></polyline>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          <span class="sr-contract-indicator" style="display:none;">▸◂</span>
+        </div>
         <div class="hud-mini-view">
           <span id="slotDropdownLabelMini" style="font-weight:600;color:#f8fafc;">Точка 1</span>
-          <span class="accordion-arrow" title="Розгорнути праворуч">▸</span>
         </div>
         <div class="hud-full-view">
           <span style="font-size: 11.5px; color: #94a3b8;">Точка:</span>
@@ -4516,7 +2938,6 @@
           <button id="btnCenterOnSlot" class="hud-icon-btn" onclick="centerMapOnSelectedSlots()" title="Центрувати мапу на обраних точках">
             🎯
           </button>
-          <span class="accordion-arrow" onclick="toggleHudCard('slot', event)" title="Згорнути ліворуч">◂</span>
         </div>
 
         <!-- Custom Dropdown Menu with Checkboxes -->
@@ -4534,74 +2955,46 @@
         </div>
       </div>
 
-      <!-- 3. Closest Threat Card (Accordion Pill with mobile support) -->
+      <!-- 3. Closest Threat Card (Warm Sand / Amber Theme) -->
       <div class="hud-card hud-collapsed" id="closestCard" onclick="handleCardClick('closest', event)" style="position:relative;" title="Найближча загроза">
+        <div class="hud-subframe hud-subframe-closest" onclick="toggleHudCard('closest', event)" title="Розгорнути / згорнути найближчу ціль">
+          <svg class="hud-subframe-icon icon-expand" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          <svg class="hud-subframe-icon icon-collapse" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline points="14 4 14 10 20 10"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <polyline points="10 20 10 14 4 14"></polyline>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          <span class="sr-contract-indicator" style="display:none;">▸◂</span>
+        </div>
         <div class="hud-mini-view">
           <span id="closestMiniText" style="font-weight:600;color:#f8fafc;">Спокійно</span>
-          <span class="accordion-arrow" title="Розгорнути праворуч">▸</span>
         </div>
         <div class="hud-full-view">
           <span class="closest-label">Найближча ціль:</span>
           <span class="closest-val" id="closestTargetName" onclick="toggleClosestBreakdown(event)">--</span>
           <span id="slotClosestDistBadge" class="slot-dist-badge calm" onclick="toggleClosestBreakdown(event)">--</span>
           <span id="slotClosestEtaBadge" class="slot-eta-badge" style="display:none;" onclick="toggleClosestBreakdown(event)">--</span>
-          <span class="accordion-arrow" onclick="toggleHudCard('closest', event)" title="Згорнути ліворуч">◂</span>
         </div>
+
         <!-- Floating Popover breakdown across all points -->
-
-
-
         <div id="closestBreakdownPopover" class="liquid-glass-card closest-popover" style="display:none;" onclick="event.stopPropagation()">
-
-
-
           <div class="popover-header" style="justify-content:flex-end;">
-
-
-
             <button class="popover-close-btn" onclick="toggleClosestBreakdown(event, false)" title="Закрити">✕</button>
-
-
-
           </div>
-
-
-
           <div class="slot-drop-divider"></div>
-
-
-
           <div id="closestBreakdownList" class="breakdown-list">
-
-
-
-            <!-- Rendered dynamically in format: "Назва точки" - "Ціль" "Дистанція" "ETA" -->
-
-
-
+            <!-- Rendered dynamically -->
           </div>
-
-
-
         </div>
-
-
-
       </div>
-
-
-
     </div>
-
-
-
   </div>
-
-
-
-
-
-
 
   <!-- Mobile Backdrop Overlay -->
 
@@ -4643,7 +3036,7 @@
 
 
 
-      <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Згорнути панель">◀</button>
+      
 
 
 
@@ -5180,21 +3573,17 @@
 
 
         <label class="toggle-row-left">
-
-
-
           <input type="checkbox" id="chkShowSampleImpacts" checked onchange="refreshMapVisuals()">
-
-
-
           <span>Точки збиттів / втрати цілей</span>
-
-
-
         </label>
 
-
-
+        <label class="toggle-row-left" style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:9px;">
+            <input type="checkbox" id="chkShowHistoryPoi" checked onchange="onToggleHistoryPoi(this.checked)">
+            <span>Військові та стратегічні об'єкти (POI)</span>
+          </div>
+          <span style="font-size:11px;color:#cf9b6d;" title="Стратегічні об'єкти України">📍</span>
+        </label>
       </div>
 
 
@@ -5803,37 +4192,55 @@
         <div class="section-header"><span>Тип підкладки мапи & API-токен</span></div>
         
         <div class="map-provider-selector">
+          <label class="provider-radio-card" id="cardArcgis">
+            <input type="radio" name="mapProvider" value="arcgis" checked onchange="handleProviderChange('arcgis')">
+            <span class="provider-name">ArcGIS Dark Gray</span>
+            <span class="provider-desc">Класична основа (за замовчуванням)</span>
+          </label>
+
           <label class="provider-radio-card" id="cardCarto">
-            <input type="radio" name="mapProvider" value="carto" checked onchange="handleProviderChange('carto')">
+            <input type="radio" name="mapProvider" value="carto" onchange="handleProviderChange('carto')">
             <span class="provider-name">CartoDB Dark Matter</span>
             <span class="provider-desc">Ультра-мінімалістична мапа</span>
           </label>
-
-          <label class="provider-radio-card" id="cardArcgis">
-            <input type="radio" name="mapProvider" value="arcgis" onchange="handleProviderChange('arcgis')">
-            <span class="provider-name">ArcGIS Dark Gray</span>
-            <span class="provider-desc">Класична основа</span>
-          </label>
         </div>
 
-        <!-- Блок введення API-токену -->
-        <div class="api-token-container" id="apiTokenBox">
+        <!-- Блок введення API-токену CartoDB (прихований для ArcGIS) -->
+        <div class="api-token-container" id="apiTokenBox" style="display: none;">
           <div class="token-header">
-            <label for="mapApiToken">API-токен карти:</label>
-            <span class="token-status" id="tokenStatusBadge">Локальне сховище</span>
+            <label for="mapApiToken">API-токен CartoDB:</label>
+            <span class="token-status" id="tokenStatusBadge">Синхронізація</span>
           </div>
           <div class="token-input-wrapper">
             <input type="password" id="mapApiToken" class="settings-input" 
-                   placeholder="Введіть API ключ (напр. pk.eyJ1...)" 
+                   placeholder="Введіть API ключ CartoDB (напр. pk.eyJ1...)" 
                    autocomplete="off">
             <button type="button" class="btn-toggle-eye" onclick="toggleTokenVisibility()" title="Показати/приховати токен">👁️</button>
           </div>
-          <p class="token-hint">Токен зберігається локально в безпечному сховищі браузера.</p>
+          <p class="token-hint">Токен зберігається в системі та автоматично синхронізується з центром керування.</p>
         </div>
 
         <button type="button" class="btn-save-settings" onclick="saveMapProviderConfig()">
           💾 Зберегти та оновити мапу
         </button>
+      </div>
+
+            <div class="panel-section" id="poiSection">
+        <div class="section-header" style="display:flex;justify-content:space-between;align-items:center;">
+          <label class="toggle-row-left" style="margin-bottom:0;cursor:pointer;">
+            <input type="checkbox" id="cfgShowPoiMaster" checked onchange="togglePoiMaster(this.checked)">
+            <span style="font-weight:700;color:#f3f5f7;letter-spacing:0.5px;">📍 ВІЙСЬКОВІ ТА СТРАТЕГІЧНІ ОБ'ЄКТИ (POI)</span>
+          </label>
+        </div>
+
+        <div id="poiCategoriesBlock" style="margin-top:10px;padding:8px;background:rgba(19,22,28,0.7);border-radius:8px;border:1px solid rgba(128,149,158,0.18);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:11px;">
+            <span style="color:#cf9b6d;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">КАТЕГОРІЇ ОБ'ЄКТІВ</span>
+            <button type="button" id="btnToggleAllPoiCats" onclick="toggleAllPoiCategories()" style="background:none;border:none;color:#94a3b8;font-size:10px;font-weight:600;cursor:pointer;padding:2px 6px;border-radius:4px;border:1px solid rgba(148,163,184,0.3);">ВИМКНУТИ ВСІ</button>
+          </div>
+          <div id="poiCategoryCheckboxes" class="poi-category-grid" style="display:flex;flex-direction:column;gap:6px;">
+          </div>
+        </div>
       </div>
 
       <div class="panel-section">
@@ -6082,9 +4489,7 @@
 
 
       <div class="timeline-scrubber-wrap">
-
-
-
+        <canvas id="timelineDensityCanvas" class="timeline-density-canvas"></canvas>
         <input type="range" id="timeSlider" class="timeline-scrubber" min="0" max="1000" value="1000" oninput="onSliderScrub(this.value)">
 
 
@@ -6610,7 +5015,7 @@
     let currentRefTileLayer = null;
 
     function initMapTileLayer() {
-      const provider = localStorage.getItem('radar_map_provider') || 'carto';
+      const provider = localStorage.getItem('radar_map_provider') || 'arcgis';
       const token = localStorage.getItem('radar_map_token') || '';
 
       if (currentBaseTileLayer) { map.removeLayer(currentBaseTileLayer); currentBaseTileLayer = null; }
@@ -6645,7 +5050,7 @@
     function handleProviderChange(provider) {
       const tokenBox = document.getElementById('apiTokenBox');
       if (tokenBox) {
-        tokenBox.style.display = 'block';
+        tokenBox.style.display = (provider === 'carto') ? 'block' : 'none';
       }
     }
 
@@ -6656,19 +5061,62 @@
       }
     }
 
-    function saveMapProviderConfig() {
-      const selected = document.querySelector('input[name="mapProvider"]:checked')?.value || 'carto';
+    async function saveMapProviderConfig() {
+      const selected = document.querySelector('input[name="mapProvider"]:checked')?.value || 'arcgis';
       const tokenInput = document.getElementById('mapApiToken');
       const tokenVal = tokenInput ? tokenInput.value.trim() : '';
 
       localStorage.setItem('radar_map_provider', selected);
       if (tokenVal) {
         localStorage.setItem('radar_map_token', tokenVal);
-      } else {
+      } else if (selected === 'carto') {
         localStorage.removeItem('radar_map_token');
       }
+
+      // Sync with server so key persists in hub_config.json
+      const userToken = urlParams.get('token') || localStorage.getItem('hub_user_token') || '';
+      try {
+        await fetch('/api/v1/client/map_settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: userToken,
+            provider: selected,
+            cartodb_key: tokenVal || null
+          })
+        });
+      } catch (e) {
+        console.warn('Could not sync map settings to hub server:', e);
+      }
+
       initMapTileLayer();
+
+      const btn = document.querySelector('.btn-save-settings');
+      if (btn) {
+        const origText = btn.innerHTML;
+        btn.innerHTML = '✅ Збережено!';
+        setTimeout(() => { btn.innerHTML = origText; }, 1800);
+      }
     }
+
+    // Prefill server-side CartoDB key if available
+    async function fetchServerMapSettings() {
+      const userToken = urlParams.get('token') || localStorage.getItem('hub_user_token') || '';
+      try {
+        const res = await fetch('/api/v1/client/map_settings?token=' + encodeURIComponent(userToken));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === 'ok' && data.cartodb_key) {
+            const tokenInput = document.getElementById('mapApiToken');
+            if (tokenInput && !tokenInput.value) {
+              tokenInput.value = data.cartodb_key;
+              localStorage.setItem('radar_map_token', data.cartodb_key);
+            }
+          }
+        }
+      } catch(e) {}
+    }
+    fetchServerMapSettings();
 
     // Initialize tile layer on load
     initMapTileLayer();
@@ -7022,6 +5470,7 @@
 
 
 
+        loadStrategicPoi();
         const res = await fetch('/api/v1/regions/geojson');
 
 
@@ -7738,6 +6187,1148 @@
 
     }
 
+    // =========================================================================
+    // 🛡️ HARDWARE-ACCELERATED RADAR ENGINE (FLIGHTRADAR24 ARCHITECTURE)
+    // =========================================================================
+
+    const USE_CANVAS_RADAR = true;
+    const threatAtlasCanvas = (typeof document !== 'undefined' && document.createElement)
+      ? document.createElement('canvas')
+      : null;
+    const threatAtlasCoords = {};
+    let threatAtlasReady = false;
+
+    // Draw tactical cross mark directly via Canvas 2D
+    function drawCanvasCrossMark(ctx, cx, cy, size = 18, color = '#EF4444') {
+      const half = size / 2;
+      // 1. Dark outer tactical barrier
+      ctx.strokeStyle = '#0B0E14';
+      ctx.lineWidth = 4.2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - half, cy - half); ctx.lineTo(cx + half, cy + half);
+      ctx.moveTo(cx - half, cy + half); ctx.lineTo(cx + half, cy - half);
+      ctx.stroke();
+
+      // 2. Core threat color
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.8;
+      ctx.stroke();
+
+      // 3. Crisp white center spine
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1.0;
+      ctx.stroke();
+    }
+
+    // =========================================================================
+    // ⚡ SYNCHRONOUS VECTOR PATH2D ENGINE (100% INSTANT, RAZOR-SHARP AT ANY ANGLE)
+    // =========================================================================
+
+    const SafePath2D = (typeof Path2D !== 'undefined')
+      ? Path2D
+      : function(d) { this.d = d; };
+
+    // 12 Normalized Vector Contours (box [-16, 16] x [-16, 16], nose pointing North at 0 deg)
+    const THREAT_PATHS = {
+      // 1. Shahed-136 delta-wing contour with rear motor notch
+      shahed: new SafePath2D('M 0,-13 L 10,8 L 10,12 L 8,11 L 3,9 L 0,11 L -3,9 L -8,11 L -10,12 L -10,8 Z'),
+      // 2. Jet-powered Shahed: delta-wing with jet nozzle exhaust
+      shahed_jet: new SafePath2D('M 0,-13 L 10,8 L 10,12 L 8,11 L 3,9 L 2.5,12 L -2.5,12 L -3,9 L -8,11 L -10,12 L -10,8 Z'),
+      // 3. Cruise Missile (Kalibr / Kh-101): slender fuselage, straight mid-wings, cruciform tail
+      missile: new SafePath2D('M 0,-14 L 2.5,-8 L 2.5,0 L 11,3 L 11,5 L 2.5,3 L 2.5,9 L 6,12 L 6,14 L 2,13 L 0,14 L -2,13 L -6,14 L -6,12 L -2.5,9 L -2.5,3 L -11,5 L -11,3 L -2.5,0 L -2.5,-8 Z'),
+      // 4. Ballistic Missile (Iskander / Kinzhal): heavy conical booster needle, flared strakes
+      ballistic: new SafePath2D('M 0,-15 L 2.5,-7 L 2.5,7 L 6,13 L 3,13 L 2,10 L -2,10 L -3,13 L -6,13 L -2.5,7 L -2.5,-7 Z'),
+      // 5. Tactical Aviation (Su-34/35 / MiG-31): twin-tail swept wings with LERX
+      aviation: new SafePath2D('M 0,-15 L 2,-9 L 3,-2 L 13,5 L 13,8 L 4,6 L 4,11 L 8,14 L 8,15 L 3,14 L 0,15 L -3,14 L -8,15 L -8,14 L -4,11 L -4,6 L -13,8 L -13,5 L -3,-2 L -2,-9 Z'),
+      // 6. Guided Aerial Bomb (KAB): glide wings and aerodynamic bomb casing
+      kab: new SafePath2D('M 0,-12 C 3.5,-6 3.5,4 0,12 C -3.5,4 -3.5,-6 0,-12 Z M -11,0 L 11,0 L 11,2 L -11,2 Z'),
+      // 7. Loitering Munition Lancet: cruciform X-wing configuration
+      lancet: new SafePath2D('M 0,-12 L 1.8,-8 L 1.8,-2 L 10,-8 L 11,-6 L 1.8,2 L 10,9 L 8,11 L 1.8,5 L 1.8,9 L 0,12 L -1.8,9 L -1.8,5 L -8,11 L -10,9 L -1.8,2 L -11,-6 L -10,-8 L -1.8,-2 L -1.8,-8 Z'),
+      // 8. Reconnaissance UAV (Orlan, Supercam, Zala): high-aspect ratio wing
+      recon: new SafePath2D('M 0,-12 L 2,-7 L 2,-1 L 14,-1 L 14,2 L 2,2 L 2,9 L 6,12 L -6,12 L -2,9 L -2,2 L -14,2 L -14,-1 L -2,-1 L -2,-7 Z'),
+      // 9. FPV Strike Drone: X-frame quadcopter
+      fpv: new SafePath2D('M -3,-3 L 3,-3 L 3,3 L -3,3 Z M -2,-2 L -8,-8 M 2,-2 L 8,-8 M -2,2 L -8,8 M 2,2 L 8,8'),
+      // 10. Artillery / MLRS: tactical 8-pointed star burst
+      artillery: new SafePath2D('M 0,-13 L 3,-4 L 10,-8 L 5,-1 L 13,0 L 5,2 L 10,8 L 3,4 L 0,13 L -3,4 L -10,8 L -5,2 L -13,0 L -5,-1 L -10,-8 L -3,-4 Z'),
+      // 11. Banderol / Light Propeller UAV: pusher prop and twin boom
+      banderol: new SafePath2D('M 0,-13 L 2,-8 L 2,0 L 12,0 L 12,3 L 2,3 L 2,10 L 5,12 L -5,12 L -2,10 L -2,3 L -12,3 L -12,0 L -2,0 L -2,-8 Z'),
+      // 12. Unknown Threat: delta chevron
+      unknown: new SafePath2D('M 0,-13 L 11,9 L 8,11 L 0,7 L -8,11 L -11,9 Z')
+    };
+
+    function initThreatSpriteAtlas() {
+      const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
+      threatAtlasCoords['cross_single'] = { x: 10 * dpr, y: 10 * dpr, w: 44 * dpr, h: 44 * dpr, anchorX: 22, anchorY: 22 };
+      threatAtlasCoords['cross_double'] = { x: 68 * dpr, y: 8 * dpr, w: 56 * dpr, h: 48 * dpr, anchorX: 28, anchorY: 24 };
+      threatAtlasCoords['cross_triple'] = { x: 138 * dpr, y: 6 * dpr, w: 64 * dpr, h: 52 * dpr, anchorX: 32, anchorY: 26 };
+      threatAtlasReady = true;
+    }
+    initThreatSpriteAtlas();
+
+    // Dual-pass synchronous vector rendering with military tactical contrast
+    function drawThreatIcon(ctx, cat, dx, dy, dw, dh) {
+      const meta = THREAT_CATEGORIES[cat] || THREAT_CATEGORIES.unknown;
+      const path = THREAT_PATHS[cat] || THREAT_PATHS.unknown;
+
+      if (typeof Path2D !== 'undefined' && path && typeof ctx.stroke === 'function') {
+        // 1. Dark tactical outer halo for 100% contrast against map & alerts
+        ctx.strokeStyle = '#05070A';
+        ctx.lineWidth = 3.6;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.stroke(path);
+
+        // 2. High-contrast crisp edge
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.0;
+        ctx.stroke(path);
+
+        // 3. Category threat color fill
+        ctx.fillStyle = meta.color || '#FFE600';
+        ctx.fill(path);
+      } else {
+        // Fallback for mock contexts
+        ctx.strokeStyle = '#05070A';
+        ctx.lineWidth = 3.6;
+        ctx.beginPath();
+        ctx.moveTo(0, -13);
+        ctx.lineTo(10, 8);
+        ctx.lineTo(0, 11);
+        ctx.lineTo(-10, 8);
+        if (typeof ctx.closePath === 'function') ctx.closePath();
+        ctx.stroke();
+
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.0;
+        ctx.stroke();
+
+        ctx.fillStyle = meta.color || '#FFE600';
+        ctx.fill();
+      }
+    }
+
+    // =========================================================================
+    // 🌿 ORGANIC TRAJECTORY MEANDERING & GRADIENT ALPHA FADING
+    // =========================================================================
+
+    function hashStringSeed(str) {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+      }
+      return Math.abs(hash);
+    }
+
+    function buildOrganicTrailPoints(rawPoints, seed) {
+      if (!rawPoints || rawPoints.length < 2) return rawPoints || [];
+      const result = [rawPoints[0]];
+      for (let i = 0; i < rawPoints.length - 1; i++) {
+        const p0 = rawPoints[i];
+        const p1 = rawPoints[i + 1];
+        const dx = p1.x - p0.x;
+        const dy = p1.y - p0.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 18) {
+          const nx = -dy / dist;
+          const ny = dx / dist;
+          const wobble = Math.sin((seed + i * 2.37)) * Math.min(dist * 0.065, 3.8);
+          result.push({
+            x: p0.x + dx * 0.5 + nx * wobble,
+            y: p0.y + dy * 0.5 + ny * wobble
+          });
+        }
+        result.push(p1);
+      }
+      return result;
+    }
+
+    const MAX_TRAIL_PTS = 2048;
+    const _trailBufX = new Float32Array(MAX_TRAIL_PTS);
+    const _trailBufY = new Float32Array(MAX_TRAIL_PTS);
+
+    function drawOrganicFadingTrail(ctx, screenPoints, baseColor, tid, isShortTrack) {
+      if (!screenPoints || screenPoints.length === 0) return;
+      const count = Math.min(screenPoints.length, MAX_TRAIL_PTS);
+      for (let i = 0; i < count; i++) {
+        _trailBufX[i] = screenPoints[i].x;
+        _trailBufY[i] = screenPoints[i].y;
+      }
+
+      // 1. Anchored Origin Dot at start of trajectory
+      ctx.save();
+      ctx.strokeStyle = '#0B0E14';
+      ctx.lineWidth = 1.6;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      ctx.arc(_trailBufX[0], _trailBufY[0], 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      if (count < 2) return;
+
+      // 2. 3-Batch Trail Rendering (Zero-Allocation batch stroke)
+      // Batch 1: Tail (alpha 0.25, or 0.55 if short track)
+      // Batch 2: Mid  (alpha 0.60)
+      // Batch 3: Head (alpha 0.95)
+      const idx1 = Math.floor(count * 0.33);
+      const idx2 = Math.floor(count * 0.67);
+
+      ctx.strokeStyle = baseColor;
+
+      // Batch 1: Tail [0 .. idx1]
+      ctx.globalAlpha = isShortTrack ? 0.55 : 0.25;
+      ctx.beginPath();
+      ctx.moveTo(_trailBufX[0], _trailBufY[0]);
+      const end1 = Math.max(idx1, 1);
+      for (let i = 1; i <= end1; i++) {
+        ctx.lineTo(_trailBufX[i], _trailBufY[i]);
+      }
+      ctx.stroke();
+
+      // Batch 2: Mid [end1 .. idx2]
+      if (idx2 > end1) {
+        ctx.globalAlpha = 0.60;
+        ctx.beginPath();
+        ctx.moveTo(_trailBufX[end1], _trailBufY[end1]);
+        for (let i = end1 + 1; i <= idx2; i++) {
+          ctx.lineTo(_trailBufX[i], _trailBufY[i]);
+        }
+        ctx.stroke();
+      }
+
+      // Batch 3: Head [start3 .. count - 1]
+      const start3 = Math.max(idx2, end1);
+      if (count - 1 > start3) {
+        ctx.globalAlpha = 0.95;
+        ctx.beginPath();
+        ctx.moveTo(_trailBufX[start3], _trailBufY[start3]);
+        for (let i = start3 + 1; i < count; i++) {
+          ctx.lineTo(_trailBufX[i], _trailBufY[i]);
+        }
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 1.0;
+    }
+
+    // =========================================================================
+    // 📍 POI STRATEGIC LAYER (POINTS OF INTEREST OF UKRAINE)
+    // =========================================================================
+
+    const POI_CATEGORIES = {
+      airbases: { name: 'Військові аеродроми', icon: '✈️', color: '#60a5fa' },
+      air_defense: { name: 'Сектори та позиції ППО', icon: '🛡️', color: '#34d399' },
+      energy_hubs: { name: 'Енергетичні хаби (ГЕС/АЕС/ТЕС)', icon: '⚡', color: '#fbbf24' },
+      fuel_depots: { name: 'Нафтобази та НПЗ', icon: '🛢️', color: '#f87171' },
+      defense_industry: { name: 'ОПК, військові заводи', icon: '🏭', color: '#c084fc' },
+      ports: { name: 'Морські та річкові порти', icon: '⚓', color: '#38bdf8' },
+      logistics_bridges: { name: 'Стратегічні мости та логістика', icon: '🌉', color: '#fb923c' }
+    };
+
+    let activePoiList = [];
+    let cfgShowPoi = true;
+    Object.defineProperty(window, 'cfgShowPoi', { get: () => cfgShowPoi, set: (v) => { cfgShowPoi = v; }, configurable: true });
+    Object.defineProperty(window, 'activePoiList', { get: () => activePoiList, set: (v) => { activePoiList = v; }, configurable: true });
+    let activePoiCategoryFilters = new Set(Object.keys(POI_CATEGORIES));
+    let hoveredPoi = null;
+
+    async function loadStrategicPoi() {
+      try {
+        const res = await fetch('/api/v1/client/poi');
+        if (res.ok) {
+          activePoiList = await res.json();
+          updatePoiCategoryCounts();
+        }
+      } catch (err) {
+        console.warn('Could not load POI dataset:', err);
+      }
+    }
+
+    function updatePoiCategoryCounts() {
+      const container = document.getElementById('poiCategoryCheckboxes');
+      if (!container) return;
+
+      const counts = {};
+      Object.keys(POI_CATEGORIES).forEach(k => counts[k] = 0);
+      if (Array.isArray(activePoiList)) {
+        activePoiList.forEach(p => {
+          if (p && counts[p.category] !== undefined) counts[p.category]++;
+        });
+      }
+
+      container.innerHTML = Object.entries(POI_CATEGORIES).map(([catKey, catMeta]) => {
+        const checked = activePoiCategoryFilters.has(catKey) ? 'checked' : '';
+        const count = counts[catKey] || 0;
+        return `
+          <label class="toggle-row-left" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:3px 0;">
+            <div style="display:flex;align-items:center;gap:7px;">
+              <input type="checkbox" ${checked} onchange="togglePoiCategory('${catKey}', this.checked)" style="accent-color:${catMeta.color};">
+              <span style="font-size:12px;">${catMeta.icon}</span>
+              <span style="font-size:11px;color:#e2e8f0;">${catMeta.name}</span>
+            </div>
+            <span style="font-family:monospace;font-size:10px;color:${catMeta.color};background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:4px;">${count}</span>
+          </label>
+        `;
+      }).join('');
+    }
+
+    function togglePoiMaster(val) {
+      cfgShowPoi = !!val;
+      const master = document.getElementById('cfgShowPoiMaster');
+      if (master) master.checked = cfgShowPoi;
+      const histChk = document.getElementById('chkShowHistoryPoi');
+      if (histChk) histChk.checked = cfgShowPoi;
+      const block = document.getElementById('poiCategoriesBlock');
+      if (block) block.style.display = cfgShowPoi ? 'block' : 'none';
+      if (typeof refreshMapVisuals === 'function') refreshMapVisuals();
+      if (typeof renderRadarCanvasFrame === 'function') renderRadarCanvasFrame(performance.now());
+    }
+
+    function onToggleHistoryPoi(val) {
+      togglePoiMaster(val);
+    }
+
+    function togglePoiCategory(catKey, isChecked) {
+      if (isChecked) activePoiCategoryFilters.add(catKey);
+      else activePoiCategoryFilters.delete(catKey);
+      if (typeof renderRadarCanvasFrame === 'function') renderRadarCanvasFrame(performance.now());
+    }
+
+    function toggleAllPoiCategories() {
+      const btn = document.getElementById('btnToggleAllPoiCats');
+      const allKeys = Object.keys(POI_CATEGORIES);
+      if (activePoiCategoryFilters.size > 0) {
+        activePoiCategoryFilters.clear();
+        if (btn) btn.textContent = 'УВІМКНУТИ ВСІ';
+      } else {
+        allKeys.forEach(k => activePoiCategoryFilters.add(k));
+        if (btn) btn.textContent = 'ВИМКНУТИ ВСІ';
+      }
+      updatePoiCategoryCounts();
+      if (typeof renderRadarCanvasFrame === 'function') renderRadarCanvasFrame(performance.now());
+    }
+
+    function renderStrategicPoiOnCanvas(ctx, map, origin, bounds, south, north, west, east) {
+      if (!cfgShowPoi || !activePoiList || activePoiList.length === 0) return;
+      const zoom = map.getZoom ? map.getZoom() : 7;
+      if (zoom < 6) return;
+
+      const showLabels = isLiveMode
+        ? (visualConfig && visualConfig.showSpeedLabels !== false)
+        : (document.getElementById('chkShowHistoryNames')?.checked ?? true);
+
+      for (let i = 0; i < activePoiList.length; i++) {
+        const poi = activePoiList[i];
+        if (!activePoiCategoryFilters.has(poi.category)) continue;
+        if (poi.lat < south || poi.lat > north || poi.lon < west || poi.lon > east) continue;
+
+        const pt = map.latLngToLayerPoint([poi.lat, poi.lon]);
+        const sx = pt.x - origin.x;
+        const sy = pt.y - origin.y;
+        poi.screenX = sx;
+        poi.screenY = sy;
+
+        const catMeta = POI_CATEGORIES[poi.category] || { icon: '📍', color: '#94a3b8' };
+
+        // Tactical Marker Base
+        ctx.save();
+        ctx.translate(sx, sy);
+
+        // Tactical Halo
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = catMeta.color;
+        ctx.lineWidth = 1.6;
+
+        ctx.beginPath();
+        ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Inner Tactical Symbol
+        ctx.fillStyle = catMeta.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+
+        // Concise label if "Назви цілей / об'єктів" is enabled
+        if (showLabels && zoom >= 8) {
+          drawCanvasTargetLabel(ctx, sx + 12, sy - 5, poi.name);
+        }
+      }
+    }
+
+    // =========================================================================
+    // 📊 TIMELINE INTENSITY SPARKLINE (AREA DENSITY CHART)
+    // =========================================================================
+
+    function renderTimelineDensitySparkline() {
+      const canvas = document.getElementById('timelineDensityCanvas');
+      if (!canvas) return;
+      const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+      const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { width: 300, height: 24 };
+      const w = rect.width || 300;
+      const h = rect.height || 24;
+      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+      }
+      const ctx = canvas.getContext ? canvas.getContext('2d') : null;
+      if (!ctx) return;
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+
+      const tracks = (typeof loadedAnalyticsTracks !== 'undefined' && loadedAnalyticsTracks.length > 0)
+        ? loadedAnalyticsTracks
+        : (typeof activeSampleTracks !== 'undefined' ? activeSampleTracks : []);
+
+      if (!tracks || tracks.length === 0) {
+        ctx.restore();
+        return;
+      }
+
+      let minT = Infinity, maxT = -Infinity;
+      tracks.forEach(t => {
+        if (t.start_time < minT) minT = t.start_time;
+        if (t.end_time > maxT) maxT = t.end_time;
+      });
+      if (!isFinite(minT) || !isFinite(maxT) || maxT <= minT) {
+        ctx.restore();
+        return;
+      }
+
+      // 100 discrete time buckets
+      const NUM_BUCKETS = 100;
+      const counts = new Float32Array(NUM_BUCKETS);
+      let maxCount = 1;
+
+      for (let b = 0; b < NUM_BUCKETS; b++) {
+        const t = minT + (maxT - minT) * (b / (NUM_BUCKETS - 1));
+        let cnt = 0;
+        for (let i = 0; i < tracks.length; i++) {
+          if (t >= tracks[i].start_time && t <= tracks[i].end_time) cnt++;
+        }
+        counts[b] = cnt;
+        if (cnt > maxCount) maxCount = cnt;
+      }
+
+      const padBottom = 2;
+      const plotH = h - padBottom - 2;
+      const stepX = w / (NUM_BUCKETS - 1);
+
+      ctx.beginPath();
+      ctx.moveTo(0, h - padBottom - (counts[0] / maxCount) * plotH);
+
+      for (let b = 0; b < NUM_BUCKETS - 1; b++) {
+        const x0 = b * stepX;
+        const y0 = h - padBottom - (counts[b] / maxCount) * plotH;
+        const x1 = (b + 1) * stepX;
+        const y1 = h - padBottom - (counts[b + 1] / maxCount) * plotH;
+        const midX = (x0 + x1) / 2;
+        ctx.quadraticCurveTo(x0, y0, midX, (y0 + y1) / 2);
+      }
+      const lastX = (NUM_BUCKETS - 1) * stepX;
+      const lastY = h - padBottom - (counts[NUM_BUCKETS - 1] / maxCount) * plotH;
+      ctx.lineTo(lastX, lastY);
+
+      // Gradient area fill underneath
+      ctx.save();
+      ctx.lineTo(w, h - padBottom);
+      ctx.lineTo(0, h - padBottom);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, 'rgba(0, 229, 255, 0.40)');
+      grad.addColorStop(0.7, 'rgba(0, 229, 255, 0.12)');
+      grad.addColorStop(1, 'rgba(0, 229, 255, 0.01)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+
+      // Neon cyan line
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    
+    function drawCanvasTargetLabel(ctx, x, y, text) {
+      ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+      const textWidth = ctx.measureText(text).width;
+      ctx.fillStyle = 'rgba(12, 16, 26, 0.85)';
+      ctx.strokeStyle = 'rgba(128, 149, 158, 0.25)';
+      ctx.lineWidth = 1;
+      const px = x;
+      const py = y - 8;
+      const pw = textWidth + 8;
+      const ph = 14;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(px, py, pw, ph, 4);
+      else ctx.rect(px, py, pw, ph);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#f3f5f7';
+      ctx.fillText(text, px + 4, py + 10);
+    }
+
+    function drawCanvasGroupBadge(ctx, x, y, badgeText, color) {
+      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = 'rgba(19, 22, 28, 0.95)';
+      ctx.strokeStyle = color || '#FFE600';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x, y, 20, 12, 3);
+      else ctx.rect(x, y, 20, 12);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = color || '#FFE600';
+      ctx.fillText(badgeText, x + 3, y + 9);
+    }
+
+    // Radar Canvas Overlay Layer
+    const RadarCanvasLayer = (typeof L !== 'undefined' && L.Layer && L.Layer.extend) ? L.Layer.extend({
+      onAdd: function(map) {
+        this._map = map;
+        this._canvas = L.DomUtil ? L.DomUtil.create('canvas', 'radar-canvas-overlay') : document.createElement('canvas');
+        this._canvas.id = 'radarCanvasOverlay';
+        this._canvas.style.position = 'absolute';
+        this._canvas.style.top = '0';
+        this._canvas.style.left = '0';
+        this._canvas.style.pointerEvents = 'none';
+        this._canvas.style.zIndex = '550';
+
+        const pane = (map.getPane && map.getPane('targetsPane')) ? map.getPane('targetsPane') : map.getPanes().overlayPane;
+        pane.appendChild(this._canvas);
+        this._ctx = this._canvas.getContext('2d', { alpha: true });
+
+        map.on('move', this._reset, this);
+        map.on('moveend', this._reset, this);
+        map.on('resize', this._reset, this);
+        map.on('zoomstart', this._onZoomStart, this);
+        map.on('zoomend', this._onZoomEnd, this);
+        this._reset();
+      },
+      onRemove: function(map) {
+        if (this._canvas && this._canvas.parentNode) {
+          this._canvas.parentNode.removeChild(this._canvas);
+        }
+        map.off('move', this._reset, this);
+        map.off('moveend', this._reset, this);
+        map.off('resize', this._reset, this);
+        map.off('zoomstart', this._onZoomStart, this);
+        map.off('zoomend', this._onZoomEnd, this);
+      },
+      _onZoomStart: function() {
+        this._isZooming = true;
+      },
+      _onZoomEnd: function() {
+        this._isZooming = false;
+        this._reset();
+      },
+      _reset: function() {
+        if (!this._map || !this._canvas) return;
+        const size = this._map.getSize ? this._map.getSize() : { x: 1920, y: 1080 };
+        const bounds = this._map.getBounds ? this._map.getBounds() : { getNorthWest: () => ({ lat: 52, lng: 22 }) };
+        const topLeft = this._map.latLngToLayerPoint ? this._map.latLngToLayerPoint(bounds.getNorthWest()) : { x: 0, y: 0 };
+        if (L.DomUtil && L.DomUtil.setPosition) {
+          L.DomUtil.setPosition(this._canvas, topLeft);
+        } else {
+          this._canvas.style.transform = `translate3d(${topLeft.x}px, ${topLeft.y}px, 0)`;
+        }
+
+        const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 1.5);
+        this._canvas.width = Math.round(size.x * dpr);
+        this._canvas.height = Math.round(size.y * dpr);
+        this._canvas.style.width = size.x + 'px';
+        this._canvas.style.height = size.y + 'px';
+
+        if (this._ctx) {
+          this._ctx.setTransform(1, 0, 0, 1, 0, 0);
+          this._ctx.scale(dpr, dpr);
+        }
+        this._origin = topLeft;
+        this._dpr = dpr;
+      }
+    }) : function() {
+      this.addTo = function(m) { return this; };
+      this._reset = function() {};
+    };
+
+    let radarCanvasLayer = null;
+    if (typeof map !== 'undefined' && map.addLayer) {
+      radarCanvasLayer = new RadarCanvasLayer();
+      radarCanvasLayer.addTo(map);
+      if (typeof document !== 'undefined' && document.body) {
+        document.body.classList.add('canvas-radar-mode');
+      }
+    }
+
+    let activeEtaWaypointsList = [];
+    let lastRenderedHistoryClusters = [];
+    let lastRadarCanvasRenderTs = 0;
+
+    function getClusterRadiusPx(zoom) {
+      if (zoom <= 6) return 18;
+      if (zoom <= 8) return 16;
+      if (zoom <= 10) return 14;
+      return 12;
+    }
+
+    function clusterHistoryImpacts(impacts, map, origin, radiusPx) {
+      const cellSize = radiusPx * 1.5;
+      const grid = new Map();
+      const screenClusters = [];
+
+      for (let i = 0; i < impacts.length; i++) {
+        const imp = impacts[i];
+        const pt = map.latLngToLayerPoint([imp.lat, imp.lon]);
+        const sx = pt.x - origin.x;
+        const sy = pt.y - origin.y;
+        imp.screenX = sx;
+        imp.screenY = sy;
+
+        const gx = Math.floor(sx / cellSize);
+        const gy = Math.floor(sy / cellSize);
+        const key = `${gx}_${gy}`;
+
+        let bucket = grid.get(key);
+        if (!bucket) {
+          bucket = [];
+          grid.set(key, bucket);
+        }
+        bucket.push(imp);
+      }
+
+      grid.forEach(bucket => {
+        if (bucket.length === 1) {
+          screenClusters.push({
+            type: 'single',
+            x: bucket[0].screenX,
+            y: bucket[0].screenY,
+            targets: bucket
+          });
+        } else if (bucket.length === 2) {
+          const cx = (bucket[0].screenX + bucket[1].screenX) / 2;
+          const cy = (bucket[0].screenY + bucket[1].screenY) / 2;
+          screenClusters.push({
+            type: 'double',
+            x: cx,
+            y: cy,
+            targets: bucket
+          });
+        } else {
+          let sumX = 0, sumY = 0;
+          for (let i = 0; i < bucket.length; i++) {
+            sumX += bucket[i].screenX;
+            sumY += bucket[i].screenY;
+          }
+          screenClusters.push({
+            type: 'triple',
+            x: sumX / bucket.length,
+            y: sumY / bucket.length,
+            targets: bucket
+          });
+        }
+      });
+
+      return screenClusters;
+    }
+
+    let radarEtaTooltipEl = null;
+    function getOrCreateEtaTooltip() {
+      if (typeof document === 'undefined') return null;
+      if (!radarEtaTooltipEl) {
+        radarEtaTooltipEl = document.createElement('div');
+        radarEtaTooltipEl.className = 'radar-eta-tooltip';
+        radarEtaTooltipEl.style.display = 'none';
+        document.body.appendChild(radarEtaTooltipEl);
+      }
+      return radarEtaTooltipEl;
+    }
+
+    function showRadarEtaTooltip(x, y, text) {
+      const el = getOrCreateEtaTooltip();
+      if (!el) return;
+      el.innerText = text;
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      el.style.display = 'block';
+    }
+
+    
+    function showPoiTacticalTooltip(clientX, clientY, poi) {
+      const el = document.getElementById('poiTacticalTooltip');
+      if (!el) return;
+      const catMeta = POI_CATEGORIES[poi.category] || { icon: '📍', name: 'Об\'єкт' };
+      el.innerHTML = `
+        <div class="poi-head">
+          <span style="font-size:14px;">${catMeta.icon}</span>
+          <span class="poi-title">${poi.name}</span>
+        </div>
+        <div class="poi-cat">${catMeta.name} • ${poi.oblast || 'Україна'}</div>
+        <div class="poi-desc">${poi.significance || ''}</div>
+        <div class="poi-status">Статус: ${poi.status || 'Активний'}</div>
+      `;
+      el.style.left = `${clientX}px`;
+      el.style.top = `${clientY}px`;
+      el.style.display = 'block';
+    }
+
+    function hidePoiTacticalTooltip() {
+      const el = document.getElementById('poiTacticalTooltip');
+      if (el) el.style.display = 'none';
+    }
+
+    function hideRadarEtaTooltip() {
+      if (radarEtaTooltipEl) {
+        radarEtaTooltipEl.style.display = 'none';
+      }
+    }
+
+    if (typeof map !== 'undefined' && map.on) {
+      map.on('mousemove', function(e) {
+        if (!radarCanvasLayer || !radarCanvasLayer._origin) return;
+        const pt = map.latLngToLayerPoint(e.latlng);
+        const origin = radarCanvasLayer._origin;
+        const mx = pt.x - origin.x;
+        const my = pt.y - origin.y;
+
+        // 1. POI Hit-Testing (Works across both Live and History modes)
+        let hoveredPoiItem = null;
+        if (cfgShowPoi && activePoiList && activePoiList.length > 0) {
+          for (let i = 0; i < activePoiList.length; i++) {
+            const p = activePoiList[i];
+            if (p.screenX === undefined) continue;
+            if (Math.hypot(mx - p.screenX, my - p.screenY) < 14) {
+              hoveredPoiItem = p;
+              break;
+            }
+          }
+        }
+
+        if (hoveredPoiItem) {
+          const containerPt = e.containerPoint || { x: e.originalEvent?.clientX || 0, y: e.originalEvent?.clientY || 0 };
+          showPoiTacticalTooltip(containerPt.x, containerPt.y, hoveredPoiItem);
+          hideRadarEtaTooltip();
+          return;
+        } else {
+          hidePoiTacticalTooltip();
+        }
+
+        // 2. ETA Waypoints Hit-Testing (Live mode only when future vector is enabled)
+        if (!isLiveMode || !visualConfig || !visualConfig.showFutureVector) {
+          hideRadarEtaTooltip();
+          return;
+        }
+
+        let hovered = null;
+        for (let i = 0; i < activeEtaWaypointsList.length; i++) {
+          const wp = activeEtaWaypointsList[i];
+          if (Math.hypot(mx - wp.screenX, my - wp.screenY) < 14) {
+            hovered = wp;
+            break;
+          }
+        }
+
+        if (hovered) {
+          const containerPt = e.containerPoint || { x: e.originalEvent?.clientX || 0, y: e.originalEvent?.clientY || 0 };
+          showRadarEtaTooltip(containerPt.x, containerPt.y, `Час підльоту: ${hovered.minutes} хв`);
+        } else {
+          hideRadarEtaTooltip();
+        }
+      });
+
+      map.on('mouseout', function() {
+        hidePoiTacticalTooltip();
+        hideRadarEtaTooltip();
+      });
+
+      map.on('click', function(e) {
+        if (!radarCanvasLayer || !radarCanvasLayer._origin) return;
+        const clickPt = map.latLngToLayerPoint(e.latlng);
+        const origin = radarCanvasLayer._origin;
+        const cx = clickPt.x - origin.x;
+        const cy = clickPt.y - origin.y;
+        const hitRadius = ((typeof window !== 'undefined' && window.innerWidth <= 768) ? 32 : 24);
+
+        // Check POI Clicks / Taps
+        if (cfgShowPoi && activePoiList && activePoiList.length > 0) {
+          for (let i = 0; i < activePoiList.length; i++) {
+            const p = activePoiList[i];
+            if (p.screenX === undefined) continue;
+            if (Math.hypot(cx - p.screenX, cy - p.screenY) < hitRadius) {
+              const catMeta = POI_CATEGORIES[p.category] || { icon: '📍', name: 'Об\'єкт', color: '#94a3b8' };
+              L.popup().setLatLng([p.lat, p.lon]).setContent(`
+                <div class="popup-title">${catMeta.icon} ${p.name}</div>
+                <div class="popup-row"><span>Категорія:</span><span class="popup-val" style="color:${catMeta.color};font-weight:700;">${catMeta.name}</span></div>
+                <div class="popup-row"><span>Область:</span><span class="popup-val">${p.oblast || 'Україна'}</span></div>
+                ${p.significance ? `<div style="margin-top:6px;font-size:11px;color:#94a3b8;line-height:1.4;">${p.significance}</div>` : ''}
+              `).openOn(map);
+              return;
+            }
+          }
+        }
+
+        if (isLiveMode) {
+          for (const tid in liveLayers) {
+            const it = liveLayers[tid];
+            if (!it || !it.sim) continue;
+            const pt = map.latLngToLayerPoint([it.sim.curLat, it.sim.curLon]);
+            if (Math.hypot(cx - (pt.x - origin.x), cy - (pt.y - origin.y)) < hitRadius) {
+              if (it.marker && it.marker.openPopup) {
+                it.marker.setLatLng([it.sim.curLat, it.sim.curLon]);
+                it.marker.openPopup();
+              }
+              return;
+            }
+          }
+        } else {
+          for (let i = 0; i < lastRenderedHistoryClusters.length; i++) {
+            const cl = lastRenderedHistoryClusters[i];
+            if (Math.hypot(cx - cl.x, cy - cl.y) < hitRadius) {
+              const tgts = cl.targets;
+              if (tgts.length === 1) {
+                const t = tgts[0];
+                L.popup().setLatLng([t.lat, t.lon]).setContent(`
+                  <div class="popup-title">❌ ${t.name}</div>
+                  <div class="popup-row"><span>Час втрати:</span><span class="popup-val">${new Date(t.end_time * 1000).toLocaleString('uk-UA')}</span></div>
+                  <div class="popup-row"><span>Координати:</span><span class="popup-val">${t.lat.toFixed(4)}, ${t.lon.toFixed(4)}</span></div>
+                `).openOn(map);
+              } else {
+                const rows = tgts.map(t => `<div class="popup-row"><span>❌ ${t.name}:</span><span class="popup-val">${new Date(t.end_time * 1000).toLocaleTimeString('uk-UA', {hour:'2-digit', minute:'2-digit'})}</span></div>`).join('');
+                L.popup().setLatLng(e.latlng).setContent(`
+                  <div class="popup-title">❌ Групове збиття / удари (${tgts.length})</div>
+                  <div style="max-height:160px;overflow-y:auto;font-size:11px;">${rows}</div>
+                `).openOn(map);
+              }
+              return;
+            }
+          }
+        }
+      });
+    }
+
+    function renderHistoryCanvasFrame(now, ctx, map, size, bounds, origin, south, north, west, east) {
+      if (!loadedAnalyticsTracks || loadedAnalyticsTracks.length === 0) return;
+      const curT = analyticsSimTime || analyticsMaxTime;
+      const showSampleTrails = document.getElementById('chkShowSampleTrails')?.checked ?? true;
+      const showHistoryIcons = document.getElementById('chkShowHistoryIcons')?.checked ?? true;
+      const showHistoryNames = document.getElementById('chkShowHistoryNames')?.checked ?? true;
+      const showSampleImpacts = document.getElementById('chkShowSampleImpacts')?.checked ?? true;
+
+      const activeSampleTracks = loadedAnalyticsTracks.filter(trk => {
+        return analyticsCategoryFilters.has(trk.cat) && trk.start_time <= curT && trk.path && trk.path.length > 0;
+      });
+
+      const completedImpacts = [];
+
+      // 1. Draw Trails (Organic micro-meandering & progressive fading)
+      if (showSampleTrails) {
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Static completed trails
+        activeSampleTracks.forEach(trk => {
+          if (curT >= trk.end_time) {
+            const pts = trk.fullSmoothPts || trk.path;
+            if (pts && pts.length > 0) {
+              const rawPts = [];
+              for (let j = 0; j < pts.length; j++) {
+                const p = map.latLngToLayerPoint([pts[j].lat || pts[j][0], pts[j].lon || pts[j][1]]);
+                rawPts.push({ x: p.x - origin.x, y: p.y - origin.y });
+              }
+              if (trk.seed === undefined) trk.seed = hashStringSeed(trk.id || 'hist_done');
+              const smoothPts = buildOrganicTrailPoints(rawPts, trk.seed);
+              const isShort = (pts.length <= 3);
+              drawOrganicFadingTrail(ctx, smoothPts, trk.color || '#FACC15', trk.id, isShort);
+            }
+          }
+        });
+
+        // Active moving trails
+        activeSampleTracks.forEach(trk => {
+          if (curT >= trk.start_time && curT < trk.end_time) {
+            const rawPts = [];
+            for (let i = 0; i < trk.path.length; i++) {
+              if (trk.path[i].time <= curT) {
+                const p = map.latLngToLayerPoint([trk.path[i].lat, trk.path[i].lon]);
+                rawPts.push({ x: p.x - origin.x, y: p.y - origin.y });
+              } else break;
+            }
+            if (rawPts.length > 0) {
+              const meta = THREAT_CATEGORIES[trk.cat] || THREAT_CATEGORIES.unknown;
+              ctx.lineWidth = meta.coreWeight || 2.4;
+              if (trk.seed === undefined) trk.seed = hashStringSeed(trk.id || 'hist_act');
+              const smoothPts = buildOrganicTrailPoints(rawPts, trk.seed);
+              const isShort = (trk.path.length <= 3);
+              drawOrganicFadingTrail(ctx, smoothPts, trk.color || meta.color, trk.id, isShort);
+            }
+          }
+        });
+      }
+
+      // POI Strategic Layer in History Mode
+      renderStrategicPoiOnCanvas(ctx, map, origin, bounds, south, north, west, east);
+
+      // 2. Draw Moving Aircraft in History
+      if (showHistoryIcons) {
+        activeSampleTracks.forEach(trk => {
+          if (curT >= trk.start_time && curT < trk.end_time) {
+            let lastPt = trk.path[0];
+            for (let i = 0; i < trk.path.length; i++) {
+              if (trk.path[i].time <= curT) lastPt = trk.path[i];
+              else break;
+            }
+            if (lastPt.lat < south || lastPt.lat > north || lastPt.lon < west || lastPt.lon > east) return;
+
+            const pt = map.latLngToLayerPoint([lastPt.lat, lastPt.lon]);
+            const sx = pt.x - origin.x;
+            const sy = pt.y - origin.y;
+
+            ctx.save();
+            ctx.translate(sx, sy);
+            ctx.rotate(((lastPt.heading || 0) * Math.PI) / 180);
+            drawThreatIcon(ctx, trk.cat, -16, -16, 32, 32);
+            ctx.restore();
+
+            if (showHistoryNames) {
+              drawCanvasTargetLabel(ctx, sx + 18, sy - 5, trk.name);
+            }
+          }
+        });
+      }
+
+      // 3. Draw Clustered Impact Points (Pyramid XXX style)
+      if (showSampleImpacts) {
+        activeSampleTracks.forEach(trk => {
+          if (curT >= trk.end_time) {
+            const lastPt = trk.path[trk.path.length - 1];
+            completedImpacts.push({
+              id: trk.id,
+              name: trk.name,
+              cat: trk.cat,
+              color: trk.color,
+              lat: lastPt.lat,
+              lon: lastPt.lon,
+              end_time: trk.end_time
+            });
+          }
+        });
+
+        const radiusPx = getClusterRadiusPx(map.getZoom ? map.getZoom() : 7);
+        const clusters = clusterHistoryImpacts(completedImpacts, map, origin, radiusPx);
+        lastRenderedHistoryClusters = clusters;
+
+        clusters.forEach(cl => {
+          if (cl.type === 'single') {
+            drawCanvasCrossMark(ctx, cl.x, cl.y, 18, cl.targets[0]?.color || '#EF4444');
+          } else if (cl.type === 'double') {
+            drawCanvasCrossMark(ctx, cl.x - 5, cl.y + 4, 15, '#EF4444');
+            drawCanvasCrossMark(ctx, cl.x + 5, cl.y - 4, 16, '#EF4444');
+          } else {
+            // Triangular Pyramid triple cross (XXX, user style!)
+            drawCanvasCrossMark(ctx, cl.x - 9, cl.y + 6, 14, '#EF4444');
+            drawCanvasCrossMark(ctx, cl.x + 9, cl.y + 6, 14, '#EF4444');
+            drawCanvasCrossMark(ctx, cl.x, cl.y - 6, 18, '#EF4444');
+          }
+        });
+      }
+    }
+
+    function renderRadarCanvasFrame(now) {
+      if (!radarCanvasLayer || !radarCanvasLayer._ctx || !radarCanvasLayer._map) return;
+      const ctx = radarCanvasLayer._ctx;
+      const map = radarCanvasLayer._map;
+      const size = map.getSize ? map.getSize() : { x: 1920, y: 1080 };
+      const bounds = map.getBounds ? map.getBounds() : {
+        getSouth: () => 44, getNorth: () => 53, getWest: () => 21, getEast: () => 41
+      };
+      const origin = radarCanvasLayer._origin || { x: 0, y: 0 };
+
+      ctx.clearRect(0, 0, size.x, size.y);
+
+      const south = bounds.getSouth() - 0.2;
+      const north = bounds.getNorth() + 0.2;
+      const west = bounds.getWest() - 0.2;
+      const east = bounds.getEast() + 0.2;
+
+      if (isLiveMode) {
+        function isValidLL(lat, lon) {
+          return typeof lat === 'number' && typeof lon === 'number' && !isNaN(lat) && !isNaN(lon) && isFinite(lat) && isFinite(lon);
+        }
+
+        // Trajectory Trails (Organic micro-meandering & gradient alpha fading)
+        if (visualConfig && visualConfig.showTrails) {
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          for (const tid in liveLayers) {
+            const it = liveLayers[tid];
+            if (!it || !it.sim) continue;
+            if (!isValidLL(it.sim.curLat, it.sim.curLon)) continue;
+            if (it.sim.curLat < south || it.sim.curLat > north || it.sim.curLon < west || it.sim.curLon > east) continue;
+
+            const meta = THREAT_CATEGORIES[it.cat] || THREAT_CATEGORIES.unknown;
+            ctx.lineWidth = meta.coreWeight || 2.4;
+
+            const base = it.baseTrailPts || [];
+            const rawPts = [];
+            for (let j = 0; j < base.length; j++) {
+              const bPt = base[j];
+              const bLat = Array.isArray(bPt) ? bPt[0] : (bPt && bPt.lat !== undefined ? bPt.lat : (bPt ? bPt[0] : null));
+              const bLon = Array.isArray(bPt) ? bPt[1] : (bPt && bPt.lon !== undefined ? bPt.lon : (bPt && bPt.lng !== undefined ? bPt.lng : (bPt ? bPt[1] : null)));
+              if (!isValidLL(bLat, bLon)) continue;
+              const p = map.latLngToLayerPoint([bLat, bLon]);
+              rawPts.push({ x: p.x - origin.x, y: p.y - origin.y });
+            }
+            const curP = map.latLngToLayerPoint([it.sim.curLat, it.sim.curLon]);
+            rawPts.push({ x: curP.x - origin.x, y: curP.y - origin.y });
+
+            if (rawPts.length >= 1) {
+              if (it.seed === undefined) it.seed = hashStringSeed(tid);
+              const smoothPts = buildOrganicTrailPoints(rawPts, it.seed);
+              const isShort = (base.length <= 3);
+              drawOrganicFadingTrail(ctx, smoothPts, meta.color, tid, isShort);
+            }
+          }
+        }
+
+        // POI Strategic Layer
+        renderStrategicPoiOnCanvas(ctx, map, origin, bounds, south, north, west, east);
+
+        // Forecast Vectors & ETA Waypoint Dots
+        if (visualConfig && visualConfig.showFutureVector) {
+          activeEtaWaypointsList = [];
+          ctx.setLineDash([4, 4]);
+          ctx.lineWidth = 1.6;
+
+          for (const tid in liveLayers) {
+            const it = liveLayers[tid];
+            if (!it || !it.sim || !it.corridor || it.corridor.length === 0) continue;
+            if (!isValidLL(it.sim.curLat, it.sim.curLon)) continue;
+            if (it.sim.curLat < south || it.sim.curLat > north || it.sim.curLon < west || it.sim.curLon > east) continue;
+
+            const meta = THREAT_CATEGORIES[it.cat] || THREAT_CATEGORIES.unknown;
+            ctx.strokeStyle = meta.vectorColor || meta.color;
+            ctx.globalAlpha = (it.currentOpacity || 1.0) * 0.42;
+            ctx.beginPath();
+            const startPt = map.latLngToLayerPoint([it.sim.curLat, it.sim.curLon]);
+            ctx.moveTo(startPt.x - origin.x, startPt.y - origin.y);
+
+            for (let i = 0; i < it.corridor.length; i++) {
+              const pt = it.corridor[i];
+              const ptLat = Array.isArray(pt) ? pt[0] : (pt && pt.lat !== undefined ? pt.lat : (pt ? pt[0] : null));
+              const ptLon = Array.isArray(pt) ? pt[1] : (pt && pt.lon !== undefined ? pt.lon : (pt && pt.lng !== undefined ? pt.lng : (pt ? pt[1] : null)));
+              if (!isValidLL(ptLat, ptLon)) continue;
+              const cp = map.latLngToLayerPoint([ptLat, ptLon]);
+              const sx = cp.x - origin.x;
+              const sy = cp.y - origin.y;
+              ctx.lineTo(sx, sy);
+
+              activeEtaWaypointsList.push({
+                screenX: sx,
+                screenY: sy,
+                minutes: pt.minutes || pt.minutes_ahead || ((i + 1) * 5),
+                cat: it.cat,
+                tid
+              });
+            }
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 1.0;
+
+          for (let i = 0; i < activeEtaWaypointsList.length; i++) {
+            const wp = activeEtaWaypointsList[i];
+            const meta = THREAT_CATEGORIES[wp.cat] || THREAT_CATEGORIES.unknown;
+            ctx.fillStyle = '#FFFFFF';
+            ctx.strokeStyle = meta.vectorColor || meta.color;
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.arc(wp.screenX, wp.screenY, 3.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+        }
+
+        // Aircraft Silhouettes
+        for (const tid in liveLayers) {
+          const it = liveLayers[tid];
+          if (!it || !it.sim) continue;
+          const sim = it.sim;
+          if (!isValidLL(sim.curLat, sim.curLon)) continue;
+          if (sim.curLat < south || sim.curLat > north || sim.curLon < west || sim.curLon > east) continue;
+
+          const pt = map.latLngToLayerPoint([sim.curLat, sim.curLon]);
+          const sx = pt.x - origin.x;
+          const sy = pt.y - origin.y;
+          it.screenX = sx;
+          it.screenY = sy;
+
+          const op = (it.currentOpacity !== undefined ? it.currentOpacity : 1.0) * (it.isLead !== false ? 1.0 : 0.0);
+          if (op <= 0.01) continue;
+          ctx.globalAlpha = op;
+
+          ctx.save();
+          ctx.translate(sx, sy);
+          ctx.rotate((sim.curHeading * Math.PI) / 180);
+          drawThreatIcon(ctx, it.cat, -16, -16, 32, 32);
+          ctx.restore();
+
+          if (it.isLead !== false) {
+            const showTag = (visualConfig && visualConfig.showSpeedLabels !== false);
+            if (showTag) {
+              const meta = THREAT_CATEGORIES[it.cat] || THREAT_CATEGORIES.unknown;
+              const spdStr = sim.speedKmh > 0 ? ` • ${Math.round(sim.speedKmh)} км/г` : '';
+              const label = `${it.trk.type || meta.name}${spdStr}`;
+              drawCanvasTargetLabel(ctx, sx + 18, sy - 5, label);
+            }
+
+            if (it.groupCount > 1) {
+              const meta = THREAT_CATEGORIES[it.cat] || THREAT_CATEGORIES.unknown;
+              drawCanvasGroupBadge(ctx, sx - 16, sy + 14, `x${it.groupCount}`, meta.color);
+            }
+          }
+          ctx.globalAlpha = 1.0;
+        }
+
+        // Pulsing Lost / Impact Targets in Live Mode
+        if (visualConfig && visualConfig.showLostPoints !== false && typeof liveLostTargets !== 'undefined') {
+          const pulsePhase = (now % 1500) / 1500;
+          const pulseR = 5 + pulsePhase * 16;
+          const pulseAlpha = (1 - pulsePhase) * 0.85;
+
+          for (const tid in liveLostTargets) {
+            const lt = liveLostTargets[tid];
+            if (!lt || !isValidLL(lt.lat, lt.lon)) continue;
+            if (lt.lat < south || lt.lat > north || lt.lon < west || lt.lon > east) continue;
+            const pt = map.latLngToLayerPoint([lt.lat, lt.lon]);
+            const sx = pt.x - origin.x;
+            const sy = pt.y - origin.y;
+            lt.screenX = sx;
+            lt.screenY = sy;
+
+            ctx.strokeStyle = `rgba(239, 68, 68, ${pulseAlpha})`;
+            ctx.lineWidth = 2.0;
+            ctx.beginPath();
+            ctx.arc(sx, sy, pulseR, 0, Math.PI * 2);
+            ctx.stroke();
+
+            drawCanvasCrossMark(ctx, sx, sy, 18, '#EF4444');
+          }
+        }
+      } else {
+        renderHistoryCanvasFrame(now, ctx, map, size, bounds, origin, south, north, west, east);
+      }
+    }
+
 
 
 
@@ -7793,76 +7384,31 @@
 
 
     function toggleSidebar() {
-
-
-
       const panel = document.getElementById('sidebarPanel');
-
-
-
       const topBar = document.getElementById('hudTopBar');
-
-
-
       const fab = document.getElementById('btnOpenSidebar');
-
-
-
+      const glyph = document.getElementById('burgerIconGlyph');
       const backdrop = document.getElementById('mobileSidebarBackdrop');
-
-
-
       const isCollapsed = panel.classList.toggle('collapsed');
-
-
-
       if (isCollapsed) {
-
-
-
         topBar.classList.add('sidebar-collapsed');
-
-
-
-        fab.style.display = 'flex';
-
-
-
+        if (fab) {
+          fab.classList.remove('is-open');
+          fab.removeAttribute('title');
+        }
+        if (glyph) glyph.textContent = '☰';
         if (backdrop) backdrop.classList.remove('active');
-
-
-
       } else {
-
-
-
         topBar.classList.remove('sidebar-collapsed');
-
-
-
-        if (window.innerWidth > 768) fab.style.display = 'none';
-
-
-
+        if (fab) {
+          fab.classList.add('is-open');
+          fab.removeAttribute('title');
+        }
+        if (glyph) glyph.textContent = '✕';
         if (backdrop && window.innerWidth <= 768) backdrop.classList.add('active');
-
-
-
       }
-
-
-
       setTimeout(() => { if (map) map.invalidateSize(); }, 300);
-
-
-
     }
-
-
-
-
-
-
 
     function switchSidebarTab(tabName) {
 
@@ -8211,6 +7757,14 @@
 
 
       liveLostLayers = {};
+
+
+
+      if (USE_CANVAS_RADAR && radarCanvasLayer) {
+
+        renderRadarCanvasFrame(performance.now());
+
+      }
 
 
 
@@ -8707,52 +8261,39 @@
 
             sim.curLon = curLon;
 
-            it.marker.setLatLng([curLat, curLon]);
+            if (!USE_CANVAS_RADAR) {
+              it.marker.setLatLng([curLat, curLon]);
 
-
-
-            // Плавне з'єднання кінчика лінії без розриву та без петлі назад на носі
-
-            if (it.coreTrail && it.baseTrailPts && it.baseTrailPts.length > 0) {
-              if (!it.lastTrailSyncTs || (now - it.lastTrailSyncTs) >= 40) {
-                it.lastTrailSyncTs = now;
-                it.coreTrail.setLatLngs(it.baseTrailPts.concat([[curLat, curLon]]));
+              // Плавне з'єднання кінчика лінії без розриву та без петлі назад на носі
+              if (it.coreTrail && it.baseTrailPts && it.baseTrailPts.length > 0) {
+                if (!it.lastTrailSyncTs || (now - it.lastTrailSyncTs) >= 40) {
+                  it.lastTrailSyncTs = now;
+                  it.coreTrail.setLatLngs(it.baseTrailPts.concat([[curLat, curLon]]));
+                }
+              }
+              if (it.futureLine && it.sim) {
+                const fPts = it.futureLine.getLatLngs();
+                if (fPts && fPts.length > 1) {
+                  fPts[0] = L.latLng(curLat, curLon);
+                  it.futureLine.setLatLngs(fPts);
+                }
               }
             }
-            if (it.futureLine && it.sim) {
-              const fPts = it.futureLine.getLatLngs();
-              if (fPts && fPts.length > 1) {
-                fPts[0] = L.latLng(curLat, curLon);
-                it.futureLine.setLatLngs(fPts);
-              }
-            }
-
-
 
             // Плавний поворот носа (найкоротша дуга)
-
             const deltaH = ((sim.targetHeading - sim.curHeading + 540) % 360) - 180;
-
             if (Math.abs(deltaH) > 0.2) {
-
               sim.curHeading += deltaH * Math.min(1.0, 0.20);
-
               sim.curHeading = (sim.curHeading + 360) % 360;
-
-              if (!it.rotatorEl || !it.rotatorEl.isConnected) {
-
-                const iconEl = it.marker.getElement();
-
-                if (iconEl) it.rotatorEl = iconEl.querySelector('.icon-rotator');
-
+              if (!USE_CANVAS_RADAR) {
+                if (!it.rotatorEl || !it.rotatorEl.isConnected) {
+                  const iconEl = it.marker.getElement();
+                  if (iconEl) it.rotatorEl = iconEl.querySelector('.icon-rotator');
+                }
+                if (it.rotatorEl) {
+                  it.rotatorEl.style.transform = `rotate(${sim.curHeading.toFixed(1)}deg)`;
+                }
               }
-
-              if (it.rotatorEl) {
-
-                it.rotatorEl.style.transform = `rotate(${sim.curHeading.toFixed(1)}deg)`;
-
-              }
-
             }
 
 
@@ -8789,6 +8330,22 @@
 
           }
 
+        }
+
+        if (USE_CANVAS_RADAR && radarCanvasLayer) {
+          const isMobileDevice = (typeof window !== 'undefined' && (window.innerWidth <= 768 || (navigator && navigator.maxTouchPoints > 0)));
+          const minInterval = isMobileDevice ? 28 : 14;
+          if (now - lastRadarCanvasRenderTs >= minInterval) {
+            lastRadarCanvasRenderTs = now;
+            renderRadarCanvasFrame(now);
+          }
+        }
+
+        if (typeof document !== 'undefined' && document.hidden) {
+          setTimeout(() => {
+            deadReckonRafId = requestAnimationFrame(loop);
+          }, 250);
+          return;
         }
 
         deadReckonRafId = requestAnimationFrame(loop);
@@ -9435,7 +8992,7 @@
 
 
 
-        const rawTrajPts = (trk.trajectory || []).map(p => [p.lat, p.lon]);
+        const rawTrajPts = (trk.trajectory || []).map(p => Array.isArray(p) ? [p[0], p[1]] : [p.lat, p.lon]).filter(p => p[0] !== undefined && p[1] !== undefined && !isNaN(p[0]) && !isNaN(p[1]));
 
 
 
@@ -9491,7 +9048,7 @@
 
 
 
-        const corridor = trk.extrapolated || trk.extrapolated_path || [];
+        const corridor = trk.corridor || trk.extrapolated || trk.extrapolated_path || [];
         const curMarker = liveLayers[tid] && liveLayers[tid].marker ? liveLayers[tid].marker.getLatLng() : null;
         const curStartPt = curMarker ? [curMarker.lat, curMarker.lng] : [trk.lat, trk.lon];
         const extraPts = [curStartPt].concat(corridor.map(p => [p.lat, p.lon]));
@@ -9522,7 +9079,28 @@
 
 
 
-          const marker = L.marker([trk.lat, trk.lon], { icon, pane: 'targetsPane', opacity: isLead ? 1 : 0 }).addTo(map).bindPopup(popupHtml);
+          const marker = (!USE_CANVAS_RADAR)
+            ? L.marker([trk.lat, trk.lon], { icon, pane: 'targetsPane', opacity: isLead ? 1 : 0 }).addTo(map).bindPopup(popupHtml)
+            : {
+                opacity: isLead ? 1 : 0,
+                _lat: trk.lat,
+                _lng: trk.lon,
+                setOpacity: function(op) { this.opacity = op; },
+                setLatLng: function(ll) {
+                  if (Array.isArray(ll)) { this._lat = ll[0]; this._lng = ll[1]; }
+                  else if (ll) { this._lat = ll.lat; this._lng = (ll.lng !== undefined ? ll.lng : ll.lon); }
+                },
+                getLatLng: function() {
+                  const lat = this._lat !== undefined ? this._lat : trk.lat;
+                  const lng = this._lng !== undefined ? this._lng : trk.lon;
+                  return (typeof L !== 'undefined' && L.latLng) ? L.latLng(lat, lng) : { lat: lat, lng: lng };
+                },
+                setIcon: function(ic) {},
+                setPopupContent: function(c) {},
+                bindPopup: function(c) { return this; },
+                openPopup: function() {},
+                getElement: function() { return null; }
+              };
 
 
 
@@ -9542,7 +9120,7 @@
 
 
 
-          if (visualConfig.showTrails && trajPts.length > 1) {
+          if (!USE_CANVAS_RADAR && visualConfig.showTrails && trajPts.length > 1) {
 
 
 
@@ -9562,7 +9140,7 @@
 
 
 
-          if (visualConfig.showOriginDot && trajPts.length > 0) {
+          if (!USE_CANVAS_RADAR && visualConfig.showOriginDot && trajPts.length > 0) {
 
 
 
@@ -9590,7 +9168,7 @@
 
 
 
-          if (visualConfig.showFutureVector && extraPts.length > 1) {
+          if (!USE_CANVAS_RADAR && visualConfig.showFutureVector && extraPts.length > 1) {
 
 
 
@@ -9701,13 +9279,14 @@
 
 
 
-          liveLayers[tid] = { marker, coreTrail, originDot, futureLine, etaMarkers, cat, trk, sim, baseTrailPts: (trajPts.length > 1 ? trajPts.slice(0, -1) : []), groupCount, isLead };
+          liveLayers[tid] = { marker, coreTrail, originDot, futureLine, etaMarkers, cat, trk, sim, baseTrailPts: (trajPts.length > 1 ? trajPts.slice(0, -1) : []), groupCount, isLead, corridor };
 
 
 
         } else {
           const item = liveLayers[tid];
           item.trk = trk;
+          item.corridor = corridor;
 
           let isNewRadarObservation = false;
 
@@ -9806,64 +9385,39 @@
 
 
           if (item.cat !== cat || item.groupCount !== groupCount || item.isLead !== isLead) {
-
-
-
             item.cat = cat;
-
             item.groupCount = groupCount;
-
             item.isLead = isLead;
 
-
-
-            item.marker.setIcon(icon);
-
-            item.marker.setOpacity(isLead ? 1 : 0);
-
-
-
-            item.rotatorEl = null;
-
-
-
-          } else {
-
-
-
-            const tagEl = item.marker.getElement()?.querySelector('.target-label-tag');
-
-
-
-            if (tagEl) {
-
-
-
-              const speedStr = trk.speed_kmh && trk.speed_kmh > 0 ? ` • ${Math.round(trk.speed_kmh)} км/г` : '';
-
-
-
-              tagEl.innerText = `${trk.type || meta.name}${speedStr}`;
-
-
-
+            if (!USE_CANVAS_RADAR) {
+              item.marker.setIcon(icon);
+              item.marker.setOpacity(isLead ? 1 : 0);
+              item.rotatorEl = null;
+            } else if (item.marker) {
+              item.marker.opacity = isLead ? 1 : 0;
             }
 
+          } else if (!USE_CANVAS_RADAR) {
+            const tagEl = item.marker.getElement()?.querySelector('.target-label-tag');
+            if (tagEl) {
+              const speedStr = trk.speed_kmh && trk.speed_kmh > 0 ? ` • ${Math.round(trk.speed_kmh)} км/г` : '';
+              tagEl.innerText = `${trk.type || meta.name}${speedStr}`;
+            }
+          }
 
-
+          if (!USE_CANVAS_RADAR && item.marker && item.marker.setPopupContent) {
+            item.marker.setPopupContent(popupHtml);
           }
 
 
 
-          item.marker.setPopupContent(popupHtml);
 
 
 
 
-
-
-
-          if (visualConfig.showTrails && trajPts.length > 1) {
+          if (USE_CANVAS_RADAR) {
+            item.baseTrailPts = (trajPts.length > 1 ? trajPts.slice(0, -1) : (trajPts.length === 1 ? trajPts : []));
+          } else if (visualConfig.showTrails && trajPts.length > 1) {
             if (isNewRadarObservation) {
               item.baseTrailPts = (trajPts.length > 1 ? trajPts.slice(0, -1) : []);
               if (item.coreTrail) {
@@ -9877,7 +9431,7 @@
             }
           }
 
-          if (visualConfig.showOriginDot && trajPts.length > 0) {
+          if (!USE_CANVAS_RADAR && visualConfig.showOriginDot && trajPts.length > 0) {
 
 
 
@@ -9911,7 +9465,7 @@
 
 
 
-          if (visualConfig.showFutureVector && extraPts.length > 1) {
+          if (!USE_CANVAS_RADAR && visualConfig.showFutureVector && extraPts.length > 1) {
 
 
 
@@ -11175,6 +10729,7 @@
 
 
       recomputeAnalyticsStatsAndUI();
+      renderTimelineDensitySparkline();
 
 
 
@@ -11851,41 +11406,16 @@
 
 
     function toggleSlotDropdown(e) {
-
-
-
       if (e) e.stopPropagation();
-
-
-
       const menu = document.getElementById('slotDropdownMenu');
-
-
-
       const btn = document.getElementById('slotDropdownTrigger');
-
-
-
+      const card = document.getElementById('slotSelectorCard');
       if (!menu) return;
-
-
-
       const isOpen = menu.style.display !== 'none';
-
-
-
       menu.style.display = isOpen ? 'none' : 'block';
-
-
-
       if (btn) btn.classList.toggle('open', !isOpen);
-
-
-
+      if (card) card.classList.toggle('dropdown-open', !isOpen);
       toggleClosestBreakdown(null, false);
-
-
-
     }
 
 
@@ -11895,64 +11425,24 @@
 
 
     function toggleClosestBreakdown(e, forceState) {
-
-
-
       if (e) e.stopPropagation();
-
-
-
       const pop = document.getElementById('closestBreakdownPopover');
-
-
-
       const card = document.getElementById('closestCard');
-
-
-
       if (!pop) return;
-
-
-
       const shouldOpen = (forceState !== undefined) ? forceState : (pop.style.display === 'none');
-
-
-
       pop.style.display = shouldOpen ? 'block' : 'none';
-
-
-
-      if (card) card.classList.toggle('open', shouldOpen);
-
-
-
-      if (shouldOpen) {
-
-
-
-        const slotMenu = document.getElementById('slotDropdownMenu');
-
-
-
-        if (slotMenu) slotMenu.style.display = 'none';
-
-
-
-        document.getElementById('slotDropdownTrigger')?.classList.remove('open');
-
-
-
+      if (card) {
+        card.classList.toggle('open', shouldOpen);
+        card.classList.toggle('popover-open', shouldOpen);
       }
-
-
-
+      if (shouldOpen) {
+        const slotMenu = document.getElementById('slotDropdownMenu');
+        const slotCard = document.getElementById('slotSelectorCard');
+        if (slotMenu) slotMenu.style.display = 'none';
+        if (slotCard) slotCard.classList.remove('dropdown-open');
+        document.getElementById('slotDropdownTrigger')?.classList.remove('open');
+      }
     }
-
-
-
-
-
-
 
     function updateSlotDropdownLabel() {
 
@@ -12465,77 +11955,27 @@
 
 
     document.addEventListener('pointerdown', (e) => {
-
-
-
       const slotCard = document.getElementById('slotSelectorCard');
-
-
-
       const closestCard = document.getElementById('closestCard');
-
-
-
       const slotMenu = document.getElementById('slotDropdownMenu');
-
-
-
       const closestPop = document.getElementById('closestBreakdownPopover');
 
-
-
-
-
-
-
       if (slotMenu && slotMenu.style.display !== 'none') {
-
-
-
         if (!slotCard?.contains(e.target) && !slotMenu.contains(e.target)) {
-
-
-
           slotMenu.style.display = 'none';
-
-
-
           document.getElementById('slotDropdownTrigger')?.classList.remove('open');
-
-
-
+          if (slotCard) slotCard.classList.remove('dropdown-open');
         }
-
-
-
       }
-
-
-
       if (closestPop && closestPop.style.display !== 'none') {
-
-
-
         if (!closestCard?.contains(e.target) && !closestPop.contains(e.target)) {
-
-
-
           closestPop.style.display = 'none';
-
-
-
-          closestCard?.classList.remove('open');
-
-
-
+          if (closestCard) {
+            closestCard.classList.remove('open');
+            closestCard.classList.remove('popover-open');
+          }
         }
-
-
-
       }
-
-
-
     });
 
 
@@ -15098,7 +14538,11 @@
 
 
 
-        const targetsMap = ds.targets || {};
+        const targetsMap = ds.targets
+          ? ds.targets
+          : (ds.tracks && Array.isArray(ds.tracks)
+              ? Object.fromEntries(ds.tracks.filter(t => t && t.id).map(t => [t.id, t]))
+              : (ds.id ? { [ds.id]: ds } : {}));
 
 
 
@@ -15308,9 +14752,7 @@
 
 
       recomputeAnalyticsStatsAndUI();
-
-
-
+      renderTimelineDensitySparkline();
       refreshMapVisuals();
 
 
@@ -15723,6 +15165,9 @@
         sampleImpactLayers = [];
         currentClusteredImpactIds.clear();
         clusteredImpactMarkersMap.clear();
+        if (USE_CANVAS_RADAR && radarCanvasLayer) {
+          renderRadarCanvasFrame(performance.now());
+        }
       }
     }
 
@@ -16141,7 +15586,7 @@
         }
 
         // Active Moving Flight at curT (Pool-optimized: zero DOM thrashing during playback & zoom)
-        if (curT >= trk.start_time && curT <= trk.end_time) {
+        if (!USE_CANVAS_RADAR && curT >= trk.start_time && curT <= trk.end_time) {
           activeMovingTrackIds.add(trk.id);
 
           if (showHistoryIcons) {
@@ -16215,7 +15660,7 @@
       // Зберігає існуючі DOM-елементи кластерів незмінними під час перегляду історії,
       // завдяки чому анімація кластера при наведенні курсору (:hover) виконується зі сталою швидкістю
       // і не пришвидшується при зміні темпу перегляду (playbackSpeed)
-      if (showSampleImpacts) {
+      if (!USE_CANVAS_RADAR && showSampleImpacts) {
         const completedImpactTracks = activeSampleTracks.filter(trk => curT >= trk.end_time);
         const newImpactIds = new Set(completedImpactTracks.map(t => t.id));
 
@@ -16486,6 +15931,14 @@
         document.getElementById('barClockDate').innerText = formatShortFullDate(dt);
 
 
+
+      }
+
+
+
+      if (USE_CANVAS_RADAR && radarCanvasLayer) {
+
+        renderRadarCanvasFrame(performance.now());
 
       }
 
@@ -17031,6 +16484,10 @@
 
 
 
+        if (USE_CANVAS_RADAR && radarCanvasLayer) {
+          renderRadarCanvasFrame(nowMs);
+        }
+
         // Throttle heavy map/heat/cluster redraw to 20 FPS (50ms interval) to prevent GPU/CPU saturation
 
 
@@ -17212,29 +16669,26 @@
 
 
         screenRecordChunks = [];
-
-
+        let totalRecordedBytes = 0;
+        const MAX_RECORD_BYTES = 250 * 1024 * 1024; // 250 MB
+        const recordStartTime = Date.now();
+        const MAX_RECORD_TIME_MS = 15 * 60 * 1000; // 15 хв
 
         const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-
-
-
         screenMediaRecorder = new MediaRecorder(screenRecordStream, { mimeType: mime });
 
-
-
-
-
-
-
         screenMediaRecorder.ondataavailable = e => {
-
-
-
-          if (e.data && e.data.size > 0) screenRecordChunks.push(e.data);
-
-
-
+          if (e.data && e.data.size > 0) {
+            screenRecordChunks.push(e.data);
+            totalRecordedBytes += e.data.size;
+            const elapsed = Date.now() - recordStartTime;
+            if (totalRecordedBytes >= MAX_RECORD_BYTES || elapsed >= MAX_RECORD_TIME_MS) {
+              console.warn('Ліміт запису досягнуто (250MB або 15 хв). Автоматична зупинка запису для захисту пам\'яті...');
+              if (screenMediaRecorder && screenMediaRecorder.state === 'recording') {
+                screenMediaRecorder.stop();
+              }
+            }
+          }
         };
 
 
@@ -17467,44 +16921,38 @@
     // =========================================================================
     // HUD ACCORDION CONTROLLER (Horizontal Rightward Expansion)
     // =========================================================================
-    let expandedHudCard = (window.innerWidth <= 768) ? null : 'all';
+    // HUD INDEPENDENT STATE CONTROLLER (Dribbble Smooth Expansion Physics)
+    // All 3 cards default to COLLAPSED (false) on initial load
+    const hudCardStates = {
+      threats: false,
+      slot: false,
+      closest: false
+    };
 
     function isMobileView() {
       return window.innerWidth <= 768;
     }
 
     function applyHudAccordionState() {
-      const isMob = isMobileView();
       const threatsEl = document.getElementById('threatsCard');
       const slotEl = document.getElementById('slotSelectorCard');
       const closestEl = document.getElementById('closestCard');
 
-      if (!isMob) {
-        // Desktop: all cards expanded by default, or individual toggle
-        const allExp = expandedHudCard === 'all' || expandedHudCard === null;
-        if (threatsEl) threatsEl.className = allExp || expandedHudCard === 'threats' ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
-        if (slotEl) slotEl.className = allExp || expandedHudCard === 'slot' ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
-        if (closestEl) closestEl.className = allExp || expandedHudCard === 'closest' ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
-      } else {
-        // Mobile: strict accordion - max 1 expanded card at a time
-        if (threatsEl) threatsEl.className = (expandedHudCard === 'threats') ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
-        if (slotEl) slotEl.className = (expandedHudCard === 'slot') ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
-        if (closestEl) closestEl.className = (expandedHudCard === 'closest') ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
+      if (threatsEl) {
+        threatsEl.className = hudCardStates.threats ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
+      }
+      if (slotEl) {
+        slotEl.className = hudCardStates.slot ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
+      }
+      if (closestEl) {
+        closestEl.className = hudCardStates.closest ? 'hud-card hud-expanded' : 'hud-card hud-collapsed';
       }
     }
 
     function toggleHudCard(cardName, event) {
       if (event) event.stopPropagation();
-      if (isMobileView()) {
-        expandedHudCard = (expandedHudCard === cardName) ? null : cardName;
-      } else {
-        if (expandedHudCard === 'all') {
-          expandedHudCard = cardName;
-        } else if (expandedHudCard === cardName) {
-          expandedHudCard = 'all';
-        } else {
-          expandedHudCard = cardName;
-        }
+      if (cardName in hudCardStates) {
+        hudCardStates[cardName] = !hudCardStates[cardName];
       }
       applyHudAccordionState();
     }
@@ -17570,6 +17018,7 @@
 
 
 
+  <div id="poiTacticalTooltip" class="tactical-poi-tooltip" style="display:none;"></div>
 </body>
 
 

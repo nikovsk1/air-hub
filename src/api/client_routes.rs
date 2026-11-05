@@ -43,20 +43,31 @@ pub fn client_routes() -> Router<AppState> {
         .route("/api/v1/directory", get(handle_directory))
         .route("/api/v1/reference", get(handle_directory))
         .route("/api/v1/regions/geojson", get(handle_regions_geojson))
+        .route("/api/v1/poi", get(handle_get_poi))
+        .route("/api/v1/client/poi", get(handle_get_poi))
+        .route("/api/v1/client/regions.geojson", get(handle_regions_geojson))
+        .route("/api/v1/client/regions/geojson", get(handle_regions_geojson))
         .route("/api/v1/slots", get(handle_get_slots).post(handle_create_slot))
         .route("/api/v1/slots/:slot_id", put(handle_update_slot).delete(handle_delete_slot))
+        .route("/api/v1/client/slots", get(handle_get_slots).post(handle_create_slot))
+        .route("/api/v1/client/slots/:slot_id", put(handle_update_slot).delete(handle_delete_slot))
         .route("/api/v1/location", post(handle_dynamic_location).get(handle_get_location_slots))
         .route("/api/v1/locations/dynamic", post(handle_dynamic_location))
         .route("/api/v1/settings", get(handle_get_settings).put(handle_update_settings).post(handle_update_settings))
         .route("/api/v1/threats", get(handle_get_threats))
+        .route("/api/v1/client/threats", get(handle_get_threats))
         .route("/api/v1/radar", get(handle_get_radar))
         .route("/api/v1/radar/live", get(handle_get_radar))
         .route("/api/v1/map", get(handle_get_map))
         .route("/api/v1/stream", get(handle_ws_stream))
         .route("/api/v1/history/months", get(handle_history_months))
         .route("/api/v1/history/summary", get(handle_get_history_summary))
+        .route("/api/v1/client/history/summary", get(handle_get_history_summary))
         .route("/api/v1/history", get(handle_get_history))
+        .route("/api/v1/client/history", get(handle_get_history))
         .route("/api/v1/history/upload", post(handle_upload_history))
+        .route("/api/v1/client/map/settings", get(handle_get_map_settings).post(handle_save_map_settings))
+        .route("/api/v1/client/map_settings", get(handle_get_map_settings).post(handle_save_map_settings))
         .route("/api/ukraine_alarm_plus/map", get(handle_radar_map_html))
         .route("/map", get(handle_radar_map_html))
         .route("/radar-map", get(handle_radar_map_html))
@@ -171,10 +182,7 @@ async fn handle_directory(
     ];
 
     let alerts_list = vec![
-        json!({"category": "missile", "name_ua": "Повітряна тривога (Ракетна небезпека)", "color": "red"}),
-        json!({"category": "drone", "name_ua": "Підвищена небезпека (БпЛА / Шахед)", "color": "yellow"}),
-        json!({"category": "artillery", "name_ua": "Артилерійський обстріл / РСЗВ", "color": "red"}),
-        json!({"category": "none", "name_ua": "Відбій тривоги", "color": "none"}),
+        &ALERT_MISSILE, &ALERT_DRONE, &ALERT_ARTILLERY, &ALERT_CLEAR
     ];
 
     let oblasts: Vec<_> = state.detector.regions.iter().map(|o| {
@@ -223,25 +231,39 @@ async fn handle_directory(
 async fn handle_regions_geojson(
     State(state): State<AppState>,
 ) -> Response {
-    let path = state.config.data_dir.join("regions.geojson");
-    let content = if path.exists() {
-        fs::read_to_string(&path).ok()
-    } else {
-        let default_path = state.config.data_defaults_dir.join("regions.geojson");
-        fs::read_to_string(&default_path).ok()
-    };
+    static GEOJSON_CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    let content = GEOJSON_CACHE.get_or_init(|| {
+        let path = state.config.data_dir.join("regions.geojson");
+        if path.exists() {
+            fs::read_to_string(&path).unwrap_or_default()
+        } else {
+            let default_path = state.config.data_defaults_dir.join("regions.geojson");
+            fs::read_to_string(&default_path).unwrap_or_default()
+        }
+    });
 
-    if let Some(content) = content {
+    if !content.is_empty() {
         (
             [
                 (header::CONTENT_TYPE, "application/geo+json"),
                 (header::CACHE_CONTROL, "public, max-age=86400")
             ],
-            content
+            content.as_str()
         ).into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()
     }
+}
+
+async fn handle_get_poi(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let pois = state.storage.get_pois();
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json"), (header::CACHE_CONTROL, "public, max-age=60")],
+        Json(pois)
+    )
 }
 
 async fn handle_get_slots(
@@ -472,6 +494,70 @@ async fn handle_get_location_slots(
         "slots": slots_list,
         "active_dynamic_slot": active_dyn_id.unwrap_or_else(|| "1".to_string()),
         "total": slots_list.len()
+    })).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct MapSettingsPayload {
+    pub token: Option<String>,
+    #[allow(dead_code)]
+    pub provider: Option<String>,
+    pub cartodb_key: Option<String>,
+}
+
+async fn handle_get_map_settings(
+    State(state): State<AppState>,
+    Query(query): Query<ClientQuery>,
+) -> Response {
+    let key = query.token.as_deref().unwrap_or("").trim();
+    let relation = if !key.is_empty() {
+        if let Some(user) = state.storage.get_user_by_key(key) {
+            user.owner
+        } else {
+            "Загальна мапа".to_string()
+        }
+    } else {
+        "Загальна мапа".to_string()
+    };
+
+    let cartodb_key = state.storage.get_cartodb_key(&relation);
+    Json(json!({
+        "status": "ok",
+        "default_provider": "arcgis",
+        "relation": relation,
+        "cartodb_key": cartodb_key
+    })).into_response()
+}
+
+async fn handle_save_map_settings(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(payload): Json<MapSettingsPayload>,
+) -> Response {
+    let key = payload.token.as_deref().unwrap_or("").trim();
+    let relation = if !key.is_empty() {
+        if let Some(user) = state.storage.get_user_by_key(key) {
+            user.owner
+        } else if is_admin(&headers, payload.token.as_deref(), Some(addr.ip()), &state.config.admin_secret_key) {
+            "Загальна мапа".to_string()
+        } else {
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
+    } else if is_admin(&headers, payload.token.as_deref(), Some(addr.ip()), &state.config.admin_secret_key) {
+        "Загальна мапа".to_string()
+    } else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+
+    if let Some(carto_key) = payload.cartodb_key {
+        let _ = state.storage.set_service_key("cartodb", &relation, Some(carto_key));
+    }
+
+    Json(json!({
+        "status": "ok",
+        "message": "map settings saved",
+        "relation": relation
     })).into_response()
 }
 
@@ -1185,12 +1271,21 @@ async fn handle_get_history_summary(
     }
 
     if let Some(ref date) = query.date {
+        if !crate::api::admin_routes::is_valid_date_param(date) {
+            return StatusCode::BAD_REQUEST.into_response();
+        }
         if let Some(summary) = state.history_mgr.get_daily_summary(date) {
             return Json(json!({
                 "status": "ok",
                 "date": date,
                 "summary": summary
             })).into_response();
+        }
+    }
+
+    if let Some(ref m) = query.month {
+        if !crate::api::admin_routes::is_valid_month_param(m) {
+            return StatusCode::BAD_REQUEST.into_response();
         }
     }
 
@@ -1218,6 +1313,16 @@ async fn handle_get_history(
 ) -> Response {
     if authenticate_user(&headers, &query, &state, Some(addr)).await.is_none() {
         return StatusCode::UNAUTHORIZED.into_response();
+    }
+    if let Some(ref m) = query.month {
+        if !crate::api::admin_routes::is_valid_month_param(m) {
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+    }
+    if let Some(ref d) = query.date {
+        if !crate::api::admin_routes::is_valid_date_param(d) {
+            return StatusCode::BAD_REQUEST.into_response();
+        }
     }
     let date_filter = query.date.as_deref();
     let month = if let Some(ref m) = query.month {

@@ -1,5 +1,20 @@
-fn is_valid_month_param(m: &str) -> bool {
-    m.len() == 7 && m.chars().enumerate().all(|(i, c)| if i == 4 { c == '-' } else { c.is_ascii_digit() })
+pub fn is_valid_month_param(m: &str) -> bool {
+    if m.len() != 7 {
+        return false;
+    }
+    let parts: Vec<&str> = m.split('-').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+    if let (Ok(y), Ok(month)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
+        (2020..=2050).contains(&y) && (1..=12).contains(&month)
+    } else {
+        false
+    }
+}
+
+pub fn is_valid_date_param(d: &str) -> bool {
+    chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").is_ok()
 }
 
 use std::fs;
@@ -60,6 +75,9 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/api/v1/admin/history/:month", delete(handle_delete_history_month))
         .route("/api/v1/admin/history/download/:month", get(handle_download_history_month))
         .route("/api/v1/admin/history/upload", post(handle_upload_history_json))
+        .route("/api/v1/admin/service_keys", get(handle_get_service_keys).post(handle_save_service_key).delete(handle_delete_service_key))
+        .route("/api/v1/admin/poi", get(handle_admin_list_poi).post(handle_admin_save_poi))
+        .route("/api/v1/admin/poi/:id", put(handle_admin_save_poi).delete(handle_admin_delete_poi))
         .route("/api/v1/admin/backup", get(handle_download_backup))
         .route("/api/v1/admin/restore", post(handle_restore_backup))
         .route("/api/v1/admin/exchange_log", get(handle_get_exchange_log))
@@ -323,6 +341,9 @@ async fn handle_gdrive_upload(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     AxumPath(month): AxumPath<String>,
 ) -> Response {
+    if !is_valid_month_param(&month) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
     if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
         return status.into_response();
     }
@@ -350,6 +371,9 @@ async fn handle_gdrive_restore(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     AxumPath(month): AxumPath<String>,
 ) -> Response {
+    if !is_valid_month_param(&month) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
     if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
         return status.into_response();
     }
@@ -427,6 +451,92 @@ async fn handle_upload_history_json(
     })).into_response()
 }
 
+#[derive(Deserialize)]
+pub struct ServiceKeyPayload {
+    pub service: String,
+    pub relation: Option<String>,
+    pub key: Option<String>,
+}
+
+async fn handle_get_service_keys(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Response {
+    if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
+        return status.into_response();
+    }
+
+    let sk = state.storage.get_service_keys();
+    let all_users = state.storage.get_all_users();
+    let mut relations = vec!["Загальна мапа".to_string()];
+    for u in &all_users {
+        if !relations.contains(&u.owner) {
+            relations.push(u.owner.clone());
+        }
+    }
+
+    Json(json!({
+        "status": "ok",
+        "service_keys": {
+            "ukrainealarm": {
+                "id": "ukrainealarm",
+                "name": "UkraineAlarm Офіційний API v3",
+                "category": "Мапа тривог",
+                "key": sk.ukrainealarm_api_token.unwrap_or_default(),
+                "relation": "Загальна мапа",
+                "is_fixed_relation": true
+            },
+            "cartodb": {
+                "id": "cartodb",
+                "name": "CartoDB Dark Matter",
+                "category": "Підложка мапи",
+                "global_key": sk.cartodb_global_api_key.unwrap_or_default(),
+                "user_keys": sk.cartodb_user_keys,
+                "available_relations": relations,
+                "is_fixed_relation": false
+            }
+        }
+    })).into_response()
+}
+
+async fn handle_save_service_key(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(payload): Json<ServiceKeyPayload>,
+) -> Response {
+    if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
+        return status.into_response();
+    }
+
+    let rel = payload.relation.unwrap_or_else(|| "Загальна мапа".to_string());
+    match state.storage.set_service_key(&payload.service, &rel, payload.key) {
+        Ok(_) => Json(json!({"status": "ok", "message": "saved"})).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"status": "error", "message": e}))).into_response(),
+    }
+}
+
+async fn handle_delete_service_key(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(payload): Json<ServiceKeyPayload>,
+) -> Response {
+    if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
+        return status.into_response();
+    }
+
+    let rel = payload.relation.unwrap_or_else(|| "Загальна мапа".to_string());
+    match state.storage.delete_service_key(&payload.service, &rel) {
+        Ok(_) => Json(json!({"status": "ok", "message": "deleted"})).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"status": "error", "message": e}))).into_response(),
+    }
+}
+
 async fn handle_download_backup(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -437,11 +547,13 @@ async fn handle_download_backup(
         return status.into_response();
     }
     let users = state.storage.get_all_users();
+    let service_keys = state.storage.get_service_keys();
     let ts = now_ts();
     let backup_data = json!({
         "timestamp": ts,
         "created_at": chrono::Utc::now().to_rfc3339(),
-        "users": users
+        "users": users,
+        "service_keys": service_keys
     });
 
     (
@@ -463,7 +575,7 @@ async fn handle_restore_backup(
     if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
         return status.into_response();
     }
-    match state.storage.restore_users(&payload) {
+    match state.storage.restore_backup(&payload) {
         Ok(count) => Json(json!({
             "status": "success",
             "message": "restored",
@@ -519,4 +631,47 @@ async fn handle_clear_exchange_log(
     }
     state.exchange_mgr.clear();
     Json(json!({"status": "cleared"})).into_response()
+}
+
+async fn handle_admin_list_poi(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Result<impl IntoResponse, StatusCode> {
+    check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key)?;
+    let pois = state.storage.get_pois();
+    Ok((
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json")],
+        Json(pois),
+    ))
+}
+
+async fn handle_admin_save_poi(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(item): Json<crate::storage::PoiItem>,
+) -> Result<impl IntoResponse, StatusCode> {
+    check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key)?;
+    state.storage.save_poi(item).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::OK)
+}
+
+async fn handle_admin_delete_poi(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<impl IntoResponse, StatusCode> {
+    check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key)?;
+    let removed = state.storage.delete_poi(&id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if removed {
+        Ok(StatusCode::OK)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }

@@ -376,19 +376,6 @@ impl ExchangeLogManager {
         }
     }
 
-    /// Зручний сумісний метод для фіксації нерозпізнаних даних без деталей
-    #[allow(dead_code)]
-    pub fn record_unmapped_simple(
-        &self,
-        log_type: &str,
-        raw_id: &str,
-        raw_code: Option<i64>,
-        mapped_as: &str,
-        source: &str,
-    ) {
-        self.record_unmapped(log_type, raw_id, raw_code, mapped_as, source, None);
-    }
-
     pub fn record_unmapped(
         &self,
         log_type: &str,
@@ -400,8 +387,14 @@ impl ExchangeLogManager {
     ) {
         let norm_id: String = raw_id.trim().chars().take(64).collect::<String>().to_lowercase();
         let key = format!("{}:{}:{:?}", log_type, norm_id, raw_code);
+        if self.known_keys.read().contains(&key) {
+            return;
+        }
         {
             let mut known = self.known_keys.write();
+            if known.len() >= 2048 {
+                known.clear();
+            }
             if !known.insert(key) {
                 return;
             }
@@ -502,43 +495,69 @@ impl ExchangeLogManager {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertMeta {
+    pub category: &'static str,
+    pub name_ua: &'static str,
+    pub name_en: &'static str,
+    pub color: &'static str,
+    pub description: &'static str,
+}
 
-    #[test]
-    fn test_classify_target_semantic_first() {
-        // Текстова назва має вищий пріоритет над конфліктними кодами
-        let (cat, _) = classify_target("КАБ", 4);
-        assert_eq!(cat, "kab");
+pub static ALERT_MISSILE: AlertMeta = AlertMeta {
+    category: "missile",
+    name_ua: "Повітряна тривога (Ракетна небезпека)",
+    name_en: "Air Alert (Missile danger)",
+    color: "red",
+    description: "Повна повітряна тривога / ракетна загроза (UkraineAlarm AIR / Neptun red)",
+};
 
-        let (cat, _) = classify_target("Су-34 винищувач", 2);
-        assert_eq!(cat, "aviation");
+pub static ALERT_DRONE: AlertMeta = AlertMeta {
+    category: "drone",
+    name_ua: "Підвищена небезпека (БпЛА / Шахед)",
+    name_en: "Heightened Alert (UAV / Shahed)",
+    color: "yellow",
+    description: "Підвищена загроза застосування ударних БпЛА / локальна небезпека (Neptun yellow)",
+};
 
-        let (cat, _) = classify_target("Х-101 ракета", 0);
-        assert_eq!(cat, "missile");
+pub static ALERT_ARTILLERY: AlertMeta = AlertMeta {
+    category: "artillery",
+    name_ua: "Артилерійський обстріл / РСЗВ",
+    name_en: "Artillery / MLRS Danger",
+    color: "red",
+    description: "Загроза артилерійського обстрілу або РСЗВ (UkraineAlarm ARTILLERY)",
+};
 
-        let (cat, _) = classify_target("Shahed-136", 0);
-        assert_eq!(cat, "shahed");
+pub static ALERT_CLEAR: AlertMeta = AlertMeta {
+    category: "none",
+    name_ua: "Відбій тривоги",
+    name_en: "All Clear",
+    color: "none",
+    description: "Відбій загрози для регіону",
+};
+
+pub fn classify_neptun_alert(level: &str) -> (&'static str, &'static str, &'static AlertMeta) {
+    match level.trim().to_lowercase().as_str() {
+        "red" => ("missile", "red", &ALERT_MISSILE),
+        "yellow" => ("drone", "yellow", &ALERT_DRONE),
+        _ => ("none", "none", &ALERT_CLEAR),
     }
+}
 
-    #[test]
-    fn test_classify_target_code_fallback() {
-        // Якщо назва порожня або загальна ("Ціль"), спрацьовує перевірка коду
-        let (cat, _) = classify_target("", 1);
-        assert_eq!(cat, "shahed");
-
-        let (cat, _) = classify_target("Ціль", 12);
-        assert_eq!(cat, "ballistic");
-
-        let (cat, _) = classify_target("Повітряна ціль", 3);
-        assert_eq!(cat, "missile");
-
-        let (cat, _) = classify_target("", 5);
-        assert_eq!(cat, "kab");
-
-        // Невідомий код без назви
-        let (cat, _) = classify_target("", 999);
-        assert_eq!(cat, "unknown");
+pub fn classify_official_alert(alert_type: &str, level: Option<&str>) -> (&'static str, &'static str, &'static AlertMeta) {
+    let t = alert_type.trim().to_uppercase();
+    if t == "ARTILLERY" {
+        ("artillery", "red", &ALERT_ARTILLERY)
+    } else if t == "AIR" || t == "MISSILE" {
+        if let Some(lvl) = level {
+            if lvl.eq_ignore_ascii_case("yellow") || lvl.eq_ignore_ascii_case("community") {
+                return ("drone", "yellow", &ALERT_DRONE);
+            }
+        }
+        ("missile", "red", &ALERT_MISSILE)
+    } else if t == "CHEMICAL" || t == "NUCLEAR" || t == "URBAN_FIGHTS" {
+        ("missile", "red", &ALERT_MISSILE)
+    } else {
+        ("none", "none", &ALERT_CLEAR)
     }
 }

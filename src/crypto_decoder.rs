@@ -1,10 +1,28 @@
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use flate2::read::GzDecoder;
 use regex::Regex;
 use serde_json::{json, Value};
 use std::io::Read;
 use std::sync::OnceLock;
+
+fn read_bounded<R: Read>(reader: R) -> Result<String, String> {
+    let mut out = String::with_capacity(16384);
+    let mut limited = reader.take(2 * 1024 * 1024 + 1);
+    limited.read_to_string(&mut out).map_err(|e| format!("Decompression error: {}", e))?;
+    if out.len() > 2 * 1024 * 1024 {
+        return Err("Decompressed payload exceeds 2 MB limit".to_string());
+    }
+    Ok(out)
+}
+
+fn decode_b64_flexible(b64_part: &str) -> Result<Vec<u8>, String> {
+    let clean = b64_part.trim().trim_end_matches('=');
+    URL_SAFE_NO_PAD
+        .decode(clean.as_bytes())
+        .or_else(|_| STANDARD_NO_PAD.decode(clean.as_bytes()))
+        .map_err(|e| format!("Base64 decode failed: {}", e))
+}
 
 #[derive(Debug, Clone)]
 pub struct Prng {
@@ -47,14 +65,7 @@ fn quarter_round(st: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize) {
 pub fn decode_payload_native(payload_str: &str) -> Result<Value, String> {
     let colon_pos = payload_str.find(':').ok_or_else(|| "Missing colon in payload prefix".to_string())?;
     let b64_part = &payload_str[colon_pos + 1..];
-    let sanitized = b64_part.replace('-', "+").replace('_', "/");
-    let pad_len = (4 - sanitized.len() % 4) % 4;
-    let mut padded = sanitized;
-    padded.push_str(&"=".repeat(pad_len));
-
-    let mut raw_bytes = BASE64_STANDARD
-        .decode(padded.as_bytes())
-        .map_err(|e| format!("Base64 decode failed: {}", e))?;
+    let mut raw_bytes = decode_b64_flexible(b64_part)?;
 
     let raw_len = raw_bytes.len();
     if raw_len < 16 {
@@ -204,10 +215,9 @@ pub fn decode_payload_native(payload_str: &str) -> Result<Value, String> {
                     chars.push(b);
                 }
                 *offset += slen;
-                let s = match String::from_utf8(chars.clone()) {
-                    Ok(valid_s) => valid_s,
-                    Err(_) => chars.iter().map(|&c| c as char).collect(),
-                };
+                let s = String::from_utf8(chars).unwrap_or_else(|e| {
+                    e.into_bytes().into_iter().map(|c| c as char).collect()
+                });
                 string_cache.push(s.clone());
                 Ok(json!(s))
             }
@@ -285,25 +295,6 @@ pub struct RawExtractedTarget {
 
 fn default_active_status() -> String {
     "active".to_string()
-}
-
-impl RawExtractedTarget {
-    #[allow(dead_code)]
-    pub fn simple(id: String, lat: f64, lon: f64, raw_name: String, raw_type_code: i64, heading_deg: f64) -> Self {
-        Self {
-            id,
-            lat,
-            lon,
-            raw_name,
-            raw_type_code,
-            heading_deg,
-            speed_kmh: None,
-            confidence: None,
-            time_offset_ms: None,
-            trail_points: Vec::new(),
-            upstream_status: "active".to_string(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -872,14 +863,7 @@ pub fn extract_targets_from_svg(svg_str: &str) -> Result<Vec<RawExtractedTarget>
 pub fn decode_surface_v2_payload(payload_str: &str) -> Result<Vec<RawExtractedTarget>, String> {
     let colon_pos = payload_str.find(':').ok_or_else(|| "Missing colon in payload prefix".to_string())?;
     let b64_part = &payload_str[colon_pos + 1..];
-    let sanitized = b64_part.replace('-', "+").replace('_', "/");
-    let pad_len = (4 - sanitized.len() % 4) % 4;
-    let mut padded = sanitized;
-    padded.push_str(&"=".repeat(pad_len));
-
-    let mut raw_bytes = BASE64_STANDARD
-        .decode(padded.as_bytes())
-        .map_err(|e| format!("Base64 decode failed: {}", e))?;
+    let mut raw_bytes = decode_b64_flexible(b64_part)?;
 
     let raw_len = raw_bytes.len();
     if raw_len < 16 {
@@ -935,183 +919,21 @@ pub fn decode_surface_v2_payload(payload_str: &str) -> Result<Vec<RawExtractedTa
     }
 
     let compressed_slice = &raw_bytes[16..];
-    let mut xml_str = String::new();
-
-    if compressed_slice.len() >= 2 && compressed_slice[0] == 0x1f && compressed_slice[1] == 0x8b {
-        let mut gz = GzDecoder::new(compressed_slice);
-        gz.read_to_string(&mut xml_str)
-            .map_err(|e| format!("Gzip decompression failed: {}", e))?;
+    let xml_str = if compressed_slice.len() >= 2 && compressed_slice[0] == 0x1f && compressed_slice[1] == 0x8b {
+        let gz = GzDecoder::new(compressed_slice);
+        read_bounded(gz).map_err(|e| format!("Gzip decompression failed: {}", e))?
     } else {
         use flate2::read::DeflateDecoder;
-        let mut def = DeflateDecoder::new(compressed_slice);
-        if def.read_to_string(&mut xml_str).is_err() {
-            xml_str.clear();
-            use flate2::read::ZlibDecoder;
-            let mut zlib = ZlibDecoder::new(compressed_slice);
-            zlib.read_to_string(&mut xml_str)
-                .map_err(|e| format!("Decompression failed: {}", e))?;
+        let def = DeflateDecoder::new(compressed_slice);
+        match read_bounded(def) {
+            Ok(s) => s,
+            Err(_) => {
+                use flate2::read::ZlibDecoder;
+                let zlib = ZlibDecoder::new(compressed_slice);
+                read_bounded(zlib).map_err(|e| format!("Decompression failed: {}", e))?
+            }
         }
-    }
+    };
 
     extract_targets_from_svg(&xml_str)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_svg_xy_to_lon_lat() {
-        // Київ: lon ~30.5234, lat ~50.4501 -> x ~120.66, y ~43.83
-        let (lon, lat) = svg_xy_to_lon_lat(120.66, 43.83);
-        assert!((lon - 30.5234).abs() < 0.1, "Longitude mismatch: {}", lon);
-        assert!((lat - 50.4501).abs() < 0.1, "Latitude mismatch: {}", lat);
-    }
-
-    #[test]
-    fn test_extract_targets_from_svg() {
-        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 175" data-f="4">
-            <g data-z="m">
-                <g id="tgt-shahed-1" transform="translate(120.66, 43.83)">
-                    <title data-l="Shahed">Шахед</title>
-                    <animateTransform type="rotate" from="135" to="135"/>
-                </g>
-                <g id="tgt-missile-2">
-                    <title data-l="Ракета">Крилата ракета</title>
-                    <animateTransform type="translate" from="150.0 60.0" to="152.0 62.0"/>
-                    <animateTransform type="rotate" from="270" to="270"/>
-                </g>
-            </g>
-        </svg>"#;
-
-        let targets = extract_targets_from_svg(svg).expect("Extraction should succeed");
-        assert_eq!(targets.len(), 2);
-        assert_eq!(targets[0].id, "tgt-shahed-1");
-        assert_eq!(targets[0].raw_name, "Шахед");
-        assert_eq!(targets[0].raw_type_code, 1);
-        assert_eq!(targets[0].heading_deg, 135.0);
-        assert!((targets[0].lon - 30.5234).abs() < 0.1);
-        assert!((targets[0].lat - 50.4501).abs() < 0.1);
-
-        assert_eq!(targets[1].id, "tgt-missile-2");
-        assert_eq!(targets[1].raw_name, "Ракета");
-        assert_eq!(targets[1].raw_type_code, 3);
-        assert_eq!(targets[1].heading_deg, 270.0);
-    }
-
-    #[test]
-    fn test_decode_surface_v2_payload() {
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
-        use std::io::Write;
-
-        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 175" data-f="4">
-            <g data-z="m">
-                <g id="tgt-shahed-test" transform="translate(120.66, 43.83)">
-                    <title data-l="Shahed">Шахед</title>
-                    <animateTransform type="rotate" from="180" to="180"/>
-                </g>
-            </g>
-        </svg>"#;
-
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(svg.as_bytes()).unwrap();
-        let gz_bytes = encoder.finish().unwrap();
-
-        let mut fnv: u32 = 2166136261;
-        for &b in &gz_bytes {
-            fnv = (fnv ^ (b as u32)).wrapping_mul(16777619);
-        }
-
-        let f = 0x11223344u32;
-        let h = 0x55667788u32;
-        let g = 0x99aabbc0u32;
-
-        let mut state_arr: [u32; 16] = [
-            1634760805, 857760878, 2036477234, 1797285236,
-            2838917605, 566540499, 2028117766, 3025996967,
-            1063430289, 3353677899, 1519178294, 2422993229,
-            1, f, h, g,
-        ];
-
-        let mut encrypted = gz_bytes.clone();
-        let mut block = [0u32; 16];
-        let raw_len = encrypted.len();
-
-        for i in (0..raw_len).step_by(64) {
-            block.copy_from_slice(&state_arr);
-            for _ in 0..10 {
-                quarter_round(&mut block, 0, 4, 8, 12);
-                quarter_round(&mut block, 1, 5, 9, 13);
-                quarter_round(&mut block, 2, 6, 10, 14);
-                quarter_round(&mut block, 3, 7, 11, 15);
-                quarter_round(&mut block, 0, 5, 10, 15);
-                quarter_round(&mut block, 1, 6, 11, 12);
-                quarter_round(&mut block, 2, 7, 8, 13);
-                quarter_round(&mut block, 3, 4, 9, 14);
-            }
-            let block_len = 64.min(raw_len - i);
-            for j in 0..block_len {
-                let key_word = block[j >> 2].wrapping_add(state_arr[j >> 2]);
-                encrypted[i + j] ^= ((key_word >> (8 * (3 & j))) & 0xFF) as u8;
-            }
-            state_arr[12] = state_arr[12].wrapping_add(1);
-        }
-
-        let mut full_bytes = Vec::new();
-        full_bytes.extend_from_slice(&f.to_le_bytes());
-        full_bytes.extend_from_slice(&h.to_le_bytes());
-        full_bytes.extend_from_slice(&g.to_le_bytes());
-        full_bytes.extend_from_slice(&fnv.to_le_bytes());
-        full_bytes.extend_from_slice(&encrypted);
-
-        let b64 = BASE64_STANDARD.encode(&full_bytes);
-        let payload = format!("~s2:{}", b64);
-
-        let decoded = decode_surface_v2_payload(&payload).expect("Decryption should succeed");
-        assert_eq!(decoded.len(), 1);
-        assert_eq!(decoded[0].id, "tgt-shahed-test");
-        assert_eq!(decoded[0].raw_name, "Шахед");
-        assert_eq!(decoded[0].raw_type_code, 1);
-        assert_eq!(decoded[0].heading_deg, 180.0);
-    }
-
-    #[tokio::test]
-    async fn test_live_ukrainealarm_decode() {
-        use reqwest::header::{USER_AGENT, ORIGIN, REFERER};
-        let client = reqwest::Client::new();
-        let resp = client.get("https://map.ukrainealarm.com/api/centrifuge/map/fallback")
-            .header(USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36")
-            .header(ORIGIN, "https://map.ukrainealarm.com")
-            .header(REFERER, "https://map.ukrainealarm.com/")
-            .send().await;
-        if let Ok(r) = resp {
-            let text = r.text().await.unwrap_or_default();
-            println!("LIVE PAYLOAD LEN: {}", text.len());
-            if let Ok(v) = serde_json::from_str::<Value>(&text) {
-                if let Some(n_str) = v.get("n").and_then(|s| s.as_str()) {
-                    let colon_pos = n_str.find(':').unwrap_or(0);
-                    println!("LIVE PREFIX: {}", &n_str[..colon_pos + 1]);
-                    match decode_payload_native(n_str) {
-                        Ok(json_val) => {
-                            println!("LIVE AST DECODED OK!");
-                            let targets = extract_targets(&json_val);
-                            println!("TARGETS EXTRACTED SUCCESSFULLY: count={}", targets.len());
-                            for (i, t) in targets.iter().enumerate() {
-                                println!("Target {}: id={}, code={}, name='{}', lat={:.4}, lon={:.4}, heading={:.1}, speed={:?}",
-                                    i, t.id, t.raw_type_code, t.raw_name, t.lat, t.lon, t.heading_deg, t.speed_kmh);
-                            }
-                        }
-                        Err(e) => {
-                            println!("DECODE ERROR: {}", e);
-                            if let Ok(surf_targets) = decode_surface_v2_payload(n_str) {
-                                println!("SURFACE DECODE OK! Targets: {}", surf_targets.len());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
 }

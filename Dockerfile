@@ -61,6 +61,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
+# Create unprivileged runtime user and group (UID/GID 10001) for container security
+RUN groupadd -g 10001 appgroup && \
+    useradd -u 10001 -g appgroup -s /bin/sh -m appuser
+
 WORKDIR /app
 
 # Copy statically compiled binary from builder (pure Rust, no external libssl3 needed!)
@@ -69,6 +73,11 @@ COPY --from=builder /usr/local/bin/air-alert-hub-rs /app/air-alert-hub-rs
 # Copy static web assets and default geographic contours
 COPY --from=builder /usr/src/app/static /app/static
 COPY --from=builder /usr/src/app/data_defaults /app/data_defaults
+
+RUN mkdir -p /app/data && \
+    chown -R appuser:appgroup /app /app/data
+
+USER appuser:appgroup
 
 VOLUME ["/app/data"]
 
