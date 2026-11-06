@@ -366,14 +366,20 @@
     <!-- ==================== ФРЕЙМ: СТРАТЕГІЧНІ ТА ВІЙСЬКОВІ ОБ'ЄКТИ (POI) ==================== -->
     <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] rounded-xl overflow-hidden shadow-xl" id="poiFrame">
       <div class="p-4 border-b border-gray-800 flex flex-wrap justify-between items-center gap-3">
-        <div>
-          <h2 class="font-semibold text-white flex items-center gap-2">
-            <span>📍 Військові та стратегічні об'єкти (POI) України</span>
-            <span id="poiTotalBadge" class="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2.5 py-0.5 rounded-full font-mono font-medium">0 об'єктів</span>
-          </h2>
-          <p class="text-xs text-gray-400 mt-0.5">Військові аеродроми, сектори ППО, енергетичні хаби, заводи ОПК, НПЗ, порти та мости на території України</p>
+        <div class="flex items-center gap-3 cursor-pointer select-none" onclick="togglePoiFrameCollapse()" title="Натисніть щоб згорнути / розгорнути довідник">
+          <button type="button" id="btnTogglePoiCollapse" class="w-7 h-7 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-bold transition">
+            <span id="poiCollapseIcon">▼</span>
+          </button>
+          <div>
+            <h2 class="font-semibold text-white flex items-center gap-2">
+              <span>📍 Військові та стратегічні об'єкти (POI) України</span>
+              <span id="poiTotalBadge" class="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2.5 py-0.5 rounded-full font-mono font-medium">0 об'єктів</span>
+            </h2>
+            <p class="text-xs text-gray-400 mt-0.5">Військові аеродроми, сектори ППО, енергетичні хаби, заводи ОПК, НПЗ, порти та мости на території України</p>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <input type="text" id="poiSearchInput" oninput="filterAdminPois()" placeholder="🔍 Пошук POI за назвою..." class="bg-gray-950 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-orange-500 w-44">
           <select id="poiCategoryFilter" onchange="filterAdminPois()" class="bg-gray-950 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-orange-500">
             <option value="all">Усі категорії</option>
             <option value="airbases">✈️ Військові аеродроми</option>
@@ -383,6 +389,12 @@
             <option value="defense_industry">🏭 ОПК та заводи</option>
             <option value="ports">⚓ Морські та річкові порти</option>
             <option value="logistics_bridges">🌉 Мости та логістика</option>
+            <option value="ammo_depots">💣 Склади БК та арсенали</option>
+            <option value="dronoports">🚀 Дронопорти та стартові позиції</option>
+            <option value="command_posts">📡 Командні пункти та штаби</option>
+            <option value="training_camps">🎯 Полігони та навчальні центри</option>
+            <option value="railways">🚆 Залізничні вузли</option>
+            <option value="radar_sites">🛰️ РЛС та радіотехнічні війська</option>
           </select>
           <button onclick="openPoiModal()" class="h-8 px-3 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow cursor-pointer" title="Додати новий стратегічний об'єкт">
             <span>➕</span><span>Додати POI</span>
@@ -393,10 +405,10 @@
         </div>
       </div>
 
-      <!-- POI TABLE -->
-      <div class="overflow-x-auto">
+      <!-- POI TABLE (COLLAPSIBLE WITH SCROLLABLE INTERNAL CONTAINER) -->
+      <div id="poiFrameContent" class="hidden overflow-x-auto max-h-[500px] overflow-y-auto">
         <table class="w-full text-left text-sm">
-          <thead class="bg-gray-950 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
+          <thead class="bg-gray-950 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800 sticky top-0 z-10">
             <tr>
               <th class="p-3 w-48">Категорія</th>
               <th class="p-3 min-w-[220px]">Назва об'єкта</th>
@@ -697,8 +709,31 @@
       fuel_depots: { name: "Нафтобази та НПЗ", icon: "🛢️", color: "#f87171" },
       defense_industry: { name: "ОПК та заводи", icon: "🏭", color: "#c084fc" },
       ports: { name: "Морські та річкові порти", icon: "⚓", color: "#38bdf8" },
-      logistics_bridges: { name: "Мости та логістика", icon: "🌉", color: "#fb923c" }
+      logistics_bridges: { name: "Мости та логістика", icon: "🌉", color: "#fb923c" },
+      ammo_depots: { name: "Склади БК та арсенали", icon: "💣", color: "#f43f5e" },
+      dronoports: { name: "Дронопорти та стартові позиції", icon: "🚀", color: "#10b981" },
+      command_posts: { name: "Командні пункти та штаби", icon: "📡", color: "#e879f9" },
+      training_camps: { name: "Полігони та навчальні центри", icon: "🎯", color: "#a3e635" },
+      railways: { name: "Залізничні вузли", icon: "🚆", color: "#facc15" },
+      radar_sites: { name: "РЛС та радіотехнічні війська", icon: "🛰️", color: "#22d3ee" }
     };
+
+    function togglePoiFrameCollapse(forceState = null) {
+      const content = document.getElementById("poiFrameContent");
+      const icon = document.getElementById("poiCollapseIcon");
+      if (!content) return;
+      const isCurrentlyHidden = content.classList.contains("hidden");
+      const shouldCollapse = (forceState !== null) ? forceState : !isCurrentlyHidden;
+      if (shouldCollapse) {
+        content.classList.add("hidden");
+        if (icon) icon.innerText = "▼";
+        localStorage.setItem("admin_poi_collapsed", "true");
+      } else {
+        content.classList.remove("hidden");
+        if (icon) icon.innerText = "▲";
+        localStorage.setItem("admin_poi_collapsed", "false");
+      }
+    }
 
     async function loadAdminPois() {
       try {
@@ -709,26 +744,61 @@
           const res2 = await fetch("/api/v1/client/poi");
           if (res2.ok) adminPoiList = await res2.json();
         }
+        syncPoiFilterOptions();
         renderAdminPoiTable();
+        // Restore collapse state from localStorage (default to collapsed if not explicitly opened)
+        const savedCollapse = localStorage.getItem("admin_poi_collapsed");
+        if (savedCollapse === "false") {
+          togglePoiFrameCollapse(false);
+        } else {
+          togglePoiFrameCollapse(true);
+        }
       } catch (err) {
         console.warn("Could not load POIs:", err);
       }
+    }
+
+    function syncPoiFilterOptions() {
+      const select = document.getElementById("poiCategoryFilter");
+      if (!select) return;
+      const currentVal = select.value;
+      const discoveredCats = new Set(Object.keys(ADMIN_POI_CATS));
+      if (Array.isArray(adminPoiList)) {
+        adminPoiList.forEach(p => { if (p && p.category) discoveredCats.add(p.category); });
+      }
+      select.innerHTML = `<option value="all">Усі категорії</option>` +
+        Array.from(discoveredCats).map(catKey => {
+          const meta = ADMIN_POI_CATS[catKey] || { name: catKey, icon: "📍" };
+          return `<option value="${catKey}">${meta.icon} ${meta.name}</option>`;
+        }).join("");
+      select.value = currentVal || "all";
     }
 
     function renderAdminPoiTable() {
       const tbody = document.getElementById("poiTableBody");
       const badge = document.getElementById("poiTotalBadge");
       const filter = document.getElementById("poiCategoryFilter")?.value || "all";
+      const search = (document.getElementById("poiSearchInput")?.value || "").toLowerCase().trim();
       if (!tbody) return;
 
-      const filtered = (filter === "all")
+      let filtered = (filter === "all")
         ? adminPoiList
         : adminPoiList.filter(p => p.category === filter);
+
+      if (search) {
+        filtered = filtered.filter(p => {
+          const nameMatch = (p.name || "").toLowerCase().includes(search);
+          const oblMatch = (p.oblast || "").toLowerCase().includes(search);
+          const sigMatch = (p.significance || "").toLowerCase().includes(search);
+          const catMatch = (p.category || "").toLowerCase().includes(search);
+          return nameMatch || oblMatch || sigMatch || catMatch;
+        });
+      }
 
       if (badge) badge.innerText = `${adminPoiList.length} об'єктів`;
 
       if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-gray-500">Немає об\'єктів у цій категорії</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-gray-500">Немає об\'єктів за вказаними критеріями</td></tr>';
         return;
       }
 
@@ -743,17 +813,17 @@
               </span>
             </td>
             <td class="p-3 font-medium text-white">${p.name}</td>
-            <td class="p-3 text-gray-300 text-xs">${p.oblast} обл.</td>
-            <td class="p-3 font-mono text-xs text-gray-400">${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}</td>
+            <td class="p-3 text-gray-300 text-xs">${p.oblast ? p.oblast + ' обл.' : '—'}</td>
+            <td class="p-3 font-mono text-xs text-gray-400">${typeof p.lat === 'number' ? p.lat.toFixed(4) : p.lat}, ${typeof p.lon === 'number' ? p.lon.toFixed(4) : p.lon}</td>
             <td class="p-3 text-xs text-gray-300">
-              <div class="line-clamp-1">${p.significance}</div>
-              <div class="text-[10px] text-emerald-400 font-mono mt-0.5">${p.status}</div>
+              <div class="line-clamp-1">${p.significance || '—'}</div>
+              <div class="text-[10px] text-emerald-400 font-mono mt-0.5">${p.status || 'Активний'}</div>
             </td>
-            <td class="p-3 text-right">
-              <button onclick="editPoiItem('${p.id}')" class="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-sky-400 hover:text-sky-300 rounded text-xs font-semibold mr-1 transition cursor-pointer">
+            <td class="p-3 text-right whitespace-nowrap">
+              <button onclick="editPoiItem('${p.id}')" class="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-sky-400 hover:text-sky-300 rounded text-xs font-semibold mr-1 transition cursor-pointer" title="Редагувати">
                 ✏️
               </button>
-              <button onclick="deletePoiItem('${p.id}')" class="px-2.5 py-1 bg-gray-800 hover:bg-red-950 text-red-400 hover:text-red-300 rounded text-xs font-semibold transition cursor-pointer">
+              <button onclick="deletePoiItem('${p.id}')" class="px-2.5 py-1 bg-gray-800 hover:bg-red-950 text-red-400 hover:text-red-300 rounded text-xs font-semibold transition cursor-pointer" title="Видалити">
                 🗑️
               </button>
             </td>
@@ -2304,14 +2374,25 @@ ${resp.api_key}
     }
 
     function launchRadarWithSelectedUser() {
-      const sel = document.getElementById("radarModalUserSelect");
-      const key = sel ? sel.value : "";
+      const sel = document.getElementById(\radarModalUserSelect\);
+      const key = sel ? sel.value : \\;
+      const verEl = document.querySelector(\input[name=radarVersionSelect]:checked\);
+      const ver = verEl ? verEl.value : \v3\;
+      const targetPath = (ver === \v3\) ? \/map-v3\ : \/map\;
+
       if (!key) {
-        const manualKey = prompt("🔑 Для безпечного відкриття онлайн-радара введіть API-ключ (або оберіть користувача зі списку):", "");
+        const manualKey = prompt(\Введіть ключ користувача:\, \\);
         if (manualKey && manualKey.trim()) {
-          window.open(`/map?token=${encodeURIComponent(manualKey.trim())}`, "_blank");
+          window.open(${targetPath}?token=, \_blank\);
           closeRadarUserModal();
         } else {
+          alert(\Оберіть користувача зі списку або введіть API-ключ.\);
+        }
+        return;
+      }
+      window.open(${targetPath}?token=, \_blank\);
+      closeRadarUserModal();
+    } else {
           alert("⚠️ Для перегляду мапи необхідно обрати користувача зі списку або ввести дійсний API-ключ.");
         }
         return;
@@ -2487,6 +2568,26 @@ ${resp.api_key}
           <!-- Preview of slots for selected user -->
         </div>
 
+        <div>
+          <label class="block text-gray-300 font-semibold mb-1.5">Версія рушія мапи:</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center gap-2 p-2 rounded-lg bg-gray-950 border border-sky-500/60 cursor-pointer hover:border-sky-400 transition">
+              <input type="radio" name="radarVersionSelect" value="v3" checked class="accent-sky-500">
+              <div>
+                <div class="font-bold text-sky-400 text-xs">Radar v3.0 (MapLibre)</div>
+                <div class="text-[10px] text-gray-400">3D нахил, 60fps зум</div>
+              </div>
+            </label>
+            <label class="flex items-center gap-2 p-2 rounded-lg bg-gray-950 border border-gray-800 cursor-pointer hover:border-gray-700 transition">
+              <input type="radio" name="radarVersionSelect" value="v2" class="accent-orange-500">
+              <div>
+                <div class="font-bold text-gray-300 text-xs">Radar v2.0 (Leaflet)</div>
+                <div class="text-[10px] text-gray-500">Класична 2D основа</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
         <div class="text-[11px] text-gray-500 flex items-center gap-1.5">
           <span>ℹ️</span>
           <span>На мапі будуть позначені всі налаштовані слоти та круги небезпеки обраного власника.</span>
@@ -2528,12 +2629,18 @@ ${resp.api_key}
             <label class="block text-gray-300 font-medium mb-1">Категорія *</label>
             <select id="poiFormCategory" required class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-orange-500">
               <option value="airbases">✈️ Військові аеродроми</option>
-              <option value="air_defense">🛡️ Позиції та сектори ППО</option>
+              <option value="air_defense">🛡️ Позиції та сектори ППО/РЕБ</option>
               <option value="energy_hubs">⚡ Енергетичні хаби</option>
               <option value="fuel_depots">🛢️ Нафтобази та НПЗ</option>
-              <option value="defense_industry">🏭 ОПК та заводи</option>
+              <option value="defense_industry">🏭 ОПК та військові заводи</option>
               <option value="ports">⚓ Морські та річкові порти</option>
-              <option value="logistics_bridges">🌉 Мости та логістика</option>
+              <option value="logistics_bridges">🌉 Мости та логістичні хаби</option>
+              <option value="ammo_depots">💣 Склади боєприпасів та арсенали</option>
+              <option value="dronoports">🚀 Дронопорти та бази БПЛА</option>
+              <option value="command_posts">📡 Командні пункти та зв'язок</option>
+              <option value="training_camps">🎯 Навчальні центри та полігони</option>
+              <option value="railways">🚆 Залізничні вузли та депо</option>
+              <option value="radar_sites">🛰️ Радіолокаційні станції (РЛС)</option>
             </select>
           </div>
           <div>

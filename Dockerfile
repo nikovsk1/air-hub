@@ -75,9 +75,11 @@ COPY --from=builder /usr/src/app/static /app/static
 COPY --from=builder /usr/src/app/data_defaults /app/data_defaults
 
 RUN mkdir -p /app/data && \
-    chown -R appuser:appgroup /app /app/data
+    chmod 777 /app/data
 
-USER appuser:appgroup
+# Run as root by default for native IoT appliance / SONOFF iHost volume compatibility
+# (Prevents "os error 13 Permission Denied" when host mounts /app/data as root:root)
+# USER appuser:appgroup
 
 VOLUME ["/app/data"]
 
