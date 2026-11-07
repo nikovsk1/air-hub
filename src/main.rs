@@ -260,6 +260,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    let (threat_watch_tx, threat_watch_rx) = tokio::sync::watch::channel(0u64);
+
+    // 10.1 Реактивний нотифікатор оновлення стану для WebSocket
+    {
+        let t_state = threat_state.clone();
+        let watch_tx = threat_watch_tx.clone();
+        tokio::spawn(async move {
+            let mut last_seq = 0u64;
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                let cur_seq = {
+                    let st = t_state.read().await;
+                    st.update_seq
+                };
+                if cur_seq != last_seq {
+                    last_seq = cur_seq;
+                    let _ = watch_tx.send_replace(cur_seq);
+                }
+            }
+        });
+    }
+
     // 11. Побудова роутера API
     let app_state = AppState {
         config: config.clone(),
@@ -269,6 +291,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         detector,
         http_client,
         threat_state,
+        threat_watch_tx,
+        threat_watch_rx,
     };
 
     let app = api::create_router(app_state);

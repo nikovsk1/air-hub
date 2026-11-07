@@ -2374,30 +2374,23 @@ ${resp.api_key}
     }
 
     function launchRadarWithSelectedUser() {
-      const sel = document.getElementById(\radarModalUserSelect\);
-      const key = sel ? sel.value : \\;
-      const verEl = document.querySelector(\input[name=radarVersionSelect]:checked\);
-      const ver = verEl ? verEl.value : \v3\;
-      const targetPath = (ver === \v3\) ? \/map-v3\ : \/map\;
+      const sel = document.getElementById('radarModalUserSelect');
+      const key = sel ? sel.value : '';
+      const verEl = document.querySelector('input[name=radarVersionSelect]:checked');
+      const ver = verEl ? verEl.value : 'v3';
+      const targetPath = (ver === 'v3') ? '/map' : '/map';
 
       if (!key) {
-        const manualKey = prompt(\Введіть ключ користувача:\, \\);
+        const manualKey = prompt('Введіть ключ користувача:', '');
         if (manualKey && manualKey.trim()) {
-          window.open(${targetPath}?token=, \_blank\);
+          window.open(`${targetPath}?token=${encodeURIComponent(manualKey.trim())}`, '_blank');
           closeRadarUserModal();
         } else {
-          alert(\Оберіть користувача зі списку або введіть API-ключ.\);
+          alert('⚠️ Для перегляду мапи необхідно обрати користувача зі списку або ввести дійсний API-ключ.');
         }
         return;
       }
-      window.open(${targetPath}?token=, \_blank\);
-      closeRadarUserModal();
-    } else {
-          alert("⚠️ Для перегляду мапи необхідно обрати користувача зі списку або ввести дійсний API-ключ.");
-        }
-        return;
-      }
-      window.open(`/map?token=${encodeURIComponent(key)}`, "_blank");
+      window.open(`${targetPath}?token=${encodeURIComponent(key)}`, '_blank');
       closeRadarUserModal();
     }
 

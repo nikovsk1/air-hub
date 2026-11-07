@@ -4,6 +4,27 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
+use rstar::{RTree, RTreeObject, AABB};
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SpatialRegionItem {
+    pub id: String,
+    pub rank: u8,
+    pub envelope: AABB<[f64; 2]>,
+}
+
+impl RTreeObject for SpatialRegionItem {
+    type Envelope = AABB<[f64; 2]>;
+    fn envelope(&self) -> Self::Envelope {
+        self.envelope
+    }
+}
+
+impl rstar::PointDistance for SpatialRegionItem {
+    fn distance_2(&self, point: &[f64; 2]) -> f64 {
+        self.envelope.distance_2(point)
+    }
+}
 
 /// Канонічна відповідність 122 районів до 26 областей (державні ID)
 pub fn get_canonical_raion_to_oblast() -> HashMap<&'static str, &'static str> {
@@ -102,6 +123,7 @@ pub struct OblastDetector {
     pub region_to_oblast: HashMap<String, String>,
     pub raions_by_id: HashMap<String, RegionFeatureData>,
     pub raion_name_to_id: HashMap<String, String>,
+    pub rtree: RTree<SpatialRegionItem>,
 }
 
 impl OblastDetector {
@@ -216,8 +238,25 @@ impl OblastDetector {
             }
         }
 
+        let mut spatial_items = Vec::with_capacity(detector.regions.len() + detector.raion_regions.len());
+        for ob in &detector.regions {
+            spatial_items.push(SpatialRegionItem {
+                id: ob.id.clone(),
+                rank: 1,
+                envelope: AABB::from_corners([ob.bbox.0, ob.bbox.1], [ob.bbox.2, ob.bbox.3]),
+            });
+        }
+        for ra in &detector.raion_regions {
+            spatial_items.push(SpatialRegionItem {
+                id: ra.id.clone(),
+                rank: 2,
+                envelope: AABB::from_corners([ra.bbox.0, ra.bbox.1], [ra.bbox.2, ra.bbox.3]),
+            });
+        }
+        detector.rtree = RTree::bulk_load(spatial_items);
+
         info!(
-            "OblastDetector loaded: {} Oblasts (Rank 1), {} Raions (Rank 2)",
+            "OblastDetector loaded: {} Oblasts (Rank 1), {} Raions (Rank 2) with R-Tree spatial index",
             detector.regions.len(),
             detector.raion_regions.len()
         );
@@ -291,10 +330,12 @@ impl OblastDetector {
             }
         }
 
-        // 2. Перевірка Районів (Rank 2)
-        for ra in &self.raion_regions {
-            let b = ra.bbox;
-            if lon >= b.0 && lon <= b.2 && lat >= b.1 && lat <= b.3 {
+        // 2. Швидкий просторовий пошук кандидатів через R-Tree O(log N)
+        let candidates: Vec<&SpatialRegionItem> = self.rtree.locate_all_at_point(&[lon, lat]).collect();
+
+        // 3. Перевірка Районів (Rank 2) серед кандидатів R-Tree
+        for item in candidates.iter().filter(|c| c.rank == 2) {
+            if let Some(ra) = self.raions_by_id.get(&item.id) {
                 for poly in &ra.polygons {
                     if Self::point_in_polygon_with_holes(lon, lat, poly) {
                         let ob_id = &ra.oblast_id;
@@ -315,13 +356,9 @@ impl OblastDetector {
             }
         }
 
-        // 3. Перевірка Областей (Rank 1, крім Києва 31)
-        for ob in &self.regions {
-            if ob.id == "31" {
-                continue;
-            }
-            let b = ob.bbox;
-            if lon >= b.0 && lon <= b.2 && lat >= b.1 && lat <= b.3 {
+        // 4. Перевірка Областей (Rank 1, крім Києва 31) серед кандидатів R-Tree
+        for item in candidates.iter().filter(|c| c.rank == 1 && c.id != "31") {
+            if let Some(ob) = self.oblasts_by_id.get(&item.id) {
                 for poly in &ob.polygons {
                     if Self::point_in_polygon_with_holes(lon, lat, poly) {
                         return LocationInfo {

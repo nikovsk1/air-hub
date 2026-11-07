@@ -673,9 +673,8 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
         if c_idx < coords.len() {
             let norm_x = coords[c_idx][0];
             let norm_y = coords[c_idx][1];
-            // Точна геодезична лінійна проекція AST без Mercator-зсуву:
-            let lon = 22.137059 + (norm_x * 18.090521);
-            let lat = 52.379147 - (norm_y * 7.994549);
+            // Точна геодезична зворотна проекція Web Mercator (усуває похибку 7-22 км):
+            let (lon, lat) = svg_xy_to_lon_lat(norm_x * 260.0, norm_y * 175.0);
 
             let (raw_code, raw_name) = if typ_idx < types.len() {
                 types[typ_idx].clone()

@@ -10,7 +10,6 @@ use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tokio::time::sleep;
 
 use crate::api::admin_routes::AppState;
 use crate::api::middleware::{extract_client_api_key, is_admin, is_external_request};
@@ -1198,47 +1197,59 @@ async fn handle_ws_client(
     };
 
     let mut selected_slot = query.slot.or(query.slot_id).unwrap_or_else(|| "1".to_string());
-    let mut last_seq = 0u64;
+    let mut watch_rx = state.threat_watch_rx.clone();
+    let timeout_duration = Duration::from_secs(3);
+
+    // Первинний снапшот одразу при підключенні клієнта
+    {
+        let current_user = state.storage.get_user_by_key(&user.api_key).unwrap_or_else(|| user.clone());
+        let snapshot = {
+            let st = state.threat_state.read().await;
+            build_user_snapshot(&current_user, &st, &selected_slot, Some(&state.history_mgr), false)
+        };
+        if tokio::time::timeout(timeout_duration, socket.send(Message::Text(snapshot.to_string()))).await.is_err() {
+            return;
+        }
+    }
 
     loop {
-        let current_user = state.storage.get_user_by_key(&user.api_key).unwrap_or_else(|| user.clone());
-
-        let (_current_seq, update_json) = {
-            let st = state.threat_state.read().await;
-            let seq = st.update_seq;
-            if seq != last_seq {
-                last_seq = seq;
-                let snapshot = build_user_snapshot(&current_user, &st, &selected_slot, Some(&state.history_mgr), false);
-                (seq, Some(snapshot))
-            } else {
-                (seq, None)
-            }
-        };
-
-        if let Some(msg) = update_json {
-            if socket.send(Message::Text(msg.to_string())).await.is_err() {
-                break;
-            }
-        }
-
         tokio::select! {
+            // Реактивне пробудження при надходженні нових засічок без поллінгу
+            res = watch_rx.changed() => {
+                if res.is_err() { break; }
+                let current_user = state.storage.get_user_by_key(&user.api_key).unwrap_or_else(|| user.clone());
+                let snapshot = {
+                    let st = state.threat_state.read().await;
+                    build_user_snapshot(&current_user, &st, &selected_slot, Some(&state.history_mgr), false)
+                };
+                if tokio::time::timeout(timeout_duration, socket.send(Message::Text(snapshot.to_string()))).await.is_err() {
+                    break;
+                }
+            }
             incoming = socket.recv() => {
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
-                        if let Ok(cmd) = serde_json::from_str::<Value>(&text) {
+                        let trimmed = text.trim();
+                        if trimmed == "ping" {
+                            let _ = tokio::time::timeout(timeout_duration, socket.send(Message::Text("{\"type\":\"pong\"}".to_string()))).await;
+                        } else if let Ok(cmd) = serde_json::from_str::<Value>(trimmed) {
                             if cmd.get("action").and_then(|a| a.as_str()) == Some("switch_slot") {
                                 if let Some(new_slot) = cmd.get("slot").and_then(|s| s.as_str()) {
                                     selected_slot = new_slot.to_string();
-                                    last_seq = 0; // Force push
+                                    let current_user = state.storage.get_user_by_key(&user.api_key).unwrap_or_else(|| user.clone());
+                                    let snapshot = {
+                                        let st = state.threat_state.read().await;
+                                        build_user_snapshot(&current_user, &st, &selected_slot, Some(&state.history_mgr), false)
+                                    };
+                                    let _ = tokio::time::timeout(timeout_duration, socket.send(Message::Text(snapshot.to_string()))).await;
                                 }
                             }
                         }
                     }
-                    Some(Ok(Message::Close(_))) | None => break,
+                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
                     _ => {}
                 }
             }
-            _ = sleep(Duration::from_millis(500)) => {}
         }
     }
 }

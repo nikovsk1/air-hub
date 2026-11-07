@@ -267,14 +267,14 @@ impl StorageManager {
         match File::create(&tmp_path) {
             Ok(mut f) => {
                 f.write_all(json_str.as_bytes()).map_err(|e| e.to_string())?;
-                f.sync_all().map_err(|e| e.to_string())?;
+                f.flush().map_err(|e| e.to_string())?;
                 let _ = fs::rename(&tmp_path, &self.poi_path);
                 Ok(())
             }
             Err(_) => {
                 let mut direct_f = File::create(&self.poi_path).map_err(|e| e.to_string())?;
                 direct_f.write_all(json_str.as_bytes()).map_err(|e| e.to_string())?;
-                direct_f.sync_all().map_err(|e| e.to_string())?;
+                direct_f.flush().map_err(|e| e.to_string())?;
                 Ok(())
             }
         }

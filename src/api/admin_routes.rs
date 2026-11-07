@@ -44,6 +44,9 @@ pub struct AppState {
     pub detector: Arc<OblastDetector>,
     pub http_client: reqwest::Client,
     pub threat_state: Arc<tokio::sync::RwLock<crate::tracker::ThreatState>>,
+    #[allow(dead_code)]
+    pub threat_watch_tx: tokio::sync::watch::Sender<u64>,
+    pub threat_watch_rx: tokio::sync::watch::Receiver<u64>,
 }
 
 #[derive(Deserialize)]

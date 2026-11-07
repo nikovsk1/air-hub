@@ -166,6 +166,17 @@ impl TargetTrack {
         if dist_from_current < 0.03 {
             self.last_seen = now;
             if speed > 0.0 { self.speed_kmh = speed; }
+            let last_ts = self.trajectory.last().map(|p| p.ts).unwrap_or(0);
+            if (now as i64).saturating_sub(last_ts) >= 30 {
+                if self.trajectory.len() >= 200 {
+                    self.trajectory.remove(0);
+                }
+                self.trajectory.push(TrajectoryPoint {
+                    lat: self.lat,
+                    lon: self.lon,
+                    ts: now as i64,
+                });
+            }
             return;
         }
 
@@ -304,9 +315,37 @@ impl TargetTracker {
     ) -> Vec<TargetTrack> {
         let now = now_sec();
         let mut seen_ids = std::collections::HashSet::new();
+        let mut lost_tracks = Vec::new();
 
         for t in incoming_targets {
             seen_ids.insert(&t.id);
+
+            // Якщо джерело явно сповіщає про втрату / знищення цілі ("lost")
+            if t.upstream_status == "lost" {
+                if let Some(mut trk) = self.tracks.remove(&t.id) {
+                    trk.status = "lost".to_string();
+                    trk.last_seen = now;
+                    self.recent_lost.insert(
+                        t.id.clone(),
+                        LostTargetRecord {
+                            id: t.id.clone(),
+                            type_ua: trk.type_ua.clone(),
+                            category: trk.category.clone(),
+                            color_hex: trk.color_hex.clone(),
+                            lat: trk.lat,
+                            lon: trk.lon,
+                            heading: trk.heading,
+                            status: "lost".to_string(),
+                            lost_ts: now,
+                            first_seen: trk.first_seen,
+                            trajectory: trk.trajectory.clone(),
+                        },
+                    );
+                    lost_tracks.push(trk);
+                }
+                continue;
+            }
+
             let ob_info = detector.find_location_info(t.lat, t.lon);
 
             // Автоматична фіксація нерозпізнаних типів цілей у журналі обміну
@@ -415,7 +454,7 @@ impl TargetTracker {
             }
         }
 
-        let mut lost_tracks = Vec::new();
+        // Expired / silent tracks
         for tid in expired_ids {
             if let Some(trk) = self.tracks.remove(&tid) {
                 self.recent_lost.insert(
