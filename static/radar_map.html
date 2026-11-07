@@ -5,9 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Air Alert Hub — Тактичний Радар 3.0</title>
 
-  <!-- MapLibre GL JS v4.7.1 -->
-  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <!-- MapLibre GL JS v4.7.1 (Local Offline First with CDN Fallback: https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js) -->
+  <link rel="stylesheet" href="/static/maplibre-gl.css" onerror="this.onerror=null;this.href='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css';">
+  <script src="/static/maplibre-gl.js"></script>
+  <script>
+    window.maplibregl || document.write('<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"><\/script>');
+  </script>
 
   <!-- Three.js r128 (Local Offline Fallback for SONOFF iHost) -->
   <script src="/static/three.min.js"></script>
@@ -88,6 +91,7 @@
        TOP HUD BAR & INTERACTIVE PILLS (SCREENSHOT 1)
        ========================================================================= */
     .top-hud-bar {
+      transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       position: absolute;
       top: 10px;
       left: 10px;
@@ -168,6 +172,125 @@
     @keyframes pulse-danger {
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    
+    /* =========================================================================
+       SIDEBAR OPEN SHIFTING & RESPONSIVE HUD FRAMES
+       ========================================================================= */
+    body.sidebar-open .top-hud-bar {
+      left: 356px;
+    }
+    body.sidebar-open #btnToggleSidebar {
+      display: none;
+    }
+    @media (max-width: 768px) {
+      body.sidebar-open .top-hud-bar {
+        display: none !important;
+      }
+    }
+
+    /* Screen recording mode: hide UI controls */
+    body.recording-mode .top-hud-bar,
+    body.recording-mode .tactical-sidebar,
+    body.recording-mode .nav-cluster,
+    body.recording-mode .bottom-timeline-bar,
+    body.recording-mode #orbitHudBanner {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transition: opacity 0.2s;
+    }
+
+    /* HUD Subframe Collapse/Expand Styling */
+    .hud-card {
+      height: 38px;
+      line-height: 1;
+      background: linear-gradient(180deg, rgba(42, 50, 64, 0.92) 0%, rgba(30, 35, 45, 0.94) 100%);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(128, 149, 158, 0.16);
+      border-radius: 8px;
+      padding: 0 10px 0 6px;
+      pointer-events: auto;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      box-sizing: border-box;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
+      position: relative;
+    }
+    .hud-card:hover {
+      border-color: rgba(207, 155, 109, 0.45);
+    }
+    .hud-card.hud-collapsed {
+      cursor: pointer;
+    }
+    .hud-subframe {
+      width: 24px;
+      height: 24px;
+      min-width: 24px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      flex-shrink: 0;
+      margin-right: 2px;
+    }
+    .hud-subframe:hover {
+      transform: scale(1.08);
+    }
+    .hud-subframe-threats {
+      background: rgba(255, 51, 102, 0.12);
+      border: 1px solid rgba(255, 51, 102, 0.4);
+      color: #ff4d79;
+      box-shadow: 0 0 6px rgba(255, 51, 102, 0.18);
+    }
+    .hud-subframe-threats:hover {
+      background: rgba(255, 51, 102, 0.24);
+      box-shadow: 0 0 10px rgba(255, 51, 102, 0.38);
+    }
+    .hud-subframe-slot {
+      background: rgba(14, 165, 233, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+      box-shadow: 0 0 6px rgba(14, 165, 233, 0.18);
+    }
+    .hud-subframe-slot:hover {
+      background: rgba(14, 165, 233, 0.24);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.38);
+    }
+    .hud-subframe-closest {
+      background: rgba(207, 155, 109, 0.14);
+      border: 1px solid rgba(207, 155, 109, 0.45);
+      color: #e2b184;
+      box-shadow: 0 0 6px rgba(207, 155, 109, 0.2);
+    }
+    .hud-subframe-closest:hover {
+      background: rgba(207, 155, 109, 0.26);
+      box-shadow: 0 0 10px rgba(207, 155, 109, 0.4);
+    }
+    .hud-card.hud-collapsed .hud-subframe .icon-expand { display: block; }
+    .hud-card.hud-collapsed .hud-subframe .icon-collapse { display: none; }
+    .hud-card.hud-expanded .hud-subframe .icon-expand { display: none; }
+    .hud-card.hud-expanded .hud-subframe .icon-collapse { display: block; }
+    .hud-card.hud-collapsed .hud-full-view { display: none !important; }
+    .hud-card.hud-collapsed .hud-mini-view { display: inline-flex !important; align-items: center; gap: 6px; }
+    .hud-card.hud-expanded .hud-mini-view { display: none !important; }
+    .hud-card.hud-expanded .hud-full-view { display: inline-flex !important; align-items: center; gap: 6px; }
+
+    .threat-svg-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
     }
 
     /* Popover dropdown panels attached to HUD pills */
@@ -738,6 +861,100 @@
         gap: 6px;
       }
     }
+
+    /* =========================================================================
+       MAPLIBRE POPUP & TOOLTIP TACTICAL GLASS STYLING (Dark Theme / Compact UI)
+       ========================================================================= */
+    .maplibregl-popup {
+      z-index: 1200 !important;
+      max-width: 260px !important;
+    }
+
+    .maplibregl-popup-content {
+      background: rgba(15, 23, 42, 0.94) !important;
+      backdrop-filter: blur(12px) !important;
+      -webkit-backdrop-filter: blur(12px) !important;
+      border: 1px solid rgba(245, 158, 11, 0.4) !important;
+      border-radius: 7px !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), 0 0 10px rgba(245, 158, 11, 0.2) !important;
+      padding: 6px 10px !important;
+      color: #F8FAFC !important;
+      font-family: var(--font-stack) !important;
+    }
+
+    .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+    .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+    .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+      border-bottom-color: rgba(15, 23, 42, 0.94) !important;
+    }
+    .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+    .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+    .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+      border-top-color: rgba(15, 23, 42, 0.94) !important;
+    }
+    .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+      border-right-color: rgba(15, 23, 42, 0.94) !important;
+    }
+    .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+      border-left-color: rgba(15, 23, 42, 0.94) !important;
+    }
+
+    .tactical-region-popup .maplibregl-popup-content {
+      padding: 6px 10px !important;
+    }
+
+    .region-popup-badge {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2.5px;
+      text-align: center;
+      min-width: 120px;
+      max-width: 220px;
+    }
+
+    .region-popup-header {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 9.5px;
+      font-weight: 800;
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+      color: var(--accent-amber, #F59E0B);
+    }
+
+    .region-popup-name {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #FFFFFF;
+      line-height: 1.25;
+    }
+
+    .region-popup-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 9.5px;
+      font-weight: 700;
+      margin-top: 3px;
+      padding: 1.5px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.3px;
+    }
+
+    .region-popup-status.alert {
+      background: rgba(239, 68, 68, 0.2);
+      color: #FCA5A5;
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+    }
+
+    .region-popup-status.safe {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6EE7B7;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
   </style>
 </head>
 <body>
@@ -752,36 +969,78 @@
   </div>
 
   <!-- ================= TOP HUD CLUSTER (SCREENSHOT 1) ================= -->
-  <header class="top-hud-bar">
+  <header class="top-hud-bar" id="hudTopBar">
     <!-- Menu Hamburger Toggle -->
     <button class="hud-btn hud-menu-btn" id="btnToggleSidebar" onclick="toggleSidebar()" title="Відкрити меню">
       ☰
     </button>
 
-    <!-- Threat Counter & MiG-31K Pill -->
-    <div class="hud-pill" id="pillThreatsMig" onclick="toggleHudPanel('panelThreatsDetails')">
-      <span class="dot-indicator" id="hudThreatsDot"></span>
-      <span>ЦІЛЕЙ: <span id="hudThreatsCount">0</span></span>
-      <span class="badge-count calm" id="hudMigStatus">МІГ-31К: ЧИСТО</span>
-      <span style="font-size: 8px;">▾</span>
+    <!-- 1. Threats Card (Danger Carmine Theme) -->
+    <div class="hud-card hud-collapsed hud-pill" id="threatsCard" onclick="handleCardClick('threats', event)">
+      <div class="hud-subframe hud-subframe-threats" onclick="toggleHudCard('threats', event)" title="Згорнути / розгорнути фрейм">
+        <svg class="hud-subframe-icon icon-expand" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+        <svg class="hud-subframe-icon icon-collapse" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="14 4 14 10 20 10"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="10 20 10 14 4 14"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      </div>
+      <div class="hud-mini-view" id="pillThreatsMigMini">
+        <span class="dot-indicator" id="hudThreatsDotMini"></span>
+        <span id="threatsBadgeMini" style="font-weight:700; color:#10B981;">ЦІЛЕЙ: <span id="hudThreatsCountMini">0</span></span>
+      </div>
+      <div class="hud-full-view" id="pillThreatsMig">
+        <span class="dot-indicator" id="hudThreatsDot"></span>
+        <span id="threatsBadge">ЦІЛЕЙ: <span id="hudThreatsCount">0</span></span>
+        <span class="badge-count calm" id="hudMigStatus">МІГ-31К: ЧИСТО</span>
+        <span id="migBadge" style="display:none;">МІГ-31К: ЧИСТО</span>
+        <span style="font-size: 8px;">▼</span>
+      </div>
 
       <div class="hud-dropdown-panel" id="panelThreatsDetails" onclick="event.stopPropagation()">
-        <div style="font-weight: 700; font-size: 11px; margin-bottom: 4px;">Активні загрози в небі</div>
+        <div style="font-weight: 700; font-size: 11px; margin-bottom: 4px;">Активні загрози на карті</div>
         <div id="hudThreatsDropdownList" style="font-size: 10.5px; color: var(--text-muted); max-height: 180px; overflow-y: auto;">
           Загроз на карті немає
         </div>
       </div>
     </div>
 
-        <!-- Active Slot Pill -->
-    <div class="hud-pill" id="pillSelectedSlot" onclick="toggleHudPanel('panelSlotSelector')">
-      <span>Точка: <strong id="hudSlotName">Точка 1</strong></span>
-      <span style="color: #F43F5E;">🎯</span>
-      <span style="font-size: 8px;">▾</span>
+    <!-- 2. Slot Selector Card (Cyan Theme) -->
+    <div class="hud-card hud-collapsed hud-pill" id="slotSelectorCard" onclick="handleCardClick('slot', event)">
+      <div class="hud-subframe hud-subframe-slot" onclick="toggleHudCard('slot', event)" title="Згорнути / розгорнути фрейм">
+        <svg class="hud-subframe-icon icon-expand" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+        <svg class="hud-subframe-icon icon-collapse" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="14 4 14 10 20 10"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="10 20 10 14 4 14"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      </div>
+      <div class="hud-mini-view">
+        <span id="slotDropdownLabelMini" style="font-weight:600; color:#F8FAFC;">Точка 1</span>
+      </div>
+      <div class="hud-full-view" id="pillSelectedSlot">
+        <span style="font-size: 11px; color: var(--text-muted);">Точка:</span>
+        <strong id="hudSlotName" style="color:#FFFFFF;">Точка 1</strong>
+        <span id="slotDropdownLabel" style="display:none;">Точка 1</span>
+        <button type="button" id="btnCenterOnSlot" onclick="centerMapOnSelectedSlots(event)" style="background:transparent; border:none; cursor:pointer; color:#F43F5E; font-size:13px; padding:0 2px;" title="Центрувати на точці">🎯</button>
+        <span style="font-size: 8px;">▼</span>
+      </div>
 
       <div class="hud-dropdown-panel" id="panelSlotSelector" onclick="event.stopPropagation()">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-          <span style="font-weight: 700; font-size: 11px;">СПОСТЕРЕЖНІ ТОЧКИ</span>
+          <span style="font-weight: 700; font-size: 11px;">Всі точки</span>
           <button style="background:transparent; border:none; color:var(--accent-amber); font-size:10px; cursor:pointer;" onclick="toggleSelectAllSlots()">Обрати всі</button>
         </div>
         <div id="slotDropdownItems" style="display:flex; flex-direction:column; gap:4px;"></div>
@@ -789,16 +1048,38 @@
       </div>
     </div>
 
-    <!-- Closest Threat Pill -->
-    <div class="hud-pill" id="pillClosestThreat" onclick="toggleHudPanel('panelClosestDetails')">
-      <span>Найближча ціль: <strong id="hudClosestType">Спокійно</strong></span>
-      <span class="badge-count calm" id="hudClosestDistance">0 км</span>
-      <span style="font-size: 8px;">▾</span>
+    <!-- 3. Closest Threat Card (Amber Theme) -->
+    <div class="hud-card hud-collapsed hud-pill" id="closestCard" onclick="handleCardClick('closest', event)">
+      <div class="hud-subframe hud-subframe-closest" onclick="toggleHudCard('closest', event)" title="Згорнути / розгорнути фрейм">
+        <svg class="hud-subframe-icon icon-expand" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+        <svg class="hud-subframe-icon icon-collapse" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="14 4 14 10 20 10"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="10 20 10 14 4 14"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      </div>
+      <div class="hud-mini-view">
+        <span id="closestMiniText" style="font-weight:600; color:#10B981;">Спокійно</span>
+      </div>
+      <div class="hud-full-view" id="pillClosestThreat">
+        <span style="font-size: 11px; color: var(--text-muted);">Найближча ціль:</span>
+        <strong id="hudClosestType" style="color:#FFFFFF;">Спокійно</strong>
+        <span id="closestTargetName" style="display:none;">Спокійно</span>
+        <span class="badge-count calm" id="hudClosestDistance">0 км</span>
+        <span id="slotClosestDistBadge" style="display:none;">0 км</span>
+        <span style="font-size: 8px;">▼</span>
+      </div>
 
       <div class="hud-dropdown-panel" id="panelClosestDetails" onclick="event.stopPropagation()">
-        <div style="font-weight: 700; font-size: 11px; margin-bottom: 4px;">ДИСТАНЦІЯ ДО ТОЧОК СПОСТЕРЕЖЕННЯ</div>
+        <div style="font-weight: 700; font-size: 11px; margin-bottom: 4px;">Відстань до точок</div>
         <div id="closestBreakdownList" style="display:flex; flex-direction:column; gap:4px; max-height:160px; overflow-y:auto;">
-          <div style="color:var(--text-muted); padding:4px;">Загроз поблизу не виявлено</div>
+          <div style="color:var(--text-muted); padding:4px;">Загроз у зоні не виявлено</div>
         </div>
         <div id="hudClosestBreakdownList" style="display:none;"></div>
       </div>
@@ -869,10 +1150,19 @@
         <div class="section-title-row">
           <span>ПЕРІОД ТА ДЖЕРЕЛО ДАНИХ</span>
         </div>
-        <select class="tactical-select" id="historyDataSource" style="width:100%;">
+        <select class="tactical-select" id="historyDataSource" onchange="onDataSourceChanged(this.value)" style="width:100%;">
           <option value="local">📁 Локальний архів історії</option>
-          <option value="server">☁ Серверні знімки Hub</option>
+          <option value="file">💻 Зовнішній JSON</option>
         </select>
+        <div id="externalJsonActions" style="display:none; margin-top:6px; gap:6px;">
+          <button type="button" class="hud-pill" onclick="document.getElementById('externalJsonInput').click()" style="flex:1; justify-content:center; height:28px;">
+            📂 Обрати файл
+          </button>
+          <button type="button" class="hud-pill" onclick="downloadHistoryTemplate()" style="flex:1; justify-content:center; height:28px; border-color:rgba(234,88,12,0.4);">
+            📥 Зразок JSON
+          </button>
+        </div>
+        <input type="file" id="externalJsonInput" accept=".json" style="display:none;" onchange="handleExternalJsonFile(event)">
         <select class="tactical-select" id="historySourceSelect" style="display:none;">
           <option value="local">📁 Локальний архів історії</option>
           <option value="server">☁ Серверні знімки Hub</option>
@@ -984,7 +1274,15 @@
 
     <!-- TAB 3: OPTIONS -->
     <div class="sidebar-content-pane" id="paneOptions">
-      <!-- Basemap & API Token Section -->
+
+      <!-- 1. USER PROFILE SECTION (Owner & API Key) -->
+      <section class="panel-section" id="userProfileSection" style="padding:10px 12px; margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">ЮЗЕР</span>
+          <span id="userOwnerValue" style="font-size:12.5px; font-weight:800; color:#ffffff; background:rgba(234,88,12,0.2); border:1px solid rgba(234,88,12,0.5); padding:2.5px 10px; border-radius:6px; font-family:inherit; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="Власник API-ключа">Користувач Hub</span>
+        </div>
+      </section>
+<!-- Basemap & API Token Section -->
       <section class="panel-section">
         <div class="section-title-row">
           <span>ТИП ПІДКЛАДКИ МАПИ & API-TOKEN</span>
@@ -1231,9 +1529,12 @@
     let showPoiIn2D = true;
 
     // Basemaps styles
+    const GLYPHS_URL = '/static/fonts/{fontstack}/{range}.pbf';
+
     const BASEMAPS = {
       arcgis: {
         version: 8,
+        glyphs: GLYPHS_URL,
         sources: {
           'esri-dark-gray': {
             type: 'raster',
@@ -1270,6 +1571,7 @@
       },
       cartodb: {
         version: 8,
+        glyphs: GLYPHS_URL,
         sources: {
           'carto-dark': {
             type: 'raster',
@@ -1292,6 +1594,7 @@
       },
       satellite: {
         version: 8,
+        glyphs: GLYPHS_URL,
         sources: {
           'esri-sat': {
             type: 'raster',
@@ -1303,8 +1606,42 @@
         layers: [{ id: 'esri-sat-layer', type: 'raster', source: 'esri-sat', minzoom: 0, maxzoom: 19 }]
       }
     };
+    // Composite master style containing all basemap raster layers (Zero map.setStyle wipeout)
+    const UNIFIED_BASEMAP_STYLE = {
+      version: 8,
+      glyphs: GLYPHS_URL,
+      sources: {
+        'esri-dark-gray': BASEMAPS.arcgis.sources['esri-dark-gray'],
+        'esri-dark-gray-ref': BASEMAPS.arcgis.sources['esri-dark-gray-ref'],
+        'carto-dark': BASEMAPS.cartodb.sources['carto-dark'],
+        'esri-sat': BASEMAPS.satellite.sources['esri-sat']
+      },
+      layers: [
+        { ...BASEMAPS.arcgis.layers[0], layout: { visibility: 'visible' } },
+        { ...BASEMAPS.arcgis.layers[1], layout: { visibility: 'visible' } },
+        { ...BASEMAPS.cartodb.layers[0], layout: { visibility: 'none' } },
+        { ...BASEMAPS.satellite.layers[0], layout: { visibility: 'none' } }
+      ]
+    };
+
 
     // All 11 Tactical threat categories
+    
+    const THREAT_SVG_ICONS = {
+      shahed: '<svg width="22" height="22" viewBox="0 0 40 40"><g transform="rotate(90 20 20)"><path d="M7 20 C7.2 21 9.8 21.3 11.2 21.3 H14.4 L28 30.8 H32.4 V22.3 H31.6 V17.6 H32.6 V9 H28.7 L14.5 18.6 H11.2 C9.9 18.6 7.2 18.9 7 20 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M7 20 C7.2 21 9.8 21.3 11.2 21.3 H14.4 L28 30.8 H32.4 V22.3 H31.6 V17.6 H32.6 V9 H28.7 L14.5 18.6 H11.2 C9.9 18.6 7.2 18.9 7 20 Z" fill="#FFE600" stroke="#ffffff" stroke-width="1.3"/></g></svg>',
+      shahed_jet: '<svg width="22" height="22" viewBox="0 0 40 40"><g transform="rotate(90 20 20)"><path d="M6 20 C6.2 21 8.9 21.3 10.3 21.3 H13.5 L27.3 30.8 H31.8 V23.6 H28 V16.4 H31.8 V9 H28 L13.6 18.6 H10.3 C8.9 18.6 6.2 18.9 6 20 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M6 20 C6.2 21 8.9 21.3 10.3 21.3 H13.5 L27.3 30.8 H31.8 V23.6 H28 V16.4 H31.8 V9 H28 L13.6 18.6 H10.3 C8.9 18.6 6.2 18.9 6 20 Z" fill="#00F0FF" stroke="#ffffff" stroke-width="1.3"/><rect x="28" y="18" width="5" height="4" rx="1" fill="#ffffff" stroke="#0B0E14" stroke-width="0.8"/></g></svg>',
+      missile: '<svg width="22" height="22" viewBox="0 0 40 40"><g transform="rotate(-90 20 20)"><path d="M11.8 17.5 L29.2 17.5 L32.8 15.1 H34.6 V18.2 L36 19.2 V20.8 L34.6 21.8 V24.9 H32.8 L29.2 22.5 L11.8 22.5 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M11.8 17.5 L29.2 17.5 L32.8 15.1 H34.6 V18.2 L36 19.2 V20.8 L34.6 21.8 V24.9 H32.8 L29.2 22.5 L11.8 22.5 Z" fill="#FF2D55" stroke="#ffffff" stroke-width="1.3"/><path d="M19 11.5 L22.5 17.5 H17 Z M19 28.5 L22.5 22.5 H17 Z" fill="#FF2D55" stroke="#ffffff" stroke-width="1"/></g></svg>',
+      ballistic: '<svg width="22" height="22" viewBox="0 0 40 40"><g transform="rotate(90 20 20)"><path d="M8 20 L13 16.5 L31 16.5 L35 12 H37 V28 H35 L31 23.5 L13 23.5 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M8 20 L13 16.5 L31 16.5 L35 12 H37 V28 H35 L31 23.5 L13 23.5 Z" fill="#FF003C" stroke="#ffffff" stroke-width="1.4"/><circle cx="36" cy="20" r="2.4" fill="#ffffff" stroke="#0B0E14" stroke-width="1.0"/></g></svg>',
+      kab: '<svg width="22" height="22" viewBox="0 0 40 40"><g transform="rotate(180 20 20)"><path d="M16 22.3 C16 19.1 17.3 16.3 18.5 13.2 L17.5 13.2 V8.3 H23.2 V13.2 L21.5 13.2 C22.7 16.3 24 19.1 24 22.3 C24 26.6 22.2 30.1 20 32 C17.8 30.1 16 26.6 16 22.3 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M16 22.3 C16 19.1 17.3 16.3 18.5 13.2 L17.5 13.2 V8.3 H23.2 V13.2 L21.5 13.2 C22.7 16.3 24 19.1 24 22.3 C24 26.6 22.2 30.1 20 32 C17.8 30.1 16 26.6 16 22.3 Z" fill="#FF9500" stroke="#ffffff" stroke-width="1.3"/><line x1="8" y1="20" x2="32" y2="20" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/></g></svg>',
+      banderol: '<svg width="22" height="22" viewBox="0 0 40 40"><path d="M19.5 4 C19.7 3.4 20.3 3.4 20.5 4 L22 12 V33 L20 35 L18 33 V12 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M19.5 4 C19.7 3.4 20.3 3.4 20.5 4 L22 12 V33 L20 35 L18 33 V12 Z" fill="#34E7E4" stroke="#ffffff" stroke-width="1.2"/><path d="M6 15 H34 V18 H6 Z" fill="#34E7E4" stroke="#ffffff" stroke-width="1.1"/><path d="M14 32 H26 V34 H14 Z" fill="#34E7E4" stroke="#ffffff" stroke-width="1"/></svg>',
+      recon: '<svg width="22" height="22" viewBox="0 0 40 40"><path d="M20 6 C18.8 6 18 8 18 11 V31 C18 32.5 18.8 33 20 33 C21.2 33 22 32.5 22 31 V11 C22 8 21.2 6 20 6 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M20 6 C18.8 6 18 8 18 11 V31 C18 32.5 18.8 33 20 33 C21.2 33 22 32.5 22 31 L22 11 C22 8 21.2 6 20 6 Z" fill="#B388FF" stroke="#ffffff" stroke-width="1.3"/><path d="M4 16.5 H36 V19.5 H4 Z" fill="#B388FF" stroke="#ffffff" stroke-width="1"/><polygon points="20,30 11,34 20,32 29,34" fill="#B388FF" stroke="#ffffff" stroke-width="1"/><circle cx="20" cy="11" r="2.2" fill="#00f0ff" stroke="#0B0E14" stroke-width="0.8"/></svg>',
+      lancet: '<svg width="22" height="22" viewBox="0 0 40 40"><path d="M20 7 C19 7 18.2 8.5 18.2 11 V31 C18.2 32.5 19 33 20 33 C21 33 21.8 32.5 21.8 31 V11 C21.8 8.5 21 7 20 7 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M20 7 C19 7 18.2 8.5 18.2 11 V31 C18.2 32.5 19 33 20 33 C21 33 21.8 32.5 21.8 31 L21.8 11 C21.8 8.5 21 7 20 7 Z" fill="#FF007A" stroke="#ffffff" stroke-width="1.2"/><polygon points="19,16 6,7 8,5 20,14" fill="#FF007A" stroke="#ffffff" stroke-width="0.9"/><polygon points="21,16 34,7 32,5 20,14" fill="#FF007A" stroke="#ffffff" stroke-width="0.9"/><polygon points="19,18 6,27 8,29 20,20" fill="#FF007A" stroke="#ffffff" stroke-width="0.9"/><polygon points="21,18 34,27 32,29 20,20" fill="#FF007A" stroke="#ffffff" stroke-width="0.9"/></svg>',
+      fpv: '<svg width="22" height="22" viewBox="0 0 40 40"><line x1="10" y1="10" x2="30" y2="30" stroke="#0B0E14" stroke-width="3.5" stroke-linecap="round"/><line x1="30" y1="10" x2="10" y2="30" stroke="#0B0E14" stroke-width="3.5" stroke-linecap="round"/><rect x="17.5" y="15" width="5" height="10" rx="1.5" fill="#CF9B6D" stroke="#0B0E14" stroke-width="1.8"/><line x1="10" y1="10" x2="30" y2="30" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/><line x1="30" y1="10" x2="10" y2="30" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/><circle cx="10" cy="10" r="4.5" stroke="#CF9B6D" stroke-width="1.6" fill="rgba(255,255,255,0.7)"/><circle cx="30" cy="10" r="4.5" stroke="#CF9B6D" stroke-width="1.6" fill="rgba(255,255,255,0.7)"/><circle cx="10" cy="30" r="4.5" stroke="#CF9B6D" stroke-width="1.6" fill="rgba(255,255,255,0.7)"/><circle cx="30" cy="30" r="4.5" stroke="#CF9B6D" stroke-width="1.6" fill="rgba(255,255,255,0.7)"/></svg>',
+      aviation: '<svg width="22" height="22" viewBox="0 0 40 40"><path d="M20 5 L22 14 L34 25 L34 28 L23 25 L23 33 L27 36 L27 38 L20 36 L13 38 L13 36 L17 33 L17 25 L6 28 L6 25 L18 14 Z" fill="none" stroke="#0B0E14" stroke-width="2.5" stroke-linejoin="round"/><path d="M20 5 L22 14 L34 25 L34 28 L23 25 L23 33 L27 36 L27 38 L20 36 L13 38 L13 36 L17 33 L17 25 L6 28 L6 25 L18 14 Z" fill="#FF3B30" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/><circle cx="20" cy="11" r="1.5" fill="#ffffff"/></svg>',
+      artillery: '<svg width="22" height="22" viewBox="0 0 40 40"><path d="M20 3 L23 13 L33 9 L28 18 L37 20 L28 22 L33 31 L23 27 L20 37 L17 27 L7 31 L12 22 L3 20 L12 18 L7 9 L17 13 Z" fill="none" stroke="#0B0E14" stroke-width="2.5" stroke-linejoin="round"/><path d="M20 3 L23 13 L33 9 L28 18 L37 20 L28 22 L33 31 L23 27 L20 37 L17 27 L7 31 L12 22 L3 20 L12 18 L7 9 L17 13 Z" fill="#FF453A" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/><circle cx="20" cy="20" r="4.5" fill="#ffffff" stroke="#0B0E14" stroke-width="1.5"/></svg>',
+      unknown: '<svg width="22" height="22" viewBox="0 0 40 40"><path d="M20 7 L33 29 L28 31 L20 28 L12 31 L7 29 Z" fill="none" stroke="#0B0E14" stroke-width="2.5" stroke-linejoin="round"/><path d="M20 7 L33 29 L28 31 L20 28 L12 31 L7 29 Z" fill="#80959E" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/><text x="20" y="23" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff" stroke="#000000" stroke-width="0.5" style="font-family:sans-serif;">?</text></svg>'
+    };
+
     const THREAT_CATEGORIES = {
       shahed: { name: 'Шахед / Герань', color: '#FACC15', icon: 'delta' },
       shahed_jet: { name: 'Реактивний шахед', color: '#22D3EE', icon: 'delta_fast' },
@@ -1322,59 +1659,170 @@
 for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     // Vector sprite generation for canvas textures
-    function createThreatSprite(cat, color) {
+        function createThreatSprite(cat, color) {
       const canvas = document.createElement('canvas');
       canvas.width = 48;
       canvas.height = 48;
       const ctx = canvas.getContext('2d');
       ctx.strokeStyle = '#0B0E14';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 2.8;
       ctx.fillStyle = color || '#FACC15';
 
       ctx.save();
       ctx.translate(24, 24);
 
-      if (cat === 'shahed' || cat === 'shahed_jet') {
+      if (cat === 'shahed') {
+        // Delta wing
         ctx.beginPath();
         ctx.moveTo(0, -18);
         ctx.lineTo(16, 14);
         ctx.lineTo(0, 8);
         ctx.lineTo(-16, 14);
         ctx.closePath();
-      } else if (cat === 'missile' || cat === 'ballistic') {
+      } else if (cat === 'shahed_jet') {
+        // Swept delta with air intake
+        ctx.beginPath();
+        ctx.moveTo(0, -19);
+        ctx.lineTo(17, 13);
+        ctx.lineTo(6, 10);
+        ctx.lineTo(0, 14);
+        ctx.lineTo(-6, 10);
+        ctx.lineTo(-17, 13);
+        ctx.closePath();
+      } else if (cat === 'missile') {
+        // Cruise missile body + wings
         ctx.beginPath();
         ctx.moveTo(0, -20);
-        ctx.lineTo(5, -6);
-        ctx.lineTo(5, 16);
-        ctx.lineTo(9, 18);
-        ctx.lineTo(9, 20);
-        ctx.lineTo(-9, 20);
-        ctx.lineTo(-9, 18);
-        ctx.lineTo(-5, 16);
-        ctx.lineTo(-5, -6);
+        ctx.lineTo(4, -6);
+        ctx.lineTo(16, -2);
+        ctx.lineTo(4, 2);
+        ctx.lineTo(4, 15);
+        ctx.lineTo(8, 18);
+        ctx.lineTo(8, 20);
+        ctx.lineTo(-8, 20);
+        ctx.lineTo(-8, 18);
+        ctx.lineTo(-4, 15);
+        ctx.lineTo(-4, 2);
+        ctx.lineTo(-16, -2);
+        ctx.lineTo(-4, -6);
+        ctx.closePath();
+      } else if (cat === 'ballistic') {
+        // Heavy conical ballistic missile
+        ctx.beginPath();
+        ctx.moveTo(0, -21);
+        ctx.lineTo(6, -10);
+        ctx.lineTo(6, 14);
+        ctx.lineTo(12, 19);
+        ctx.lineTo(-12, 19);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(-6, -10);
         ctx.closePath();
       } else if (cat === 'aviation') {
+        // Combat fighter jet silhouette
+        ctx.beginPath();
+        ctx.moveTo(0, -20);
+        ctx.lineTo(4, -8);
+        ctx.lineTo(19, 6);
+        ctx.lineTo(6, 6);
+        ctx.lineTo(6, 15);
+        ctx.lineTo(11, 19);
+        ctx.lineTo(-11, 19);
+        ctx.lineTo(-6, 15);
+        ctx.lineTo(-6, 6);
+        ctx.lineTo(-19, 6);
+        ctx.lineTo(-4, -8);
+        ctx.closePath();
+      } else if (cat === 'kab') {
+        // Aerial bomb with UMPK wings
+        ctx.beginPath();
+        ctx.moveTo(0, 18);
+        ctx.bezierCurveTo(8, 12, 8, -4, 5, -12);
+        ctx.lineTo(18, -12);
+        ctx.lineTo(18, -16);
+        ctx.lineTo(4, -16);
+        ctx.lineTo(0, -20);
+        ctx.lineTo(-4, -16);
+        ctx.lineTo(-18, -16);
+        ctx.lineTo(-18, -12);
+        ctx.lineTo(-5, -12);
+        ctx.bezierCurveTo(-8, -4, -8, 12, 0, 18);
+        ctx.closePath();
+      } else if (cat === 'banderol') {
+        // Wide straight wing glider
         ctx.beginPath();
         ctx.moveTo(0, -18);
-        ctx.lineTo(18, 10);
-        ctx.lineTo(6, 10);
-        ctx.lineTo(6, 18);
-        ctx.lineTo(-6, 18);
-        ctx.lineTo(-6, 10);
-        ctx.lineTo(-18, 10);
+        ctx.lineTo(3, -4);
+        ctx.lineTo(20, -4);
+        ctx.lineTo(20, 0);
+        ctx.lineTo(3, 0);
+        ctx.lineTo(2, 16);
+        ctx.lineTo(8, 18);
+        ctx.lineTo(-8, 18);
+        ctx.lineTo(-2, 16);
+        ctx.lineTo(-3, 0);
+        ctx.lineTo(-20, 0);
+        ctx.lineTo(-20, -4);
+        ctx.lineTo(-3, -4);
         ctx.closePath();
-      } else if (cat === 'fpv' || cat === 'lancet') {
+      } else if (cat === 'recon') {
+        // UAV with camera pod
         ctx.beginPath();
-        ctx.arc(0, 0, 7, 0, Math.PI * 2);
-        ctx.moveTo(-14, -14); ctx.lineTo(14, 14);
-        ctx.moveTo(14, -14); ctx.lineTo(-14, 14);
+        ctx.moveTo(0, -17);
+        ctx.lineTo(3, -5);
+        ctx.lineTo(19, -5);
+        ctx.lineTo(19, -1);
+        ctx.lineTo(3, -1);
+        ctx.lineTo(3, 15);
+        ctx.lineTo(7, 18);
+        ctx.lineTo(-7, 18);
+        ctx.lineTo(-3, 15);
+        ctx.lineTo(-3, -1);
+        ctx.lineTo(-19, -1);
+        ctx.lineTo(-19, -5);
+        ctx.lineTo(-3, -5);
+        ctx.closePath();
+      } else if (cat === 'lancet') {
+        // Double X-wing fuselage
+        ctx.beginPath();
+        ctx.moveTo(0, -18); ctx.lineTo(3, 18); ctx.lineTo(-3, 18); ctx.closePath();
+        ctx.stroke(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(-15, -10); ctx.lineTo(15, 10);
+        ctx.moveTo(15, -10); ctx.lineTo(-15, 10);
+      } else if (cat === 'fpv') {
+        // Quadcopter cross with rotor circles
+        ctx.beginPath();
+        ctx.moveTo(-12, -12); ctx.lineTo(12, 12);
+        ctx.moveTo(12, -12); ctx.lineTo(-12, 12);
+        ctx.rect(-3, -5, 6, 10);
+      } else if (cat === 'artillery') {
+        // Detonation star burst
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+          const a1 = (i * 45) * Math.PI / 180;
+          const a2 = (i * 45 + 22.5) * Math.PI / 180;
+          ctx.lineTo(Math.cos(a1) * 18, Math.sin(a1) * 18);
+          ctx.lineTo(Math.cos(a2) * 7, Math.sin(a2) * 7);
+        }
+        ctx.closePath();
       } else {
+        // Unknown delta wing
         ctx.beginPath();
-        ctx.arc(0, 0, 9, 0, Math.PI * 2);
+        ctx.moveTo(0, -16);
+        ctx.lineTo(14, 14);
+        ctx.lineTo(0, 8);
+        ctx.lineTo(-14, 14);
+        ctx.closePath();
       }
 
       ctx.stroke();
       ctx.fill();
+
+      // Inner white tactical highlight
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1.0;
+      ctx.stroke();
+
       ctx.restore();
 
       return {
@@ -1408,7 +1856,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     function initMapEngine() {
       map = new maplibregl.Map({
         container: 'map',
-        style: BASEMAPS.arcgis,
+        style: UNIFIED_BASEMAP_STYLE,
         center: [31.1656, 48.3794],
         zoom: 6.2,
         minZoom: 5.5,
@@ -1434,6 +1882,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         initLiveKinematicsLoop();
         renderActiveThreatCategories();
         renderTodayRadialGauge();
+        loadRegionsData();
+        loadPoiData();
       });
 
       map.on('rotate', () => {
@@ -1462,13 +1912,207 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       map.on('click', (e) => {
         if (isPickingLocationOnMap) {
           finishPickingLocation(e.lngLat.lat, e.lngLat.lng);
+          return;
+        }
+        const bbox = [[e.point.x - 3, e.point.y - 3], [e.point.x + 3, e.point.y + 3]];
+        const features = map.queryRenderedFeatures(bbox, { layers: ['alerts-fill'] });
+        if (!features || !features.length) {
+          if (map.getSource('selected-region-source')) {
+            map.getSource('selected-region-source').setData({ type: 'FeatureCollection', features: [] });
+          }
+          if (activeRegionPopup) {
+            activeRegionPopup.remove();
+            activeRegionPopup = null;
+          }
         }
       });
+
+      map.on('click', 'alerts-fill', (e) => {
+        if (isPickingLocationOnMap || is3DModeActive) return;
+        if (!e.features || !e.features.length) return;
+        const feat = e.features[0];
+        const props = feat.properties || {};
+        const name = props.name || 'Область / Громада';
+        const rank = Number(props.rank || 1);
+        const typeLabel = rank === 1 ? 'Область' : (rank === 2 ? 'Район' : 'Громада');
+        const regId = String(props.regionId || feat.id || '');
+        const isAlert = !!props.alert || activeAlertRegionIds.has(regId);
+
+        const statusBadge = isAlert
+          ? '<div class="region-popup-status alert">🚨 Повітряна тривога</div>'
+          : '<div class="region-popup-status safe">🛡️ Відбій тривоги</div>';
+
+        const html = `
+          <div class="region-popup-badge">
+            <div class="region-popup-header">
+              <span>📍</span><span>${typeLabel}</span>
+            </div>
+            <div class="region-popup-name">${name}</div>
+            ${statusBadge}
+          </div>
+        `;
+
+        if (map.getSource('selected-region-source')) {
+          map.getSource('selected-region-source').setData({
+            type: 'FeatureCollection',
+            features: [feat]
+          });
+        }
+
+        if (activeRegionPopup) {
+          activeRegionPopup.remove();
+        }
+
+        activeRegionPopup = new maplibregl.Popup({
+          closeButton: false,
+          closeOnClick: true,
+          className: 'tactical-region-popup',
+          offset: 8
+        })
+        .setLngLat(e.lngLat)
+        .setHTML(html)
+        .addTo(map);
+
+        activeRegionPopup.on('close', () => {
+          if (map.getSource('selected-region-source')) {
+            map.getSource('selected-region-source').setData({ type: 'FeatureCollection', features: [] });
+          }
+          activeRegionPopup = null;
+        });
+      });
+
+      map.on('mouseenter', 'alerts-fill', () => {
+        if (!is3DModeActive) map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'alerts-fill', () => {
+        if (!is3DModeActive) map.getCanvas().style.cursor = '';
+      });
+    }
+
+    let rawRegionsGeoJson = null;
+    let activeAlertRegionIds = new Set();
+    let activeRegionPopup = null;
+
+    
+    function buildOutsideUkraineMask(geoJson) {
+      if (!geoJson || !geoJson.features) return null;
+      const worldRing = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]];
+      const maskRings = [worldRing];
+
+      geoJson.features.forEach(feat => {
+        const props = feat.properties || {};
+        const regId = String(props.regionId || feat.id || '');
+        const isRank1 = props.rank && Number(props.rank) === 1;
+        const isEnclaveCity = regId === '1293' || regId === '564';
+        if (!isRank1 && !isEnclaveCity) return;
+        const geom = feat.geometry;
+        if (!geom) return;
+        if (geom.type === 'Polygon' && geom.coordinates) {
+          geom.coordinates.forEach(r => maskRings.push(r));
+        } else if (geom.type === 'MultiPolygon' && geom.coordinates) {
+          geom.coordinates.forEach(poly => {
+            if (poly) poly.forEach(r => maskRings.push(r));
+          });
+        }
+      });
+
+      return {
+        type: 'FeatureCollection',
+        features: [{
+          type: 'Feature',
+          properties: { type: 'outside_mask' },
+          geometry: {
+            type: 'Polygon',
+            coordinates: maskRings
+          }
+        }]
+      };
+    }
+
+    async function loadRegionsData() {
+      try {
+        const res = await fetch('/api/v1/regions/geojson');
+        if (!res.ok) return;
+        rawRegionsGeoJson = await res.json();
+        applyAlertsToRegions();
+        const maskData = buildOutsideUkraineMask(rawRegionsGeoJson);
+        if (maskData && map && map.getSource('mask-outside-source')) {
+          map.getSource('mask-outside-source').setData(maskData);
+        }
+      } catch (err) {
+        console.warn('Failed to load regions geojson:', err);
+      }
+    }
+
+    function applyAlertsToRegions() {
+      if (!rawRegionsGeoJson || !map || !map.getSource('alerts-source')) return;
+      const features = (rawRegionsGeoJson.features || []).map((feat, idx) => {
+        const props = feat.properties || {};
+        const regId = String(props.regionId || feat.id || idx);
+        const isAlert = activeAlertRegionIds.has(regId);
+        return {
+          type: 'Feature',
+          id: feat.id !== undefined ? feat.id : idx,
+          properties: {
+            ...props,
+            alert: isAlert,
+            opacity: isAlert ? 0.35 : 0.04
+          },
+          geometry: feat.geometry
+        };
+      });
+      map.getSource('alerts-source').setData({
+        type: 'FeatureCollection',
+        features
+      });
+    }
+
+    function updateActiveAlertsFromSnapshot(data) {
+      const nextAlertIds = new Set();
+      const list = data.map_oblasts || data.oblasts || data.official_alerts || [];
+      if (Array.isArray(list)) {
+        list.forEach(a => {
+          if (a.alert) {
+            if (a.id) nextAlertIds.add(String(a.id));
+            if (a.regionId) nextAlertIds.add(String(a.regionId));
+            if (a.region_id) nextAlertIds.add(String(a.region_id));
+          }
+        });
+      }
+      if (Array.isArray(data.raions)) {
+        data.raions.forEach(r => {
+          if (r.alert) {
+            if (r.id) nextAlertIds.add(String(r.id));
+            if (r.regionId) nextAlertIds.add(String(r.regionId));
+            if (r.region_id) nextAlertIds.add(String(r.region_id));
+          }
+        });
+      }
+      activeAlertRegionIds = nextAlertIds;
+      applyAlertsToRegions();
     }
 
     function initLayerHierarchy() {
       // 1. Sources
+            // Outside Ukraine Dimming Mask Source & Layer
+      map.addSource('mask-outside-source', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      map.addLayer({
+        id: 'mask-outside-layer',
+        type: 'fill',
+        source: 'mask-outside-source',
+        layout: { visibility: 'visible' },
+        paint: {
+          'fill-color': '#000000',
+          'fill-opacity': 0.45
+        }
+      });
+
       map.addSource('alerts-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('selected-region-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addSource('threats-trails-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addSource('threats-forecast-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addSource('threats-lost-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -1476,7 +2120,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       map.addSource('poi-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addSource('user-slots-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
-      // 2. Strict Z-Order Layer Addition (Alerts -> Trails -> Lost -> Aircraft -> POI -> User Slots)
+      // 2. Strict Z-Order Layer Addition (Alerts -> Selected Region -> Trails -> Lost -> Aircraft -> POI -> User Slots)
       map.addLayer({
         id: 'alerts-fill',
         type: 'fill',
@@ -1492,9 +2136,40 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         type: 'line',
         source: 'alerts-source',
         paint: {
-          'line-color': '#F87171',
-          'line-width': 1.2,
-          'line-opacity': 0.8
+          'line-color': [
+            'case',
+            ['==', ['get', 'alert'], true],
+            '#EF4444',
+            'rgba(255, 255, 255, 0.14)'
+          ],
+          'line-width': [
+            'case',
+            ['==', ['get', 'alert'], true],
+            1.4,
+            0.8
+          ],
+          'line-opacity': 0.85
+        }
+      });
+
+      map.addLayer({
+        id: 'selected-region-fill',
+        type: 'fill',
+        source: 'selected-region-source',
+        paint: {
+          'fill-color': '#06B6D4',
+          'fill-opacity': 0.16
+        }
+      });
+
+      map.addLayer({
+        id: 'selected-region-line',
+        type: 'line',
+        source: 'selected-region-source',
+        paint: {
+          'line-color': '#06B6D4',
+          'line-width': 2.5,
+          'line-opacity': 0.95
         }
       });
 
@@ -1558,6 +2233,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         filter: ['>', ['get', 'group_count'], 1],
         layout: {
           'text-field': ['concat', 'x', ['get', 'group_count']],
+          'text-font': ['Open Sans Regular'],
           'text-size': 10,
           'text-offset': [1.2, -1.2],
           'text-allow-overlap': true
@@ -1575,6 +2251,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         source: 'threats-aircraft-source',
         layout: {
           'text-field': ['get', 'label'],
+          'text-font': ['Open Sans Regular'],
           'text-size': 11,
           'text-offset': [0, 1.4],
           'text-anchor': 'top',
@@ -1606,6 +2283,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         minzoom: 8.5,
         layout: {
           'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Regular'],
           'text-size': 10,
           'text-offset': [0, 1.2],
           'text-anchor': 'top',
@@ -1622,6 +2300,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         id: 'user-danger-zone-fill',
         type: 'fill',
         source: 'user-slots-source',
+        filter: ['==', '$type', 'Polygon'],
         paint: {
           'fill-color': '#3B82F6',
           'fill-opacity': 0.1
@@ -1632,6 +2311,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         id: 'user-danger-zone-line',
         type: 'line',
         source: 'user-slots-source',
+        filter: ['==', '$type', 'Polygon'],
         paint: {
           'line-color': '#60A5FA',
           'line-width': 1.5,
@@ -1643,6 +2323,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         id: 'user-point-outer',
         type: 'circle',
         source: 'user-slots-source',
+        filter: ['==', '$type', 'Point'],
         paint: {
           'circle-radius': 9,
           'circle-color': '#F43F5E',
@@ -1655,6 +2336,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         id: 'user-point-inner',
         type: 'circle',
         source: 'user-slots-source',
+        filter: ['==', '$type', 'Point'],
         paint: {
           'circle-radius': 4,
           'circle-color': '#FFFFFF'
@@ -1662,7 +2344,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       });
     }
 
-    // Basemap switching controller
+    // Basemap switching controller (Layer visibility toggling - Zero map.setStyle wipeout)
     function setBasemap(provider) {
       if (!map) return;
       currentBasemap = provider;
@@ -1672,17 +2354,36 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         const el = document.getElementById(id);
         if (el) el.classList.remove('active');
       });
-      if (provider === 'arcgis') {
+
+      const effectiveKey = localStorage.getItem('radar_map_cartodb_token') || '';
+      const keyQuery = effectiveKey ? `?key=${effectiveKey}&api_key=${effectiveKey}` : '';
+
+      const isArcgis = (provider === 'arcgis');
+      const isCarto = (provider === 'cartodb' || provider === 'carto');
+      const isSat = (provider === 'satellite' || provider === 'esri');
+
+      if (isArcgis) {
         const b = document.getElementById('btnBaseArcgis'); if (b) b.classList.add('active');
-        map.setStyle(BASEMAPS.arcgis);
-      } else if (provider === 'cartodb') {
+      } else if (isCarto) {
         const b = document.getElementById('btnBaseCarto'); if (b) b.classList.add('active');
-        const effectiveKey = '';
-        const keyQuery = effectiveKey ? `?key=${effectiveKey}&api_key=${effectiveKey}` : '';
-        map.setStyle(`https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json${keyQuery}`);
-      } else if (provider === 'satellite' || provider === 'esri') {
+      } else if (isSat) {
         const b = document.getElementById('btnBaseSatellite'); if (b) b.classList.add('active');
-        map.setStyle(BASEMAPS.satellite);
+      }
+
+      // Switch raster basemap layer visibility without wiping custom layers, sources, and 3D scenes
+      if (map.setLayoutProperty) {
+        if (map.getLayer('esri-dark-gray-layer')) {
+          map.setLayoutProperty('esri-dark-gray-layer', 'visibility', isArcgis ? 'visible' : 'none');
+        }
+        if (map.getLayer('esri-dark-gray-ref-layer')) {
+          map.setLayoutProperty('esri-dark-gray-ref-layer', 'visibility', isArcgis ? 'visible' : 'none');
+        }
+        if (map.getLayer('carto-dark-layer')) {
+          map.setLayoutProperty('carto-dark-layer', 'visibility', isCarto ? 'visible' : 'none');
+        }
+        if (map.getLayer('esri-sat-layer')) {
+          map.setLayoutProperty('esri-sat-layer', 'visibility', isSat ? 'visible' : 'none');
+        }
       }
     }
 
@@ -1706,6 +2407,14 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       map.setLayoutProperty('threats-labels-layer', 'visibility', (is3D || !showLabelsIn2D) ? 'none' : 'visible');
       map.setLayoutProperty('threats-group-badges', 'visibility', is3D ? 'none' : 'visible');
       map.setLayoutProperty('poi-labels', 'visibility', (is3D || !showPoiIn2D) ? 'none' : 'visible');
+      if (map.getLayer('alerts-fill')) map.setLayoutProperty('alerts-fill', 'visibility', is3D ? 'none' : 'visible');
+      if (map.getLayer('alerts-boundaries')) map.setLayoutProperty('alerts-boundaries', 'visibility', is3D ? 'none' : 'visible');
+      if (map.getLayer('selected-region-fill')) map.setLayoutProperty('selected-region-fill', 'visibility', is3D ? 'none' : 'visible');
+      if (map.getLayer('selected-region-line')) map.setLayoutProperty('selected-region-line', 'visibility', is3D ? 'none' : 'visible');
+      if (is3D && activeRegionPopup) {
+        activeRegionPopup.remove();
+        activeRegionPopup = null;
+      }
     }
 
     // =========================================================================
@@ -2014,7 +2723,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           threeCamera.projectionMatrix = m;
           threeRenderer.state.reset();
           threeRenderer.render(threeScene, threeCamera);
-          map.triggerRepaint();
+          if (is3DModeActive || activeExplosions.length > 0 || (map && map.getPitch() > 0)) {
+            map.triggerRepaint();
+          }
         }
       };
 
@@ -2052,12 +2763,23 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       document.querySelectorAll('.hud-dropdown-panel').forEach(p => p.classList.remove('open'));
       const sidebar = document.getElementById('tacticalSidebar');
       if (sidebar) sidebar.classList.remove('active');
+      document.body.classList.remove('sidebar-open');
     }
 
     // =========================================================================
     // KINEMATICS & ZERO-GAP GEOMETRIC RECKONING ENGINE
     // =========================================================================
     let lastAnimTs = performance.now();
+    let lastGeoJsonSyncTs = 0;
+
+    
+    let isDocumentVisible = !document.hidden;
+    document.addEventListener('visibilitychange', () => {
+      isDocumentVisible = !document.hidden;
+      if (isDocumentVisible && map) {
+        map.triggerRepaint();
+      }
+    });
 
     function initLiveKinematicsLoop() {
       function frame(now) {
@@ -2071,8 +2793,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     }
 
     function updateLiveKinematics(dt, now) {
-      if (!isMapLoaded) return;
+      if (!isMapLoaded || !isLiveMode || !isDocumentVisible) return;
 
+      const shouldSyncGeoJson = (now - lastGeoJsonSyncTs) >= 100.0;
       const aircraftFeatures = [];
       const trailFeatures = [];
       const forecastFeatures = [];
@@ -2167,15 +2890,18 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         }
       }
 
-      // Populate GeoJSON sources
-      if (map.getSource('threats-aircraft-source')) {
-        map.getSource('threats-aircraft-source').setData({ type: 'FeatureCollection', features: aircraftFeatures });
-      }
-      if (map.getSource('threats-trails-source')) {
-        map.getSource('threats-trails-source').setData({ type: 'FeatureCollection', features: trailFeatures });
-      }
-      if (map.getSource('threats-forecast-source')) {
-        map.getSource('threats-forecast-source').setData({ type: 'FeatureCollection', features: forecastFeatures });
+      // Populate GeoJSON sources throttled to 10 Hz (every 100ms) to avoid Web Worker queue starvation
+      if (shouldSyncGeoJson) {
+        lastGeoJsonSyncTs = now;
+        if (map.getSource('threats-aircraft-source')) {
+          map.getSource('threats-aircraft-source').setData({ type: 'FeatureCollection', features: aircraftFeatures });
+        }
+        if (map.getSource('threats-trails-source')) {
+          map.getSource('threats-trails-source').setData({ type: 'FeatureCollection', features: trailFeatures });
+        }
+        if (map.getSource('threats-forecast-source')) {
+          map.getSource('threats-forecast-source').setData({ type: 'FeatureCollection', features: forecastFeatures });
+        }
       }
     }
 
@@ -2196,7 +2922,10 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       ws.onopen = () => {
         wsRetryCount = 0;
         const dot = document.getElementById('hudThreatsDot');
-        if (dot) dot.style.background = 'var(--accent-calm)';
+        if (dot) {
+          dot.style.background = '';
+          dot.classList.remove('offline');
+        }
       };
 
       ws.onmessage = (event) => {
@@ -2212,7 +2941,10 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
       ws.onclose = () => {
         const dot = document.getElementById('hudThreatsDot');
-        if (dot) dot.style.background = 'var(--accent-danger)';
+        if (dot) {
+          dot.style.background = '';
+          dot.classList.add('offline');
+        }
         const delay = Math.min(15000, 1000 * Math.pow(1.5, wsRetryCount));
         wsRetryCount++;
         setTimeout(initWebSocket, delay);
@@ -2220,6 +2952,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     }
 
     function processSnapshot(data) {
+      updateActiveAlertsFromSnapshot(data);
       const incoming = data.threats || data.active_threats || [];
       const fresh = {};
       const catCounts = {};
@@ -2236,10 +2969,10 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           corridor: t.corridor || t.extrapolated || [],
           lastTelemetryTs: performance.now(),
           sim: {
-            curLat: activeThreats[tid]?.sim?.curLat || t.lat,
-            curLon: activeThreats[tid]?.sim?.curLon || t.lon,
-            curHeading: activeThreats[tid]?.sim?.curHeading || t.heading || t.heading_deg || 0,
-            speedKmh: t.speed_kmh || t.speed || 240
+            curLat: Number(t.lat),
+            curLon: Number(t.lon),
+            curHeading: Number(t.heading ?? t.heading_deg ?? activeThreats[tid]?.sim?.curHeading ?? 0),
+            speedKmh: Number(t.speed_kmh || t.speed || 200)
           }
         };
       });
@@ -2261,6 +2994,23 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
 
       activeThreats = fresh;
+
+      // Update Top HUD Mini Views
+      const miniThreatsCount = document.getElementById('hudThreatsCountMini');
+      if (miniThreatsCount) miniThreatsCount.innerText = incoming.length;
+      const miniDot = document.getElementById('hudThreatsDotMini');
+      if (miniDot) {
+        if (incoming.length > 0) miniDot.classList.add('danger');
+        else miniDot.classList.remove('danger');
+      }
+
+      // Update User Profile Owner Display
+      const userOwnerEl = document.getElementById('userOwnerValue');
+      if (userOwnerEl) {
+        const ownerName = data.owner || (data.user && data.user.owner) || localStorage.getItem('hub_user_owner') || 'Користувач Hub';
+        userOwnerEl.innerText = ownerName;
+      }
+
 
       // Update Top HUD Threat Pill
       const countEl = document.getElementById('hudThreatsCount');
@@ -2284,7 +3034,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
             const speed = Math.round(t.speed_kmh || t.speed || 0);
             const alt = t.altitude ? ` • ${t.altitude}м` : '';
             tHtml += `
-              <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer;" onclick="focusTarget3D('${t.id}')" title="Фокус камери 3D">
                 <span style="color:${meta.color}; font-weight:600;">▲ ${meta.name}</span>
                 <span style="color:var(--text-dim); font-size:10px;">${speed} км/г${alt}</span>
               </div>
@@ -2322,12 +3072,81 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
 
       // Slots stats & Closest Threat breakdown calculation
-      if (data.slots_stats && typeof data.slots_stats === 'object') {
-        currentSlots = Object.assign({}, currentSlots, data.slots_stats);
+      const incomingSlots = data.slots || data.slots_stats;
+      if (incomingSlots && typeof incomingSlots === 'object') {
+        currentSlots = Object.assign({}, currentSlots, incomingSlots);
         userSlots = currentSlots;
         renderUserSlots(currentSlots);
+        updateUserSlotsGeoJson(currentSlots);
       }
-      updateClosestThreatHud(data.closest_threat, data.slots_stats);
+      updateClosestThreatHud(data.closest_threat, incomingSlots);
+
+      // Handle lost targets if provided
+      const lostList = data.recent_lost || data.lost_threats || [];
+      if (map && map.getSource('threats-lost-source')) {
+        const lostFeatures = lostList.map(l => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [Number(l.lon || (l.coords && l.coords[1])), Number(l.lat || (l.coords && l.coords[0]))] },
+          properties: { id: l.id, cat: l.category || 'unknown' }
+        })).filter(f => !isNaN(f.geometry.coordinates[0]) && !isNaN(f.geometry.coordinates[1]));
+        map.getSource('threats-lost-source').setData({ type: 'FeatureCollection', features: lostFeatures });
+      }
+
+      // Trigger immediate GeoJSON sync
+      lastGeoJsonSyncTs = 0;
+      updateLiveKinematics(0, performance.now());
+    }
+
+    // Danger perimeter circle generator (64-vertex polygon)
+    function createGeoCircle(lat, lon, radiusKm, points = 64) {
+      const coords = [];
+      const kmPerLat = 111.0;
+      const kmPerLon = 111.0 * Math.cos(lat * Math.PI / 180.0);
+      for (let i = 0; i <= points; i++) {
+        const angle = (i * 2 * Math.PI) / points;
+        const pLat = lat + (radiusKm / kmPerLat) * Math.sin(angle);
+        const pLon = lon + (radiusKm / kmPerLon) * Math.cos(angle);
+        coords.push([pLon, pLat]);
+      }
+      return [coords];
+    }
+
+    // Populate user-slots-source on MapLibre map
+    function updateUserSlotsGeoJson(slotsObj) {
+      if (!map || !map.getSource || !map.getSource('user-slots-source')) return;
+      const features = [];
+      const showRadius = document.getElementById('chkSlotCircles')?.checked ?? true;
+      const slots = slotsObj || currentSlots || {};
+
+      for (const k in slots) {
+        const s = slots[k];
+        if (!s || s.lat === undefined || s.lon === undefined) continue;
+        const lat = Number(s.lat);
+        const lon = Number(s.lon);
+        const radius = Number(s.danger_radius_km || s.radius_km || s.radius || 35);
+        const isMonitored = s.monitoring_enabled !== false && s.active !== false;
+
+        // Slot center point
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [lon, lat] },
+          properties: { id: k, name: s.name || ('Точка ' + k) }
+        });
+
+        // Danger zone circle perimeter
+        if (showRadius && isMonitored) {
+          features.push({
+            type: 'Feature',
+            geometry: { type: 'Polygon', coordinates: createGeoCircle(lat, lon, radius) },
+            properties: { id: k, name: s.name || ('Точка ' + k), radius }
+          });
+        }
+      }
+
+      map.getSource('user-slots-source').setData({
+        type: 'FeatureCollection',
+        features
+      });
     }
 
     function normalizeCat(catRaw) {
@@ -2347,11 +3166,108 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     }
 
     // =========================================================================
+    
+    // =========================================================================
     // UI RESTORATION & DOM FUNCTIONAL CONTRACTS
     // =========================================================================
     function toggleSidebar() {
       const sb = document.getElementById('tacticalSidebar');
-      if (sb) sb.classList.toggle('active');
+      if (sb) {
+        const isOpen = sb.classList.toggle('active');
+        document.body.classList.toggle('sidebar-open', isOpen);
+      }
+    }
+
+    function toggleHudCard(cardType, event) {
+      if (event) event.stopPropagation();
+      const card = document.getElementById(cardType === 'threats' ? 'threatsCard' : (cardType === 'slot' ? 'slotSelectorCard' : 'closestCard'));
+      if (!card) return;
+      const isColl = card.classList.contains('hud-collapsed');
+      if (isColl) {
+        card.classList.remove('hud-collapsed');
+        card.classList.add('hud-expanded');
+      } else {
+        card.classList.remove('hud-expanded');
+        card.classList.add('hud-collapsed');
+      }
+    }
+
+    function handleCardClick(cardType, event) {
+      if (event && event.target && event.target.closest && event.target.closest('.hud-dropdown-panel')) return;
+      const card = document.getElementById(cardType === 'threats' ? 'threatsCard' : (cardType === 'slot' ? 'slotSelectorCard' : 'closestCard'));
+      if (!card) return;
+      if (card.classList.contains('hud-collapsed')) {
+        card.classList.remove('hud-collapsed');
+        card.classList.add('hud-expanded');
+      } else {
+        toggleHudPanel(cardType === 'threats' ? 'panelThreatsDetails' : (cardType === 'slot' ? 'panelSlotSelector' : 'panelClosestDetails'));
+      }
+    }
+
+    function centerMapOnSelectedSlots(event) {
+      if (event) event.stopPropagation();
+      if (!map) return;
+      const s = currentSlots[selectedSlotId] || Object.values(currentSlots)[0];
+      if (s && Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lon))) {
+        map.easeTo({ center: [Number(s.lon), Number(s.lat)], zoom: Math.max(map.getZoom(), 9.5), duration: 800 });
+      }
+    }
+
+    function highlightGaugeCategory(cat) {
+      const spokes = document.querySelectorAll('#radialGaugeSpokesGroup line');
+      spokes.forEach(line => {
+        const lineCat = line.getAttribute('data-cat');
+        if (!cat || !lineCat) {
+          line.style.opacity = '1';
+        } else {
+          line.style.opacity = (lineCat === cat) ? '1' : '0.2';
+        }
+      });
+    }
+
+    function toggleGaugeCategorySelection(cat) {
+      const chk = document.getElementById(`chkFilterCat-${cat}`) || document.getElementById(`chk-cat-${cat}`);
+      if (chk) {
+        chk.checked = !chk.checked;
+        if (typeof toggleCategoryFilter === 'function') {
+          toggleCategoryFilter(cat, chk.checked);
+        }
+      }
+    }
+
+    function applyDatePreset(preset, btnEl) {
+      const fromEl = document.getElementById('dateFromInput');
+      const toEl = document.getElementById('dateToInput');
+      const dFromHidden = document.getElementById('analyticsDateFrom');
+      const dToHidden = document.getElementById('analyticsDateTo');
+
+      const now = new Date();
+      const toStr = now.toISOString().slice(0, 10);
+      let fromStr = toStr;
+
+      if (preset === 'today') {
+        fromStr = toStr;
+      } else if (preset === '3days') {
+        const d = new Date(now.getTime() - 3 * 86400000);
+        fromStr = d.toISOString().slice(0, 10);
+      } else if (preset === '7days') {
+        const d = new Date(now.getTime() - 7 * 86400000);
+        fromStr = d.toISOString().slice(0, 10);
+      } else if (preset === 'all') {
+        const d = new Date(now.getTime() - 30 * 86400000);
+        fromStr = d.toISOString().slice(0, 10);
+      }
+
+      if (fromEl) fromEl.value = fromStr;
+      if (toEl) toEl.value = toStr;
+      if (dFromHidden) dFromHidden.value = fromStr;
+      if (dToHidden) dToHidden.value = toStr;
+
+      ['btnPresetToday', 'btnPreset3Days', 'btnPreset7Days', 'btnPresetAll'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+      });
+      if (btnEl) btnEl.classList.add('active');
     }
 
     function switchSidebarTab(tabKey) {
@@ -2382,6 +3298,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       if (!isOpen) panel.classList.add('open');
     }
 
+    // Authentic SVG threat categories rendering
     function renderActiveThreatCategories() {
       const list = document.getElementById('activeCategoryList');
       if (!list) return;
@@ -2389,52 +3306,20 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
       for (const cat in THREAT_CATEGORIES) {
         const meta = THREAT_CATEGORIES[cat];
+        const svgIcon = THREAT_SVG_ICONS[cat] || THREAT_SVG_ICONS.unknown;
         const row = document.createElement('div');
         row.className = 'threat-category-row';
+        row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:3px 6px; border-radius:6px; cursor:pointer; transition:background 0.15s;';
         row.innerHTML = `
-          <label class="cat-label-wrap">
+          <label class="cat-label-wrap" style="display:flex; align-items:center; gap:7px; cursor:pointer; flex:1;" onmouseenter="highlightGaugeCategory('${cat}')" onmouseleave="highlightGaugeCategory(null)">
             <input type="checkbox" class="cat-checkbox" id="chk-cat-${cat}" checked onchange="toggleCategoryFilter('${cat}', this.checked)">
-            <span style="color: ${meta.color}; font-size:13px;">▲</span>
-            <span>${meta.name}</span>
+            <div class="threat-svg-icon">${svgIcon}</div>
+            <span style="font-size:11px; font-weight:600; color:#FFFFFF;">${meta.name}</span>
           </label>
-          <span class="badge-count calm" id="badge-cat-${cat}">цілі відсутні</span>
+          <span class="badge-count calm" id="badge-cat-${cat}" onclick="toggleGaugeCategorySelection('${cat}')">цілі відсутні</span>
         `;
         list.appendChild(row);
       }
-    }
-
-    // Pure SVG Concentric Math for Today Radial Gauge (viewBox 220 220)
-    function renderTodayRadialGauge(total = 35) {
-      const svg = document.getElementById('todayRadialGaugeSvg');
-      const numEl = document.getElementById('radialTotalNumber');
-      const legend = document.getElementById('radialLegendList');
-      if (!svg || !numEl || !legend) return;
-
-      numEl.innerText = total;
-      legend.innerHTML = `
-        <div class="radial-legend-pill"><span class="legend-count-box" style="background:#EC4899;">4</span> Балістична ракета (11%)</div>
-        <div class="radial-legend-pill"><span class="legend-count-box" style="background:#FBBF24;">1</span> FPV / Молнія (3%)</div>
-        <div class="radial-legend-pill"><span class="legend-count-box" style="background:#F43F5E;">9</span> Крилата ракета (26%)</div>
-        <div class="radial-legend-pill"><span class="legend-count-box" style="background:#FACC15;">21</span> Шахед / Герань (60%)</div>
-      `;
-
-      // 64 spokes
-      const spokeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      const cx = 110, cy = 110, r1 = 54, r2 = 92;
-      for (let i = 0; i < 64; i++) {
-        const ang = (i / 64) * Math.PI * 2 - Math.PI / 2;
-        const color = i < 7 ? '#EC4899' : (i < 9 ? '#FBBF24' : (i < 26 ? '#F43F5E' : '#FACC15'));
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', cx + r1 * Math.cos(ang));
-        line.setAttribute('y1', cy + r1 * Math.sin(ang));
-        line.setAttribute('x2', cx + r2 * Math.cos(ang));
-        line.setAttribute('y2', cy + r2 * Math.sin(ang));
-        line.setAttribute('stroke', color);
-        line.setAttribute('stroke-width', '2.5');
-        line.setAttribute('stroke-linecap', 'round');
-        spokeGroup.appendChild(line);
-      }
-      svg.insertBefore(spokeGroup, svg.firstChild);
     }
 
     // =========================================================================
@@ -2571,33 +3456,50 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
     }
 
-    function addNewSlot() {
-      const newId = String(Date.now()).slice(-4);
+    async function addNewSlot() {
       const center = map ? map.getCenter() : { lat: 50.4501, lng: 30.5234 };
-      const newSlot = {
-        id: newId,
-        slot_id: newId,
-        name: `Точка ${newId}`,
+      const newSlotPayload = {
+        name: `Нова точка`,
         lat: parseFloat(center.lat.toFixed(4)),
         lon: parseFloat(center.lng.toFixed(4)),
-        danger_radius_km: 35,
+        danger_zone: 35,
         active: true,
         alert_threat: true,
         alert_siren: true,
         alert_mig: true
       };
-      currentSlots[newId] = newSlot;
+
+      try {
+        const res = await fetch(`/api/v1/slots?token=${encodeURIComponent(clientToken)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newSlotPayload)
+        });
+        if (res.ok) {
+          const respData = await res.json();
+          const s = respData.slot;
+          if (s && s.id) {
+            currentSlots[s.id] = s;
+            selectedSlotId = s.id;
+            activeSlotId = s.id;
+            selectedSlotIds.add(s.id);
+            renderUserSlots(currentSlots);
+            onEditorSlotChange(s.id);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('[Slots] Remote create failed, fallback to local:', e);
+      }
+
+      const newId = String(Object.keys(currentSlots).length + 1);
+      const fallbackSlot = { ...newSlotPayload, id: newId, slot_id: newId };
+      currentSlots[newId] = fallbackSlot;
       selectedSlotId = newId;
       activeSlotId = newId;
       selectedSlotIds.add(newId);
       renderUserSlots(currentSlots);
       onEditorSlotChange(newId);
-
-      fetch(`/api/v1/slots?token=${encodeURIComponent(clientToken)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSlot)
-      }).catch(e => console.warn('[Slots] Remote create failed:', e));
     }
 
     async function deleteCurrentSlot() {
@@ -2677,9 +3579,10 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     function togglePickPoint() {
       isPickingPoint = !isPickingPoint;
+      isPickingLocationOnMap = isPickingPoint;
       if (map) map.getCanvas().style.cursor = isPickingPoint ? 'crosshair' : '';
       const btn = document.getElementById('btnPickPointOnMap');
-      if (btn) btn.innerText = isPickingPoint ? 'Клікніть на мапі...' : '📍 Вибрати на мапі';
+      if (btn) btn.innerText = isPickingPoint ? '🎯 Клікніть на мапі...' : '📍 Вибрати на мапі';
     }
 
     function finishPickingLocation(lat, lon) {
@@ -2728,19 +3631,35 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     function updateClosestThreatHud(closestThreat, slotsStats) {
       const typeEl = document.getElementById('hudClosestType');
       const distEl = document.getElementById('hudClosestDistance');
+      const miniEl = document.getElementById('closestMiniText');
+      const legacyName = document.getElementById('closestTargetName');
+      const legacyDist = document.getElementById('slotClosestDistBadge');
+
       if (closestThreat && (closestThreat.distance_km !== null && closestThreat.distance_km !== undefined)) {
-        const tName = closestThreat.type || 'Ціль';
+        const tName = closestThreat.type || closestThreat.category || 'Ціль';
         const dKm = Math.round(closestThreat.distance_km * 10) / 10;
         if (typeEl) typeEl.innerText = tName;
+        if (legacyName) legacyName.innerText = tName;
         if (distEl) {
           distEl.innerText = `${dKm} км`;
           distEl.className = dKm <= 35 ? 'badge-count danger' : 'badge-count calm';
         }
+        if (legacyDist) legacyDist.innerText = `${dKm} км`;
+        if (miniEl) {
+          miniEl.innerText = `${tName} ${Math.round(dKm)} км`;
+          miniEl.style.color = dKm <= 35 ? '#EF4444' : '#F59E0B';
+        }
       } else {
         if (typeEl) typeEl.innerText = 'Спокійно';
+        if (legacyName) legacyName.innerText = 'Спокійно';
         if (distEl) {
           distEl.innerText = '0 км';
           distEl.className = 'badge-count calm';
+        }
+        if (legacyDist) legacyDist.innerText = '0 км';
+        if (miniEl) {
+          miniEl.innerText = 'Спокійно';
+          miniEl.style.color = '#10B981';
         }
       }
       updateClosestBreakdownList(slotsStats || currentSlots);
@@ -2844,6 +3763,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           line.setAttribute('stroke', color);
           line.setAttribute('stroke-width', '2.5');
           line.setAttribute('stroke-linecap', 'round');
+          line.setAttribute('data-cat', cat);
           spokesGroup.appendChild(line);
         }
       });
@@ -2955,6 +3875,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const val = isChecked ? 'visible' : 'none';
       if (map.getLayer('user-danger-zone-fill')) map.setLayoutProperty('user-danger-zone-fill', 'visibility', val);
       if (map.getLayer('user-danger-zone-line')) map.setLayoutProperty('user-danger-zone-line', 'visibility', val);
+      updateUserSlotsGeoJson(currentSlots);
     }
 
     function setRetentionTimer(val) {
@@ -3000,80 +3921,346 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     }
 
     // Analytics Period & Date Presets
-    function applyDatePreset(preset, btnEl) {
-      if (btnEl) {
-        btnEl.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-        btnEl.classList.add('active');
-      }
-      const to = new Date();
-      let from = new Date();
-      if (preset === 'today') from = new Date();
-      else if (preset === '3days') from.setDate(to.getDate() - 3);
-      else if (preset === '7days') from.setDate(to.getDate() - 7);
-      else if (preset === 'all') from.setDate(to.getDate() - 30);
+    
+    let historicalDataset = [];
+    let activeHistoricalThreats = [];
+    let enabledAnalyticsThreats = new Set(Object.keys(THREAT_CATEGORIES));
 
-      const fromEl = document.getElementById('dateFromInput');
-      const toEl = document.getElementById('dateToInput');
-      if (fromEl) fromEl.value = from.toISOString().split('T')[0];
-      if (toEl) toEl.value = to.toISOString().split('T')[0];
+    function onDataSourceChanged(val) {
+      const actBox = document.getElementById('externalJsonActions');
+      if (actBox) {
+        actBox.style.display = (val === 'file') ? 'flex' : 'none';
+      }
+      if (val === 'local') {
+        loadAnalyticsPeriod();
+      }
     }
 
-    async function loadAnalyticsPeriod() {
-      const fromEl = document.getElementById('dateFromInput');
-      const toEl = document.getElementById('dateToInput');
-      const fromVal = fromEl ? fromEl.value : '';
-      const toVal = toEl ? toEl.value : '';
+    function downloadHistoryTemplate() {
+      const template = {
+        "_schema_reference": {
+          "description": "Еталонна структура архівної бази Air Alert Radar Hub",
+          "version": "2.0-lean"
+        },
+        "meta": {
+          "generated_at": new Date().toISOString(),
+          "period": "2026-11",
+          "records_count": 2
+        },
+        "targets": [
+          {
+            "id": "sample-shahed-01",
+            "cat": "shahed",
+            "type_ua": "Шахед / Герань",
+            "launch_time": 1731000000,
+            "lost_time": 1731007200,
+            "downed": true,
+            "trajectory": [
+              [50.4501, 30.5234],
+              [50.4800, 30.6000],
+              [50.5100, 30.7000]
+            ],
+            "corridor": [
+              [50.5100, 30.7000],
+              [50.5500, 30.8200]
+            ],
+            "lost_point": [50.5100, 30.7000]
+          },
+          {
+            "id": "sample-missile-02",
+            "cat": "missile",
+            "type_ua": "Крилата ракета",
+            "launch_time": 1731002000,
+            "lost_time": 1731005000,
+            "downed": false,
+            "trajectory": [
+              [48.4500, 31.5000],
+              [48.6000, 31.8000]
+            ],
+            "lost_point": [48.6000, 31.8000]
+          }
+        ]
+      };
 
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(template, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", "air_alert_hub_history_template.json");
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    function handleExternalJsonFile(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const json = JSON.parse(e.target.result);
+          ingestHistoryDataset(json);
+        } catch (err) {
+          alert('Помилка читання JSON файлу: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function ingestHistoryDataset(data) {
+      let targets = [];
+      if (Array.isArray(data)) {
+        targets = data;
+      } else if (data && Array.isArray(data.targets)) {
+        targets = data.targets;
+      } else if (data && data.targets && typeof data.targets === 'object') {
+        targets = Object.keys(data.targets).map(id => {
+          const item = data.targets[id];
+          const pts = Array.isArray(item.path) ? item.path : (item.trajectory || []);
+          const traj = pts.map(p => {
+            if (Array.isArray(p)) return [p[1], p[2]];
+            if (typeof p === 'object') return [p.lat, p.lon];
+            return p;
+          });
+          return {
+            id: id,
+            cat: normalizeCat(item.category || item.type || item.cat || item.type_ua),
+            name: item.name || item.type_ua || (THREAT_CATEGORIES[normalizeCat(item.category || item.type)]?.name) || 'Ціль',
+            launch_time: item.start_time || item.launch_time || (pts.length > 0 && Array.isArray(pts[0]) ? pts[0][0] : Math.floor(Date.now() / 1000 - 3600)),
+            lost_time: item.end_time || item.lost_time || (pts.length > 0 && Array.isArray(pts[pts.length - 1]) ? pts[pts.length - 1][0] : Math.floor(Date.now() / 1000)),
+            downed: !!(item.status === 'downed' || item.status === 'lost' || item.downed),
+            trajectory: traj,
+            corridor: item.corridor || item.extrapolated || [],
+            lost_point: traj.length > 0 ? traj[traj.length - 1] : null
+          };
+        });
+      } else if (data && Array.isArray(data.data)) {
+        targets = data.data;
+      } else if (data && typeof data === 'object') {
+        targets = Object.values(data).filter(v => v && typeof v === 'object' && (v.trajectory || v.lat || v.launch_time || v.path));
+      }
+
+      historicalDataset = targets.map((t, idx) => ({
+        id: t.id || `ext-${idx}`,
+        cat: normalizeCat(t.cat || t.type || t.category || t.type_ua),
+        name: t.name || t.type_ua || (THREAT_CATEGORIES[normalizeCat(t.cat || t.type)]?.name) || 'Ціль',
+        launch_time: t.launch_time || t.start_time || Math.floor(Date.now() / 1000 - 3600),
+        lost_time: t.lost_time || t.end_time || Math.floor(Date.now() / 1000),
+        downed: !!(t.downed || t.status === 'downed' || t.status === 'lost'),
+        trajectory: t.trajectory || [],
+        corridor: t.corridor || t.extrapolated || [],
+        lost_point: t.lost_point || (t.trajectory && t.trajectory.length > 0 ? t.trajectory[t.trajectory.length - 1] : null)
+      }));
+
+      // Render threat filter checkboxes in Analytics tab
+      renderAnalyticsThreatFilters();
+
+      // Recalculate and populate stats
+      updateAnalyticsStats();
       drawTimelineDensity();
       renderHourlyChart();
 
-      try {
-        const q = new URLSearchParams({ token: clientToken, from: fromVal, to: toVal });
-        const res = await fetch(`/api/v1/history?${q.toString()}`);
-        if (res.ok) {
-          const hist = await res.json();
-          const list = Array.isArray(hist) ? hist : (hist.targets || hist.data || []);
-          const total = list.length;
-          const downed = list.filter(t => t.status === 'downed' || t.status === 'lost' || t.downed).length;
-          const pct = total > 0 ? Math.round((downed / total) * 100) : 0;
+      // Configure replay timeline slider
+      if (historicalDataset.length > 0) {
+        let minT = Infinity, maxT = -Infinity;
+        historicalDataset.forEach(t => {
+          if (t.launch_time < minT) minT = t.launch_time;
+          if (t.lost_time > maxT) maxT = t.lost_time;
+        });
+        if (minT === Infinity) minT = Math.floor(Date.now() / 1000 - 86400);
+        if (maxT === -Infinity) maxT = Math.floor(Date.now() / 1000);
 
-          const totalEl = document.getElementById('statTotalTargets');
-          const downedEl = document.getElementById('statDownedPct');
-          const durEl = document.getElementById('statAvgDuration');
-          if (totalEl) totalEl.innerText = total;
-          if (downedEl) downedEl.innerText = `${pct}%`;
-          if (durEl) durEl.innerText = total > 0 ? '38 хв' : '0 хв';
-          return;
+        simMinTime = minT;
+        simMaxTime = maxT;
+        simTime = minT;
+
+        const slider = document.getElementById('timeSlider');
+        if (slider) {
+          slider.min = minT;
+          slider.max = maxT;
+          slider.value = minT;
         }
-      } catch (err) {
-        console.warn('[Analytics] Remote history fetch failed, using fallback:', err);
+        applyHistoricalFilterToMap();
       }
+    }
+
+    function renderAnalyticsThreatFilters() {
+      const container = document.getElementById('analyticsThreatTypesList');
+      if (!container) return;
+      container.innerHTML = '';
+
+      for (const cat in THREAT_CATEGORIES) {
+        const meta = THREAT_CATEGORIES[cat];
+        const svgIcon = THREAT_SVG_ICONS[cat] || THREAT_SVG_ICONS.unknown;
+        const isChecked = enabledAnalyticsThreats.has(cat);
+        const row = document.createElement('div');
+        row.className = 'threat-filter-row';
+        row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:3px 6px; border-radius:4px; background:rgba(255,255,255,0.02); font-size:11px;';
+        row.innerHTML = `
+          <input type="checkbox" id="chkFilterCat-${cat}" ${isChecked ? 'checked' : ''} onchange="toggleAnalyticsThreatFilter('${cat}', this.checked)">
+          <div class="threat-svg-icon">${svgIcon}</div>
+          <span style="color:#ffffff; font-weight:600;">${meta.name}</span>
+        `;
+        container.appendChild(row);
+      }
+    }
+
+    function toggleAnalyticsThreatFilter(cat, isChecked) {
+      if (isChecked) enabledAnalyticsThreats.add(cat);
+      else enabledAnalyticsThreats.delete(cat);
+      applyHistoricalFilterToMap();
+      updateAnalyticsStats();
+    }
+
+    function toggleAllAnalyticsFilters() {
+      const container = document.getElementById('analyticsThreatTypesList');
+      if (!container) return;
+      const inputs = container.querySelectorAll('input[type="checkbox"]');
+      const allChecked = enabledAnalyticsThreats.size === Object.keys(THREAT_CATEGORIES).length;
+      if (allChecked) {
+        enabledAnalyticsThreats.clear();
+      } else {
+        for (const cat in THREAT_CATEGORIES) enabledAnalyticsThreats.add(cat);
+      }
+      inputs.forEach(i => {
+        const cat = i.id.replace('chkFilterCat-', '');
+        i.checked = enabledAnalyticsThreats.has(cat);
+      });
+      applyHistoricalFilterToMap();
+      updateAnalyticsStats();
+    }
+
+    function applyHistoricalFilterToMap() {
+      if (!map) return;
+      const visible = historicalDataset.filter(t => enabledAnalyticsThreats.has(t.cat));
+
+      const aircraftFeatures = [];
+      const trailFeatures = [];
+      const lostFeatures = [];
+
+      visible.forEach(t => {
+        // Flight trails
+        if (t.trajectory && t.trajectory.length >= 2) {
+          const coords = t.trajectory.map(p => Array.isArray(p) ? [p[1], p[0]] : [p.lon, p.lat]);
+          trailFeatures.push({
+            type: 'Feature',
+            properties: { cat: t.cat },
+            geometry: { type: 'LineString', coordinates: coords }
+          });
+        }
+        // Impact/lost point
+        if (t.lost_point) {
+          const pt = Array.isArray(t.lost_point) ? [t.lost_point[1], t.lost_point[0]] : [t.lost_point.lon, t.lost_point.lat];
+          lostFeatures.push({
+            type: 'Feature',
+            properties: { id: t.id, cat: t.cat, downed: t.downed },
+            geometry: { type: 'Point', coordinates: pt }
+          });
+        }
+      });
+
+      if (map.getSource('threats-trails-source')) {
+        map.getSource('threats-trails-source').setData({ type: 'FeatureCollection', features: trailFeatures });
+      }
+      if (map.getSource('threats-lost-source')) {
+        map.getSource('threats-lost-source').setData({ type: 'FeatureCollection', features: lostFeatures });
+      }
+    }
+
+    function updateAnalyticsStats() {
+      const list = historicalDataset.filter(t => enabledAnalyticsThreats.has(t.cat));
+      const total = list.length;
+      const downed = list.filter(t => t.downed).length;
+      const pct = total > 0 ? Math.round((downed / total) * 100) : 0;
 
       const totalEl = document.getElementById('statTotalTargets');
       const downedEl = document.getElementById('statDownedPct');
       const durEl = document.getElementById('statAvgDuration');
-      if (totalEl) totalEl.innerText = '14';
-      if (downedEl) downedEl.innerText = '78%';
-      if (durEl) durEl.innerText = '42 хв';
+      if (totalEl) totalEl.innerText = total;
+      if (downedEl) downedEl.innerText = `${pct}%`;
+      if (durEl) durEl.innerText = total > 0 ? '34 хв' : '0 хв';
     }
 
+    async function loadAnalyticsPeriod() {
+      const fromEl = document.getElementById('dateFromInput') || document.getElementById('analyticsDateFrom');
+      const dateVal = fromEl ? fromEl.value : '';
+      const monthVal = dateVal ? dateVal.slice(0, 7) : new Date().toISOString().slice(0, 7);
+
+      let query = `token=${encodeURIComponent(clientToken)}&month=${monthVal}`;
+      if (dateVal) query += `&date=${dateVal}`;
+
+      try {
+        const res = await fetch(`/api/v1/history?${query}`);
+        if (res.ok) {
+          const histData = await res.json();
+          ingestHistoryDataset(histData);
+        }
+      } catch (err) {
+        console.warn('[Analytics] Failed to fetch history:', err);
+      }
+
+      drawTimelineDensity();
+      renderHourlyChart();
+      updateAnalyticsStats();
+    }
+
+    
     function drawTimelineDensity() {
       const canvas = document.getElementById('timelineDensityCanvas');
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
-      const w = canvas.width = canvas.parentElement.clientWidth || 300;
-      const h = canvas.height = 16;
+      const w = canvas.width = canvas.parentElement.clientWidth || 320;
+      const h = canvas.height = 18;
       ctx.clearRect(0, 0, w, h);
 
-      ctx.fillStyle = 'rgba(96, 165, 250, 0.45)';
-      const bars = 60;
-      const barW = w / bars;
-      for (let i = 0; i < bars; i++) {
-        const val = Math.sin(i / 5.0) * 0.4 + Math.random() * 0.6;
-        const barH = val * h * 0.85;
-        ctx.fillRect(i * barW, h - barH, barW - 1, barH);
+      // Gradient area fill with smooth spline curve
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, 'rgba(56, 189, 248, 0.65)');
+      grad.addColorStop(1, 'rgba(14, 165, 233, 0.05)');
+
+      const points = 40;
+      const data = [];
+      for (let i = 0; i <= points; i++) {
+        const val = 0.3 * Math.sin(i / 3.0) + 0.4 * Math.cos(i / 5.5) + 0.3;
+        data.push(Math.max(0.08, Math.min(0.92, val)));
       }
+
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (let i = 0; i <= points; i++) {
+        const x = (i / points) * w;
+        const y = h - (data[i] * (h - 3));
+        if (i === 0) ctx.lineTo(x, y);
+        else {
+          const prevX = ((i - 1) / points) * w;
+          const prevY = h - (data[i - 1] * (h - 3));
+          const cx = (prevX + x) / 2;
+          ctx.quadraticCurveTo(prevX, prevY, cx, (prevY + y) / 2);
+        }
+      }
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Top crisp waveform line
+      ctx.beginPath();
+      for (let i = 0; i <= points; i++) {
+        const x = (i / points) * w;
+        const y = h - (data[i] * (h - 3));
+        if (i === 0) ctx.moveTo(x, y);
+        else {
+          const prevX = ((i - 1) / points) * w;
+          const prevY = h - (data[i - 1] * (h - 3));
+          const cx = (prevX + x) / 2;
+          ctx.quadraticCurveTo(prevX, prevY, cx, (prevY + y) / 2);
+        }
+      }
+      ctx.strokeStyle = '#38BDF8';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
+
 
     function renderHourlyChart() {
       const container = document.getElementById('hourlyChartBars');
@@ -3089,13 +4276,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
     }
 
-    function toggleAllAnalyticsFilters() {
-      const container = document.getElementById('analyticsThreatTypesList');
-      if (!container) return;
-      const inputs = container.querySelectorAll('input[type="checkbox"]');
-      const anyUnchecked = Array.from(inputs).some(i => !i.checked);
-      inputs.forEach(i => i.checked = anyUnchecked);
-    }
+
 
     function toggleAllPoiCategories() {
       const list = document.getElementById('poiCategoriesList');
@@ -3105,19 +4286,96 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       inputs.forEach(i => i.checked = anyUnchecked);
     }
 
-    function toggleScreenRecording() {
-      alert('Запис екрану розпочато. Повторний клік зупинить запис.');
+    
+    // =========================================================================
+    // SCREEN RECORDING ENGINE (MediaRecorder from timeline_map.html)
+    // =========================================================================
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecordingScreen = false;
+
+    async function toggleScreenRecording() {
+      const recBtn = document.getElementById('btnScreenRecord');
+
+      if (isRecordingScreen && mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { displaySurface: "browser", frameRate: 60 },
+          preferCurrentTab: true,
+          selfBrowserSurface: "include"
+        });
+
+        recordedChunks = [];
+        const mime = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) 
+          ? 'video/webm; codecs=vp9' 
+          : 'video/webm';
+
+        mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
+        mediaRecorder.ondataavailable = e => {
+          if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = `osint_radar_history_${Date.now()}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          URL.revokeObjectURL(url);
+          recordedChunks = [];
+
+          document.body.classList.remove('recording-mode');
+          isRecordingScreen = false;
+          stream.getTracks().forEach(t => t.stop());
+          if (recBtn) recBtn.innerHTML = '📹 Запис екрану (без HUD)';
+        };
+
+        document.body.classList.add('recording-mode');
+        isRecordingScreen = true;
+        if (recBtn) recBtn.innerHTML = '⏹ Зупинити запис';
+        mediaRecorder.start();
+      } catch (err) {
+        console.warn('Screen recording error or user cancelled:', err);
+        document.body.classList.remove('recording-mode');
+        isRecordingScreen = false;
+        if (recBtn) recBtn.innerHTML = '📹 Запис екрану (без HUD)';
+      }
     }
+
 
     // Bottom Replay Timeline Bar & Live Clock
     function scrubTimeline(val) {
-      const pct = Number(val) / 1000.0;
-      isLiveMode = (pct >= 0.99);
+      const num = Number(val);
+      const slider = document.getElementById('timeSlider');
+      const minVal = slider ? Number(slider.min || 0) : 0;
+      const maxVal = slider ? Number(slider.max || 1000) : 1000;
+
+      let pct = 1.0;
+      let targetTimeMs = Date.now();
+
+      if (maxVal > minVal) {
+        pct = Math.max(0, Math.min(1, (num - minVal) / (maxVal - minVal)));
+        if (minVal > 1000000) {
+          simTime = num;
+          targetTimeMs = num * 1000;
+          isLiveMode = (num >= maxVal - 5);
+        } else {
+          isLiveMode = (pct >= 0.99);
+          targetTimeMs = Date.now() - (1.0 - pct) * 86400000;
+        }
+      }
+
       const btn = document.getElementById('btnLivePill');
       if (btn) btn.classList.toggle('active', isLiveMode);
 
-      const now = new Date();
-      const scrubDate = new Date(now.getTime() - (1.0 - pct) * 86400000);
+      const scrubDate = new Date(targetTimeMs);
       const timeStr = scrubDate.toTimeString().split(' ')[0];
       const dateStr = scrubDate.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
@@ -3129,6 +4387,10 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       if (dEl) dEl.innerText = dateStr;
       if (t2) t2.innerText = timeStr;
       if (d2) d2.innerText = dateStr;
+
+      if (!isLiveMode && typeof applyHistoricalFilterToMap === 'function') {
+        applyHistoricalFilterToMap();
+      }
     }
 
     function activateLiveMode() {
@@ -3136,26 +4398,80 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const btn = document.getElementById('btnLivePill');
       if (btn) btn.classList.add('active');
       const slider = document.getElementById('timeSlider');
-      if (slider) slider.value = 1000;
+      if (slider) slider.value = slider.max || 1000;
+      lastGeoJsonSyncTs = 0;
+      if (typeof updateLiveKinematics === 'function') {
+        updateLiveKinematics(0, performance.now());
+      }
       updateLiveClock();
     }
 
+    
+    let isReplayPlaying = false;
+    let replaySpeed = 10;
+    let simMinTime = 0;
+    let simMaxTime = 1000;
+    let simTime = 1000;
+    let lastReplayTick = 0;
+
     function toggleReplayPlay() {
-      const playIcon = document.getElementById('playIconSvg');
-      const pauseIcon = document.getElementById('pauseIconSvg');
-      if (!playIcon || !pauseIcon) return;
-      if (playIcon.style.display !== 'none') {
-        playIcon.style.display = 'none';
-        pauseIcon.style.display = 'block';
-      } else {
-        playIcon.style.display = 'block';
-        pauseIcon.style.display = 'none';
+      if (!isReplayPlaying) {
+        if (simTime >= simMaxTime || simTime >= 995) {
+          simTime = simMinTime || 0;
+          const slider = document.getElementById('timeSlider');
+          if (slider) slider.value = simTime;
+        }
+      }
+      isReplayPlaying = !isReplayPlaying;
+      const playBtn = document.getElementById('btnPlayPause');
+      const replayBtn = document.getElementById('btnReplayPlay');
+      if (playBtn) playBtn.innerText = isReplayPlaying ? '⏸' : '▶';
+      if (replayBtn) replayBtn.innerText = isReplayPlaying ? '⏸' : '▶';
+
+      if (isReplayPlaying) {
+        lastReplayTick = performance.now();
+        requestAnimationFrame(historyPlaybackLoop);
       }
     }
 
     function setReplaySpeed(val) {
-      // Replay speed multiplier
+      replaySpeed = Number(val) || 10;
     }
+
+    function historyPlaybackLoop(now) {
+      if (!isReplayPlaying) return;
+      const deltaSec = (now - lastReplayTick) / 1000.0;
+      lastReplayTick = now;
+
+      if (deltaSec > 0 && deltaSec < 2) {
+        simTime += deltaSec * replaySpeed * 60;
+      }
+
+      if (simTime >= simMaxTime) {
+        simTime = simMaxTime;
+        isReplayPlaying = false;
+        const playBtn = document.getElementById('btnPlayPause');
+        if (playBtn) playBtn.innerText = '▶';
+      }
+
+      const slider = document.getElementById('timeSlider');
+      if (slider) slider.value = simTime;
+
+      // Update clocks
+      const date = new Date(simTime * 1000);
+      const timeStr = date.toTimeString().split(' ')[0];
+      const dateStr = date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
+
+      const tEl = document.getElementById('barClockTime');
+      const dEl = document.getElementById('barClockDate');
+      if (tEl) tEl.innerText = timeStr;
+      if (dEl) dEl.innerText = dateStr;
+
+      applyHistoricalFilterToMap();
+
+      if (isReplayPlaying) requestAnimationFrame(historyPlaybackLoop);
+    }
+
 
     function updateLiveClock() {
       if (!isLiveMode) return;

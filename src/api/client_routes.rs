@@ -1200,12 +1200,15 @@ async fn handle_ws_client(
     let mut selected_slot = query.slot.or(query.slot_id).unwrap_or_else(|| "1".to_string());
     let mut watch_rx = state.threat_watch_rx.clone();
     let timeout_duration = Duration::from_secs(3);
+    let mut fallback_tick = tokio::time::interval(Duration::from_millis(1000));
+    let mut last_sent_seq;
 
     // Первинний снапшот одразу при підключенні клієнта
     {
         let current_user = state.storage.get_user_by_key(&user.api_key).unwrap_or_else(|| user.clone());
         let snapshot = {
             let st = state.threat_state.read().await;
+            last_sent_seq = st.update_seq;
             build_user_snapshot(&current_user, &st, &selected_slot, Some(&state.history_mgr), false)
         };
         if tokio::time::timeout(timeout_duration, socket.send(Message::Text(snapshot.to_string()))).await.is_err() {
@@ -1221,10 +1224,26 @@ async fn handle_ws_client(
                 let current_user = state.storage.get_user_by_key(&user.api_key).unwrap_or_else(|| user.clone());
                 let snapshot = {
                     let st = state.threat_state.read().await;
+                    last_sent_seq = st.update_seq;
                     build_user_snapshot(&current_user, &st, &selected_slot, Some(&state.history_mgr), false)
                 };
                 if tokio::time::timeout(timeout_duration, socket.send(Message::Text(snapshot.to_string()))).await.is_err() {
                     break;
+                }
+            }
+            // Резервний тікер: перевірка зміни update_seq для гарантованої доставки оновлень
+            _ = fallback_tick.tick() => {
+                let cur_seq = state.threat_state.read().await.update_seq;
+                if cur_seq != last_sent_seq {
+                    let current_user = state.storage.get_user_by_key(&user.api_key).unwrap_or_else(|| user.clone());
+                    let snapshot = {
+                        let st = state.threat_state.read().await;
+                        last_sent_seq = st.update_seq;
+                        build_user_snapshot(&current_user, &st, &selected_slot, Some(&state.history_mgr), false)
+                    };
+                    if tokio::time::timeout(timeout_duration, socket.send(Message::Text(snapshot.to_string()))).await.is_err() {
+                        break;
+                    }
                 }
             }
             incoming = socket.recv() => {
@@ -1240,6 +1259,7 @@ async fn handle_ws_client(
                                     let current_user = state.storage.get_user_by_key(&user.api_key).unwrap_or_else(|| user.clone());
                                     let snapshot = {
                                         let st = state.threat_state.read().await;
+                                        last_sent_seq = st.update_seq;
                                         build_user_snapshot(&current_user, &st, &selected_slot, Some(&state.history_mgr), false)
                                     };
                                     let _ = tokio::time::timeout(timeout_duration, socket.send(Message::Text(snapshot.to_string()))).await;

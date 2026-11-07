@@ -30,7 +30,21 @@ pub async fn run_alerts_collector(
 ) {
     let mut last_action_index: Option<u64> = None;
     let mut consecutive_ua_failures: u32 = 0;
+    let mut ua_cooldown_until: f64 = 0.0;
     let mut last_provider_log = String::new();
+
+    // Офіційний регламент UkraineAlarm API v3: запити раз на 12-15 секунд (4-5 запитів на хвилину)
+    // За замовчуванням 12 секунд (допустимий діапазон 10..60 сек)
+    let poll_interval_secs: u64 = std::env::var("ALERTS_POLL_INTERVAL_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(12)
+        .clamp(10, 60);
+
+    info!(
+        "Alerts collector initialized: polling interval = {}s (UkraineAlarm API v3 rate-limit compliant)",
+        poll_interval_secs
+    );
 
     loop {
         let service_keys = storage.get_service_keys();
@@ -38,10 +52,11 @@ pub async fn run_alerts_collector(
             .ukrainealarm_api_token
             .filter(|t| !t.trim().is_empty());
 
+        let now = now_sec();
         let mut used_primary = false;
 
         if let Some(token) = ua_token {
-            if consecutive_ua_failures < 3 {
+            if now >= ua_cooldown_until && consecutive_ua_failures < 5 {
                 // =========================================================================
                 // ОСНОВНИЙ РУШІЙ: Офіційний API v3 (api.ukrainealarm.com)
                 // =========================================================================
@@ -67,6 +82,7 @@ pub async fn run_alerts_collector(
                 match status_res {
                     Ok(resp) if resp.status().is_success() => {
                         consecutive_ua_failures = 0;
+                        ua_cooldown_until = 0.0;
                         used_primary = true;
 
                         if let Ok(status_json) = resp.json::<Value>().await {
@@ -81,6 +97,9 @@ pub async fn run_alerts_collector(
                             };
 
                             if should_fetch {
+                                // Запобігання мікро-спайкам (burst protection): 800мс між запитами
+                                sleep(Duration::from_millis(800)).await;
+
                                 if let Ok(alerts_resp) = http_client
                                     .get(UKRAINEALARM_ALERTS_URL)
                                     .header(AUTHORIZATION, auth_val)
@@ -105,6 +124,23 @@ pub async fn run_alerts_collector(
                             }
                         }
                     }
+                    Ok(resp) if resp.status().as_u16() == 429 => {
+                        // Отримано HTTP 429 Too Many Requests: читаємо Retry-After або бекофф 60 сек
+                        let retry_after = resp
+                            .headers()
+                            .get(reqwest::header::RETRY_AFTER)
+                            .and_then(|v| v.to_str().ok())
+                            .and_then(|s| s.parse::<u64>().ok())
+                            .unwrap_or(60);
+
+                        warn!(
+                            "UkraineAlarm API v3 returned HTTP 429 Too Many Requests. Rate limit triggered! Pausing requests for {}s (failures={})",
+                            retry_after,
+                            consecutive_ua_failures + 1
+                        );
+                        consecutive_ua_failures += 1;
+                        ua_cooldown_until = now_sec() + (retry_after as f64);
+                    }
                     Ok(resp) => {
                         warn!(
                             "UkraineAlarm API v3 returned HTTP status: {} (failures={})",
@@ -112,6 +148,8 @@ pub async fn run_alerts_collector(
                             consecutive_ua_failures + 1
                         );
                         consecutive_ua_failures += 1;
+                        let backoff = (consecutive_ua_failures as f64).min(5.0) * 15.0;
+                        ua_cooldown_until = now_sec() + backoff;
                     }
                     Err(e) => {
                         warn!(
@@ -120,14 +158,21 @@ pub async fn run_alerts_collector(
                             consecutive_ua_failures + 1
                         );
                         consecutive_ua_failures += 1;
+                        let backoff = (consecutive_ua_failures as f64).min(5.0) * 15.0;
+                        ua_cooldown_until = now_sec() + backoff;
                     }
                 }
+            } else if now < ua_cooldown_until {
+                debug!(
+                    "UkraineAlarm API v3 in cooldown for next {:.0}s, routing through fallback",
+                    ua_cooldown_until - now
+                );
             }
         }
 
         // =========================================================================
         // АЛЬТЕРНАТИВНИЙ РУШІЙ: Neptun API (neptun.in.ua/api/v1/alerts)
-        // Спрацьовує, якщо токен UkraineAlarm не налаштований або запити зазнали збою
+        // Спрацьовує, якщо токен UkraineAlarm не налаштований або запити зазнали збою / cooldown
         // =========================================================================
         if !used_primary {
             if last_provider_log != "Neptun Alerts" {
@@ -147,12 +192,6 @@ pub async fn run_alerts_collector(
                     if let Ok(val) = resp.json::<Value>().await {
                         process_neptun_alerts(&val, &threat_state, &detector, &exchange_mgr).await;
                     }
-                    // Якщо були збої в UkraineAlarm, через деякий час спробуємо повернутися
-                    if consecutive_ua_failures > 0 {
-                        sleep(Duration::from_secs(5)).await;
-                        consecutive_ua_failures = 0; // give UkraineAlarm another chance next cycle
-                        continue;
-                    }
                 }
                 Ok(resp) => {
                     debug!("Neptun alerts HTTP error: {}", resp.status());
@@ -161,12 +200,13 @@ pub async fn run_alerts_collector(
                     debug!("Neptun alerts request failed: {}", e);
                 }
             }
-            sleep(Duration::from_secs(5)).await;
+            // Резервний цикл опитування: той самий безпечний інтервал
+            sleep(Duration::from_secs(poll_interval_secs)).await;
             continue;
         }
 
-        // Затримка Smart Polling для офіційного API
-        sleep(Duration::from_millis(3500)).await;
+        // Затримка Smart Polling для офіційного API (12-15 сек за регламентом)
+        sleep(Duration::from_secs(poll_interval_secs)).await;
     }
 }
 

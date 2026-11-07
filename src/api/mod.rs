@@ -11,9 +11,10 @@ use client_routes::client_routes;
 
 pub fn create_router(state: AppState) -> Router {
     let client_cors = CorsLayer::permissive();
+    let static_dir = state.config.static_dir.clone();
 
     Router::new()
-        .nest_service("/static", ServeDir::new("static"))
+        .nest_service("/static", ServeDir::new(static_dir))
         .merge(client_routes().layer(client_cors))
         .merge(admin_routes())
         .layer(CompressionLayer::new())

@@ -394,6 +394,9 @@ impl OblastDetector {
             return "0".to_string();
         }
         let clean = name.to_lowercase().replace("область", "").replace("обл.", "").trim().to_string();
+        if clean.contains("севастополь") || clean.contains("крим") {
+            return "9999".to_string();
+        }
         for reg in &self.regions {
             let reg_clean = reg.name.to_lowercase().replace("область", "").replace("обл.", "").trim().to_string();
             if clean.contains(&reg_clean) || reg_clean.contains(&clean) {
