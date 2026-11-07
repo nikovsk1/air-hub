@@ -402,8 +402,12 @@ async fn handle_delete_history_month(
         return status.into_response();
     }
     let file_path = state.history_mgr.history_dir.join(format!("flight_history_{}.json", month));
-    if file_path.exists() {
+    let existed = file_path.exists();
+    if existed {
         let _ = fs::remove_file(file_path);
+    }
+    state.history_mgr.evict_month(&month);
+    if existed {
         Json(json!({"status": "deleted", "month": month})).into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()

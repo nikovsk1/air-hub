@@ -290,6 +290,16 @@ impl HistoryManager {
         }
     }
 
+    /// Cleanly evict month data from in-memory caches, pending writes, and summaries
+    pub fn evict_month(&self, month: &str) {
+        self.dirty_months.write().remove(month);
+        self.pending_dirty.write().remove(month);
+        self.read_cache.write().remove(month);
+        self.month_meta_cache.write().remove(month);
+        self.daily_summaries.write().remove(month);
+        self.gdrive_synced_months.write().remove(month);
+    }
+
     /// Періодичний скид накопичених "брудних" даних на диск (кожні 300 секунд)
     pub fn flush_dirty(&self) {
         let dirty_batch: HashMap<String, HashMap<String, Value>> = {

@@ -1174,21 +1174,22 @@ async fn handle_get_map(
 /// WebSocket стрім телеметрії для клієнтів Home Assistant та ESP32
 async fn handle_ws_stream(
     ws: WebSocketUpgrade,
+    headers: HeaderMap,
     State(state): State<AppState>,
     Query(query): Query<ClientQuery>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> Response {
-    ws.on_upgrade(move |socket| handle_ws_client(socket, state, query, addr))
+    ws.on_upgrade(move |socket| handle_ws_client(socket, headers, state, query, addr))
 }
 
 async fn handle_ws_client(
     mut socket: WebSocket,
+    headers: HeaderMap,
     state: AppState,
     query: ClientQuery,
     addr: SocketAddr,
 ) {
-    let dummy_headers = HeaderMap::new();
-    let user = match authenticate_user(&dummy_headers, &query, &state, Some(addr)).await {
+    let user = match authenticate_user(&headers, &query, &state, Some(addr)).await {
         Some(u) => u,
         None => {
             let _ = socket.send(Message::Text(json!({"error": "Unauthorized"}).to_string())).await;

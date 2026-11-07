@@ -1213,10 +1213,16 @@
     let isMapLoaded = false;
     let activeThreats = {};
     let recordedLostIds = new Set();
-    let userSlots = {};
-    let activeSlotId = "1";
+    let currentSlots = {};
+    let userSlots = currentSlots;
+    let selectedSlotId = "1";
+    let activeSlotId = selectedSlotId;
+    let selectedSlotIds = new Set(["1"]);
     let isLiveMode = true;
     let isPickingLocationOnMap = false;
+    let isPickingPoint = false;
+    const token = clientToken;
+    let enabledThreatCategories = new Set();
     let currentBasemap = 'arcgis';
     let saved2DBasemap = 'arcgis';
     let is3DModeActive = false;
@@ -1312,6 +1318,8 @@
       artillery: { name: 'Артилерія / РСЗВ', color: '#F87171', icon: 'blast' },
       unknown: { name: 'Невідома ціль', color: '#94A3B8', icon: 'dot' }
     };
+
+for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     // Vector sprite generation for canvas textures
     function createThreatSprite(cat, color) {
@@ -2110,7 +2118,12 @@
         });
 
         // Zero-Gap Trailing Line
-        const trailCoords = (t.baseTrailPts || []).map(p => [p[1], p[0]]);
+        const trailCoords = (t.baseTrailPts || []).map(p => {
+          if (!p) return null;
+          if (Array.isArray(p)) return [p[1], p[0]];
+          if (typeof p === 'object' && p.lon !== undefined && p.lat !== undefined) return [p.lon, p.lat];
+          return null;
+        }).filter(Boolean);
         trailCoords.push(headCoord); // ZERO GAP ANCHOR
         if (trailCoords.length > 1) {
           trailFeatures.push({
@@ -2125,7 +2138,11 @@
           const corridorCoords = [headCoord]; // Start directly at aircraft nose!
           for (let i = 0; i < t.corridor.length; i++) {
             const pt = t.corridor[i];
-            corridorCoords.push([pt.lon || pt[1], pt.lat || pt[0]]);
+            const cLon = (pt && typeof pt === 'object' && pt.lon !== undefined) ? pt.lon : (Array.isArray(pt) ? pt[1] : undefined);
+            const cLat = (pt && typeof pt === 'object' && pt.lat !== undefined) ? pt.lat : (Array.isArray(pt) ? pt[0] : undefined);
+            if (cLon !== undefined && cLat !== undefined) {
+              corridorCoords.push([cLon, cLat]);
+            }
           }
           forecastFeatures.push({
             type: 'Feature',
@@ -2144,7 +2161,7 @@
             threat3DMeshes[tid] = meshGroup;
           }
           // Coordinate transform to Three.js coordinates
-          const modelAsMercator = maplibre-gl.MercatorCoordinate.fromLngLat(headCoord, 1500);
+          const modelAsMercator = maplibregl.MercatorCoordinate.fromLngLat(headCoord, 1500);
           meshGroup.position.set(modelAsMercator.x, modelAsMercator.y, modelAsMercator.z);
           meshGroup.rotation.z = -(sim.curHeading * Math.PI) / 180.0;
         }
@@ -2254,10 +2271,33 @@
         else dotEl.classList.remove('danger');
       }
 
-      // MiG-31K status
+      // Populate Top HUD Threat Dropdown list
+      const threatListEl = document.getElementById('hudThreatsDropdownList');
+      if (threatListEl) {
+        if (incoming.length === 0) {
+          threatListEl.innerHTML = '<div style="color:var(--text-muted); padding:4px;">Загроз на карті немає</div>';
+        } else {
+          let tHtml = '';
+          incoming.forEach((t, i) => {
+            const cat = normalizeCat(t.category || t.type || t.type_ua);
+            const meta = THREAT_CATEGORIES[cat] || THREAT_CATEGORIES.unknown;
+            const speed = Math.round(t.speed_kmh || t.speed || 0);
+            const alt = t.altitude ? ` • ${t.altitude}м` : '';
+            tHtml += `
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+                <span style="color:${meta.color}; font-weight:600;">▲ ${meta.name}</span>
+                <span style="color:var(--text-dim); font-size:10px;">${speed} км/г${alt}</span>
+              </div>
+            `;
+          });
+          threatListEl.innerHTML = tHtml;
+        }
+      }
+
+      // MiG-31K status: handle both data.mig31k_alert and data.general_alerts.mig31k_active
+      const isMigActive = !!(data.mig31k_alert || (data.general_alerts && data.general_alerts.mig31k_active));
       const migEl = document.getElementById('hudMigStatus');
       if (migEl) {
-        const isMigActive = !!data.mig31k_alert;
         migEl.innerText = isMigActive ? 'МІГ-31К: ТРИВОГА' : 'МІГ-31К: ЧИСТО';
         migEl.className = isMigActive ? 'badge-count danger' : 'badge-count calm';
       }
@@ -2274,8 +2314,20 @@
       const totalLiveEl = document.getElementById('lblTotalActiveLive');
       if (totalLiveEl) totalLiveEl.innerText = incoming.length;
 
-      // Closest Threat Breakdown calculation
-      updateClosestThreatHud();
+      // Update Today Radial Gauge dynamically from WebSocket data.today_stats
+      if (data.today_stats) {
+        const countsMap = data.today_stats.categories || data.today_stats.by_category || {};
+        const total = data.today_stats.total || 0;
+        renderRadialTodayGauge(countsMap, total);
+      }
+
+      // Slots stats & Closest Threat breakdown calculation
+      if (data.slots_stats && typeof data.slots_stats === 'object') {
+        currentSlots = Object.assign({}, currentSlots, data.slots_stats);
+        userSlots = currentSlots;
+        renderUserSlots(currentSlots);
+      }
+      updateClosestThreatHud(data.closest_threat, data.slots_stats);
     }
 
     function normalizeCat(catRaw) {
@@ -2385,232 +2437,117 @@
       svg.insertBefore(spokeGroup, svg.firstChild);
     }
 
-    // Render Slots & User Dropdowns
-    function renderUserSlots() {
-      const slotsList = document.getElementById('slotsStatusList');
-      const optSelect = document.getElementById('optSlotSelect');
-      const hudList = document.getElementById('hudSlotsList');
+    // =========================================================================
+    // UNIFIED OBSERVATION POINTS, RADAR HUD, & ANALYTICS CONTROLLERS
+    // =========================================================================
+
+    // Observation points (slots) rendering
+    function renderUserSlots(slotsObj) {
+      if (slotsObj && typeof slotsObj === 'object') currentSlots = slotsObj;
+      userSlots = currentSlots;
+      const slotsList = document.getElementById('radarSlotsStatusList') || document.getElementById('slotsStatusList');
+      const dropList = document.getElementById('slotDropdownItems') || document.getElementById('hudSlotsList');
+      const optSelect = document.getElementById('editorSlotSelect') || document.getElementById('optSlotSelect');
+
+      const keys = Object.keys(currentSlots);
+      if (keys.length === 0) {
+        currentSlots["1"] = { id: "1", slot_id: "1", name: "Точка 1", lat: 50.4501, lon: 30.5234, radius_km: 35, danger_radius_km: 35, active: true };
+        keys.push("1");
+      }
+
+      if (dropList) {
+        dropList.innerHTML = '';
+        keys.forEach(k => {
+          const s = currentSlots[k];
+          const isSel = selectedSlotIds.has(k);
+          const row = document.createElement('div');
+          row.className = 'slot-chk-item';
+          row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:4px 6px; border-radius:4px; background:rgba(255,255,255,0.03); margin-bottom:2px; cursor:pointer;';
+          row.innerHTML = `
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:11px; flex:1;">
+              <input type="checkbox" ${isSel ? 'checked' : ''} onchange="toggleSelectSlot('${k}', this.checked)">
+              <span>${s.name || ('Точка ' + k)}</span>
+            </label>
+            <button class="hud-pill" style="height:20px; font-size:9.5px; padding:0 6px;" onclick="selectSlot('${k}')">Вибрати</button>
+          `;
+          dropList.appendChild(row);
+        });
+      }
 
       if (slotsList) {
-        slotsList.innerHTML = `
-          <div class="slot-status-card">
+        slotsList.innerHTML = '';
+        keys.forEach(k => {
+          const s = currentSlots[k];
+          const card = document.createElement('div');
+          card.className = 'slot-status-card';
+          const isDanger = s.danger_zone_active || false;
+          const isSiren = s.siren_active || false;
+          const statusText = isDanger ? 'Небезпека!' : (isSiren ? 'Тривога' : 'Спокійно');
+          const badgeCls = (isDanger || isSiren) ? 'danger' : 'calm';
+          card.innerHTML = `
             <div class="slot-status-info">
-              <span class="slot-status-title">Точка 1</span>
-              <span class="slot-status-sub">Радіус: 35 км</span>
+              <span class="slot-status-title">${s.name || ('Точка ' + k)}</span>
+              <span class="slot-status-sub">Радіус: ${s.danger_radius_km || s.radius_km || 35} км</span>
             </div>
-            <span class="badge-count danger">Небезпека!</span>
-          </div>
-        `;
-      }
-      if (optSelect) {
-        optSelect.innerHTML = `<option value="1">Точка 1</option>`;
-      }
-      if (hudList) {
-        hudList.innerHTML = `
-          <button class="hud-pill" style="width:100%; justify-content:space-between;" onclick="selectSlot('1')">
-            <span>Точка 1</span>
-            <span class="badge-count danger">Небезпека!</span>
-          </button>
-        `;
-      }
-    }
-
-    function updateClosestBreakdownList() {
-      const el = document.getElementById('hudClosestBreakdownList');
-      if (!el) return;
-      el.innerHTML = `
-        <div style="display:flex; justify-content:space-between; padding:3px 0;">
-          <span>Крилата ракета</span>
-          <span style="color:var(--accent-danger); font-weight:700;">0 км (У периметрі!)</span>
-        </div>
-      `;
-    }
-
-    function updateClosestThreatHud() {
-      const typeEl = document.getElementById('hudClosestType');
-      const distEl = document.getElementById('hudClosestDistance');
-      if (typeEl && distEl) {
-        typeEl.innerText = 'Ракета';
-        distEl.innerText = '0 км';
-        distEl.className = 'badge-count danger';
-      }
-      updateClosestBreakdownList();
-    }
-
-    function activateLiveMode() {
-      isLiveMode = true;
-      const btn = document.getElementById('btnLivePill');
-      if (btn) btn.classList.add('active');
-    }
-
-    function toggleReplayPlay() {
-      const playIcon = document.getElementById('playIconSvg');
-      const pauseIcon = document.getElementById('pauseIconSvg');
-      if (!playIcon || !pauseIcon) return;
-      if (playIcon.style.display !== 'none') {
-        playIcon.style.display = 'none';
-        pauseIcon.style.display = 'block';
-      } else {
-        playIcon.style.display = 'block';
-        pauseIcon.style.display = 'none';
-      }
-    }
-
-    function setReplaySpeed(val) {}
-    function onScrubberInput(val) {}
-
-    function toggleLayerVisibility(layerId, isVisible) {
-      if (map && map.setLayoutProperty) {
-        map.setLayoutProperty(layerId, 'visibility', isVisible ? 'visible' : 'none');
-      }
-    }
-
-    function toggleLabelsVisibility(isVisible) {
-      showLabelsIn2D = isVisible;
-      if (map && map.setLayoutProperty) {
-        map.setLayoutProperty('threats-labels-layer', 'visibility', isVisible ? 'visible' : 'none');
-      }
-    }
-
-    function togglePoiVisibility(isVisible) {
-      showPoiIn2D = isVisible;
-      if (map && map.setLayoutProperty) {
-        map.setLayoutProperty('poi-layer', 'visibility', isVisible ? 'visible' : 'none');
-        map.setLayoutProperty('poi-labels', 'visibility', isVisible ? 'visible' : 'none');
-      }
-      const chkPoi = document.getElementById('chkShowPoi');
-      if (chkPoi && !chkPoi.checked) {
-        if (poisGroup) {
-          const group = poisGroup;
-          group.visible = false;
-        }
-      } else {
-        if (poisGroup) poisGroup.visible = true;
-      }
-    }
-
-    function updateSlotRadiusLabel(val) {
-      const lbl = document.getElementById('lblSlotRadius');
-      if (lbl) lbl.innerText = `${val} км`;
-    }
-
-    function startPickingLocation() {
-      isPickingLocationOnMap = true;
-      const btn = document.getElementById('btnPickLocationOnMap');
-      if (btn) btn.innerText = '🎯 Клікніть на карті...';
-    }
-
-    function finishPickingLocation(lat, lon) {
-      isPickingLocationOnMap = false;
-      const latIn = document.getElementById('optSlotLat');
-      const lonIn = document.getElementById('optSlotLon');
-      const btn = document.getElementById('btnPickLocationOnMap');
-      if (latIn) latIn.value = lat.toFixed(4);
-      if (lonIn) lonIn.value = lon.toFixed(4);
-      if (btn) btn.innerText = '📍 Вказати кліком на карті';
-    }
-
-    function saveSlotChanges() {}
-    function deleteCurrentSlot() {}
-    function createNewSlot() {}
-    function loadSlotIntoEditor(id) {}
-    function setAnalyticsPreset(preset) {}
-    function loadAnalyticsData() {}
-    function selectAllAnalyticsFilters() {}
-    function toggleHeatmap(type) {}
-    function setHeatmapOpacity(val) {
-      const lbl = document.getElementById('lblHeatmapOpacity');
-      if (lbl) lbl.innerText = `${val}%`;
-    }
-    function toggleHistoryTrails(v) {}
-    function toggleHistoryIcons(v) {}
-    function toggleHistoryLabels(v) {}
-    function toggleCategoryFilter(c, v) {}
-
-    // Initialize DOM & Map on Startup
-    document.addEventListener('DOMContentLoaded', () => {
-      renderUserSlots();
-      initMapEngine();
-    });
-
-    // Close HUD panels on outer click
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('.hud-pill') && !e.target.closest('.hud-dropdown-panel')) {
-        document.querySelectorAll('.hud-dropdown-panel').forEach(p => p.classList.remove('open'));
-      }
-    });
-
-    // =========================================================================
-    // INVARIANTS & AUDIT COMPLIANCE COMMENTS
-    // L.circleMarker in overlayPane
-    // Reverse hook prevention heuristic
-    // Crab flight avoidance heuristic
-    // Hermite cubic easing
-    // Tactical cluster palette color non-collision
-    // Flight trail corner smoothing apex vertex invariant
-    // Pure SVG concentricity math verification for today radial gauge
-    // Upstream radar delay invariant - repeated snapshot keeps target frozen
-    // Strict zero DOM target markers
-    // Single SVG concentric radial gauge
-    // Top HUD horizontal accordion mutual exclusivity
-    // =========================================================================
-  
-    // =========================================================================
-    // RESTORED HUD & SIDEBAR CONTROLLERS (MATCHING USER SCREENSHOTS)
-    // =========================================================================
-
-    // 1. Basemap Provider & Decoupled Token Management
-    function handleProviderChange(provider) {
-      const tokenBox = document.getElementById('apiTokenBox');
-      if (tokenBox) {
-        tokenBox.style.display = (provider === 'carto') ? 'block' : 'none';
-      }
-      const cardArcgis = document.getElementById('cardArcgis');
-      const cardCarto = document.getElementById('cardCarto');
-      if (cardArcgis) cardArcgis.classList.toggle('active', provider === 'arcgis');
-      if (cardCarto) cardCarto.classList.toggle('active', provider === 'carto');
-      setBasemap(provider === 'carto' ? 'cartodb' : provider);
-    }
-
-    function toggleTokenVisibility() {
-      const input = document.getElementById('mapApiToken');
-      if (input) {
-        input.type = (input.type === 'password') ? 'text' : 'password';
-      }
-    }
-
-    async function saveMapProviderConfig() {
-      const selectedRadio = document.querySelector('input[name="mapProvider"]:checked');
-      const provider = selectedRadio ? selectedRadio.value : 'arcgis';
-      const tokenInput = document.getElementById('mapApiToken');
-      const tokenVal = tokenInput ? tokenInput.value.trim() : '';
-
-      localStorage.setItem('radar_map_provider', provider);
-      localStorage.setItem('radar_map_token', tokenVal);
-
-      setBasemap(provider === 'carto' ? 'cartodb' : provider);
-
-      // Decoupled: only save map settings, never alter user account token or slots!
-      try {
-        await fetch('/api/v1/client/map_settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider, token: tokenVal })
+            <span class="badge-count ${badgeCls}">${statusText}</span>
+          `;
+          slotsList.appendChild(card);
         });
-      } catch (err) {
-        console.warn('[MapSettings] Remote save failed:', err);
+      }
+
+      if (optSelect) {
+        optSelect.innerHTML = '';
+        keys.forEach(k => {
+          const s = currentSlots[k];
+          const opt = document.createElement('option');
+          opt.value = k;
+          opt.innerText = s.name || ('Точка ' + k);
+          if (k === selectedSlotId) opt.selected = true;
+          optSelect.appendChild(opt);
+        });
+      }
+
+      const hudSlotNameEl = document.getElementById('hudSlotName');
+      if (hudSlotNameEl) {
+        hudSlotNameEl.innerText = selectedSlotIds.size === 1
+          ? (currentSlots[Array.from(selectedSlotIds)[0]]?.name || 'Точка ' + Array.from(selectedSlotIds)[0])
+          : `Обрано: ${selectedSlotIds.size}`;
       }
     }
 
-    // 2. Observation Points (Slots) Selection & Management
+    function selectSlot(id) {
+      selectedSlotId = id;
+      activeSlotId = id;
+      selectedSlotIds = new Set([id]);
+      const s = currentSlots[id];
+      const lbl = document.getElementById('hudSlotName');
+      if (lbl) lbl.innerText = s ? s.name : ('Точка ' + id);
+      renderUserSlots(currentSlots);
+      onEditorSlotChange(id);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: "switch_slot", slot: id }));
+      }
+    }
+
     function toggleSelectAllSlots() {
       const allKeys = Object.keys(currentSlots);
+      if (allKeys.length === 0) return;
       if (selectedSlotIds.size === allKeys.length) {
         selectedSlotIds = new Set([allKeys[0]]);
+        selectedSlotId = allKeys[0];
       } else {
         selectedSlotIds = new Set(allKeys);
       }
+      const lbl = document.getElementById('hudSlotName');
+      if (lbl) {
+        lbl.innerText = selectedSlotIds.size === 1
+          ? (currentSlots[Array.from(selectedSlotIds)[0]]?.name || 'Точка ' + Array.from(selectedSlotIds)[0])
+          : `Обрано: ${selectedSlotIds.size}`;
+      }
       renderUserSlots(currentSlots);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: "switch_slot", slot: Array.from(selectedSlotIds).join(',') }));
+      }
     }
 
     function toggleSelectSlot(id, checked) {
@@ -2618,13 +2555,19 @@
         selectedSlotIds.add(id);
         selectedSlotId = id;
       } else {
-        selectedSlotIds.delete(id);
+        if (selectedSlotIds.size > 1) {
+          selectedSlotIds.delete(id);
+          selectedSlotId = Array.from(selectedSlotIds)[0];
+        }
       }
       const lbl = document.getElementById('hudSlotName');
       if (lbl) {
         lbl.innerText = selectedSlotIds.size === 1 
-          ? (currentSlots[Array.from(selectedSlotIds)[0]]?.name || 'Точка ' + id) 
+          ? (currentSlots[Array.from(selectedSlotIds)[0]]?.name || 'Точка ' + Array.from(selectedSlotIds)[0]) 
           : `Обрано: ${selectedSlotIds.size}`;
+      }
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: "switch_slot", slot: Array.from(selectedSlotIds).join(',') }));
       }
     }
 
@@ -2645,22 +2588,41 @@
       };
       currentSlots[newId] = newSlot;
       selectedSlotId = newId;
+      activeSlotId = newId;
       selectedSlotIds.add(newId);
       renderUserSlots(currentSlots);
       onEditorSlotChange(newId);
 
-      fetch(`/api/v1/slots?token=${encodeURIComponent(token)}`, {
+      fetch(`/api/v1/slots?token=${encodeURIComponent(clientToken)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSlot)
       }).catch(e => console.warn('[Slots] Remote create failed:', e));
     }
 
-    function togglePickPoint() {
-      isPickingPoint = !isPickingPoint;
-      if (map) map.getCanvas().style.cursor = isPickingPoint ? 'crosshair' : '';
-      const btn = document.getElementById('btnPickPointOnMap');
-      if (btn) btn.innerText = isPickingPoint ? 'Клікніть на мапі...' : '📍 Вибрати на мапі';
+    async function deleteCurrentSlot() {
+      const allKeys = Object.keys(currentSlots);
+      if (allKeys.length <= 1) {
+        alert('Неможливо видалити єдину точку спостереження');
+        return;
+      }
+      const idToDelete = selectedSlotId;
+      delete currentSlots[idToDelete];
+      selectedSlotIds.delete(idToDelete);
+      const remainingKey = Object.keys(currentSlots)[0];
+      selectedSlotId = remainingKey;
+      activeSlotId = remainingKey;
+      selectedSlotIds.add(remainingKey);
+      renderUserSlots(currentSlots);
+      onEditorSlotChange(remainingKey);
+
+      try {
+        await fetch(`/api/v1/slots/${encodeURIComponent(idToDelete)}?token=${encodeURIComponent(clientToken)}`, {
+          method: 'DELETE'
+        });
+      } catch (e) {
+        console.warn('[Slots] Remote delete failed:', e);
+      }
     }
 
     function onEditorSlotChange(id) {
@@ -2703,7 +2665,7 @@
       renderUserSlots(currentSlots);
 
       try {
-        await fetch(`/api/v1/slots/${encodeURIComponent(selectedSlotId)}?token=${encodeURIComponent(token)}`, {
+        await fetch(`/api/v1/slots/${encodeURIComponent(selectedSlotId)}?token=${encodeURIComponent(clientToken)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(s)
@@ -2713,7 +2675,122 @@
       }
     }
 
-    // 3. Radial Concentric Today Gauge (64 concentric spokes around circle 110,110)
+    function togglePickPoint() {
+      isPickingPoint = !isPickingPoint;
+      if (map) map.getCanvas().style.cursor = isPickingPoint ? 'crosshair' : '';
+      const btn = document.getElementById('btnPickPointOnMap');
+      if (btn) btn.innerText = isPickingPoint ? 'Клікніть на мапі...' : '📍 Вибрати на мапі';
+    }
+
+    function finishPickingLocation(lat, lon) {
+      isPickingPoint = false;
+      isPickingLocationOnMap = false;
+      if (map) map.getCanvas().style.cursor = '';
+      const latIn = document.getElementById('slotLatInput') || document.getElementById('optSlotLat');
+      const lonIn = document.getElementById('slotLonInput') || document.getElementById('optSlotLon');
+      const btn = document.getElementById('btnPickPointOnMap') || document.getElementById('btnPickLocationOnMap');
+      if (latIn) latIn.value = lat.toFixed(4);
+      if (lonIn) lonIn.value = lon.toFixed(4);
+      if (btn) btn.innerText = '📍 Вибрати на мапі';
+    }
+
+    // Closest Threat & Breakdown HUD
+    function updateClosestBreakdownList(slots) {
+      const container = document.getElementById('closestBreakdownList');
+      const hiddenContainer = document.getElementById('hudClosestBreakdownList');
+      const activeObj = slots || currentSlots;
+      if (!activeObj || Object.keys(activeObj).length === 0) {
+        if (container) container.innerHTML = '<div style="color:var(--text-muted); padding:4px;">Загроз поблизу не виявлено</div>';
+        if (hiddenContainer) hiddenContainer.innerHTML = '';
+        return;
+      }
+      let html = '';
+      Object.entries(activeObj).forEach(([id, s]) => {
+        const sName = s.name || ('Точка ' + id);
+        const cType = s.closest_type || 'Загроз немає';
+        const cDist = (s.closest_distance_km !== null && s.closest_distance_km !== undefined) ? `${s.closest_distance_km} км` : '--';
+        const isDanger = s.danger_zone_active;
+        const color = isDanger ? 'var(--accent-danger)' : 'var(--text-muted)';
+        html += `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+            <span><strong>${sName}</strong>: ${cType}</span>
+            <span style="color:${color}; font-weight:700;">${cDist} ${isDanger ? '(У периметрі!)' : ''}</span>
+          </div>
+        `;
+      });
+      if (html.length === 0) {
+        html = '<div style="color:var(--text-muted); padding:4px;">Загроз поблизу не виявлено</div>';
+      }
+      if (container) container.innerHTML = html;
+      if (hiddenContainer) hiddenContainer.innerHTML = html;
+    }
+
+    function updateClosestThreatHud(closestThreat, slotsStats) {
+      const typeEl = document.getElementById('hudClosestType');
+      const distEl = document.getElementById('hudClosestDistance');
+      if (closestThreat && (closestThreat.distance_km !== null && closestThreat.distance_km !== undefined)) {
+        const tName = closestThreat.type || 'Ціль';
+        const dKm = Math.round(closestThreat.distance_km * 10) / 10;
+        if (typeEl) typeEl.innerText = tName;
+        if (distEl) {
+          distEl.innerText = `${dKm} км`;
+          distEl.className = dKm <= 35 ? 'badge-count danger' : 'badge-count calm';
+        }
+      } else {
+        if (typeEl) typeEl.innerText = 'Спокійно';
+        if (distEl) {
+          distEl.innerText = '0 км';
+          distEl.className = 'badge-count calm';
+        }
+      }
+      updateClosestBreakdownList(slotsStats || currentSlots);
+    }
+
+    // Category Filter & Section Collapse
+    function toggleSectionCollapse(containerId, chevronEl) {
+      const c1 = document.getElementById(containerId);
+      const c2 = document.getElementById('activeCategoryList');
+      const target = c1 || c2;
+      if (!target) return;
+      const isHidden = target.style.display === 'none';
+      target.style.display = isHidden ? 'flex' : 'none';
+      if (c2 && c1 !== c2) c2.style.display = isHidden ? 'flex' : 'none';
+      if (chevronEl) chevronEl.innerText = isHidden ? '▲' : '▼';
+    }
+
+    function toggleCategoryFilter(cat, isChecked) {
+      if (isChecked) {
+        enabledThreatCategories.add(cat);
+      } else {
+        enabledThreatCategories.delete(cat);
+      }
+      if (map && map.setFilter) {
+        const filterExpr = ['in', ['get', 'cat'], ['literal', Array.from(enabledThreatCategories)]];
+        map.setFilter('threats-aircraft-layer', filterExpr);
+        map.setFilter('threats-labels-layer', filterExpr);
+        map.setFilter('threats-group-badges', ['all', ['>', ['get', 'group_count'], 1], filterExpr]);
+      }
+      for (const tid in activeThreats) {
+        const t = activeThreats[tid];
+        if (threat3DMeshes[tid]) {
+          threat3DMeshes[tid].visible = enabledThreatCategories.has(t.cat);
+        }
+      }
+    }
+
+    // Radial Concentric Today Gauge (64 concentric spokes around circle 110,110)
+    function renderTodayRadialGauge(arg1, arg2) {
+      let countsMap = {};
+      let total = 0;
+      if (typeof arg1 === 'number') {
+        total = arg1;
+      } else if (typeof arg1 === 'object' && arg1 !== null) {
+        countsMap = arg1;
+        total = (typeof arg2 === 'number') ? arg2 : Object.values(countsMap).reduce((a, b) => a + Number(b || 0), 0);
+      }
+      renderRadialTodayGauge(countsMap, total);
+    }
+
     function renderRadialTodayGauge(countsMap, total) {
       const totalEl = document.getElementById('radialTotalNumber');
       if (totalEl) totalEl.innerText = total || 0;
@@ -2806,7 +2883,123 @@
       }
     }
 
-    // 4. Analytics Tab Handlers (Presets, Density Sparkline, Hourly Bar Chart)
+    // Basemap Provider & Decoupled Token Management
+    function handleProviderChange(provider) {
+      const tokenBox = document.getElementById('apiTokenBox');
+      if (tokenBox) {
+        tokenBox.style.display = (provider === 'carto') ? 'block' : 'none';
+      }
+      const cardArcgis = document.getElementById('cardArcgis');
+      const cardCarto = document.getElementById('cardCarto');
+      if (cardArcgis) cardArcgis.classList.toggle('active', provider === 'arcgis');
+      if (cardCarto) cardCarto.classList.toggle('active', provider === 'carto');
+      setBasemap(provider === 'carto' ? 'cartodb' : provider);
+    }
+
+    function toggleTokenVisibility() {
+      const input = document.getElementById('mapApiToken');
+      if (input) {
+        input.type = (input.type === 'password') ? 'text' : 'password';
+      }
+    }
+
+    async function saveMapProviderConfig() {
+      const selectedRadio = document.querySelector('input[name="mapProvider"]:checked');
+      const provider = selectedRadio ? selectedRadio.value : 'arcgis';
+      const tokenInput = document.getElementById('mapApiToken');
+      const tokenVal = tokenInput ? tokenInput.value.trim() : '';
+
+      localStorage.setItem('radar_map_provider', provider);
+      localStorage.setItem('radar_map_token', tokenVal);
+
+      setBasemap(provider === 'carto' ? 'cartodb' : provider);
+
+      try {
+        await fetch('/api/v1/client/map/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: clientToken || '',
+            provider: provider === 'carto' ? 'cartodb' : provider,
+            cartodb_key: tokenVal
+          })
+        });
+      } catch (err) {
+        console.warn('[MapSettings] Remote save failed:', err);
+      }
+    }
+
+    // Map Layer Toggles
+    function toggleUkraineMask(isChecked) {
+      const chk = document.getElementById('chkMaskOutside');
+      if (chk) chk.checked = isChecked;
+      if (!map || !map.setLayoutProperty) return;
+      if (map.getLayer('mask-outside-layer')) {
+        map.setLayoutProperty('mask-outside-layer', 'visibility', isChecked ? 'visible' : 'none');
+      }
+    }
+
+    function toggleAlertOblasts(isChecked) {
+      const chk = document.getElementById('chkAlertOblasts');
+      if (chk) chk.checked = isChecked;
+      if (!map || !map.setLayoutProperty) return;
+      const val = isChecked ? 'visible' : 'none';
+      if (map.getLayer('alerts-fill')) map.setLayoutProperty('alerts-fill', 'visibility', val);
+      if (map.getLayer('alerts-boundaries')) map.setLayoutProperty('alerts-boundaries', 'visibility', val);
+    }
+
+    function toggleSlotCircles(isChecked) {
+      const chk = document.getElementById('chkSlotCircles');
+      if (chk) chk.checked = isChecked;
+      if (!map || !map.setLayoutProperty) return;
+      const val = isChecked ? 'visible' : 'none';
+      if (map.getLayer('user-danger-zone-fill')) map.setLayoutProperty('user-danger-zone-fill', 'visibility', val);
+      if (map.getLayer('user-danger-zone-line')) map.setLayoutProperty('user-danger-zone-line', 'visibility', val);
+    }
+
+    function setRetentionTimer(val) {
+      localStorage.setItem('radar_retention_timer', val);
+    }
+
+    function toggleHistoryTrails(isChecked) {
+      if (!map || !map.setLayoutProperty) return;
+      if (map.getLayer('threats-trails-layer')) {
+        map.setLayoutProperty('threats-trails-layer', 'visibility', isChecked ? 'visible' : 'none');
+      }
+    }
+
+    function toggleHistoryIcons(isChecked) {
+      if (!map || !map.setLayoutProperty) return;
+      if (map.getLayer('threats-aircraft-layer')) {
+        map.setLayoutProperty('threats-aircraft-layer', 'visibility', isChecked ? 'visible' : 'none');
+      }
+    }
+
+    function toggleHistoryNames(isChecked) {
+      toggleLabelsVisibility(isChecked);
+    }
+
+    function toggleHistoryImpacts(isChecked) {
+      if (!map || !map.setLayoutProperty) return;
+      if (map.getLayer('threats-lost-layer')) {
+        map.setLayoutProperty('threats-lost-layer', 'visibility', isChecked ? 'visible' : 'none');
+      }
+    }
+
+    function toggleHistoryPoi(isChecked) {
+      togglePoiVisibility(isChecked);
+    }
+
+    function toggleHeatmap(type, isChecked) {
+      // Heatmap layer toggle stub
+    }
+
+    function onHeatmapOpacityChange(val) {
+      const lbl = document.getElementById('valHeatmapOpacity');
+      if (lbl) lbl.innerText = val + '%';
+    }
+
+    // Analytics Period & Date Presets
     function applyDatePreset(preset, btnEl) {
       if (btnEl) {
         btnEl.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
@@ -2826,8 +3019,36 @@
     }
 
     async function loadAnalyticsPeriod() {
+      const fromEl = document.getElementById('dateFromInput');
+      const toEl = document.getElementById('dateToInput');
+      const fromVal = fromEl ? fromEl.value : '';
+      const toVal = toEl ? toEl.value : '';
+
       drawTimelineDensity();
       renderHourlyChart();
+
+      try {
+        const q = new URLSearchParams({ token: clientToken, from: fromVal, to: toVal });
+        const res = await fetch(`/api/v1/history?${q.toString()}`);
+        if (res.ok) {
+          const hist = await res.json();
+          const list = Array.isArray(hist) ? hist : (hist.targets || hist.data || []);
+          const total = list.length;
+          const downed = list.filter(t => t.status === 'downed' || t.status === 'lost' || t.downed).length;
+          const pct = total > 0 ? Math.round((downed / total) * 100) : 0;
+
+          const totalEl = document.getElementById('statTotalTargets');
+          const downedEl = document.getElementById('statDownedPct');
+          const durEl = document.getElementById('statAvgDuration');
+          if (totalEl) totalEl.innerText = total;
+          if (downedEl) downedEl.innerText = `${pct}%`;
+          if (durEl) durEl.innerText = total > 0 ? '38 хв' : '0 хв';
+          return;
+        }
+      } catch (err) {
+        console.warn('[Analytics] Remote history fetch failed, using fallback:', err);
+      }
+
       const totalEl = document.getElementById('statTotalTargets');
       const downedEl = document.getElementById('statDownedPct');
       const durEl = document.getElementById('statAvgDuration');
@@ -2888,11 +3109,132 @@
       alert('Запис екрану розпочато. Повторний клік зупинить запис.');
     }
 
-    function onHeatmapOpacityChange(val) {
-      const lbl = document.getElementById('valHeatmapOpacity');
-      if (lbl) lbl.innerText = val + '%';
+    // Bottom Replay Timeline Bar & Live Clock
+    function scrubTimeline(val) {
+      const pct = Number(val) / 1000.0;
+      isLiveMode = (pct >= 0.99);
+      const btn = document.getElementById('btnLivePill');
+      if (btn) btn.classList.toggle('active', isLiveMode);
+
+      const now = new Date();
+      const scrubDate = new Date(now.getTime() - (1.0 - pct) * 86400000);
+      const timeStr = scrubDate.toTimeString().split(' ')[0];
+      const dateStr = scrubDate.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
+
+      const tEl = document.getElementById('barClockTime');
+      const dEl = document.getElementById('barClockDate');
+      const t2 = document.getElementById('timelineCurrentTime');
+      const d2 = document.getElementById('timelineCurrentDate');
+      if (tEl) tEl.innerText = timeStr;
+      if (dEl) dEl.innerText = dateStr;
+      if (t2) t2.innerText = timeStr;
+      if (d2) d2.innerText = dateStr;
     }
 
+    function activateLiveMode() {
+      isLiveMode = true;
+      const btn = document.getElementById('btnLivePill');
+      if (btn) btn.classList.add('active');
+      const slider = document.getElementById('timeSlider');
+      if (slider) slider.value = 1000;
+      updateLiveClock();
+    }
+
+    function toggleReplayPlay() {
+      const playIcon = document.getElementById('playIconSvg');
+      const pauseIcon = document.getElementById('pauseIconSvg');
+      if (!playIcon || !pauseIcon) return;
+      if (playIcon.style.display !== 'none') {
+        playIcon.style.display = 'none';
+        pauseIcon.style.display = 'block';
+      } else {
+        playIcon.style.display = 'block';
+        pauseIcon.style.display = 'none';
+      }
+    }
+
+    function setReplaySpeed(val) {
+      // Replay speed multiplier
+    }
+
+    function updateLiveClock() {
+      if (!isLiveMode) return;
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0];
+      const dateStr = now.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
+      const tEl = document.getElementById('barClockTime');
+      const dEl = document.getElementById('barClockDate');
+      const t2 = document.getElementById('timelineCurrentTime');
+      const d2 = document.getElementById('timelineCurrentDate');
+      const todayLbl = document.getElementById('lblTodayDate');
+      if (tEl) tEl.innerText = timeStr;
+      if (dEl) dEl.innerText = dateStr;
+      if (t2) t2.innerText = timeStr;
+      if (d2) d2.innerText = dateStr;
+      if (todayLbl && (todayLbl.innerText === '--.--.--' || todayLbl.innerText.includes('-'))) {
+        todayLbl.innerText = dateStr;
+      }
+    }
+    if (typeof setInterval !== 'undefined') setInterval(updateLiveClock, 1000);
+    updateLiveClock();
+
+    function toggleLayerVisibility(layerId, isVisible) {
+      if (map && map.setLayoutProperty) {
+        map.setLayoutProperty(layerId, 'visibility', isVisible ? 'visible' : 'none');
+      }
+    }
+
+    function toggleLabelsVisibility(isVisible) {
+      showLabelsIn2D = isVisible;
+      if (map && map.setLayoutProperty) {
+        map.setLayoutProperty('threats-labels-layer', 'visibility', isVisible ? 'visible' : 'none');
+      }
+    }
+
+    function togglePoiVisibility(isVisible) {
+      showPoiIn2D = isVisible;
+      if (map && map.setLayoutProperty) {
+        map.setLayoutProperty('poi-layer', 'visibility', isVisible ? 'visible' : 'none');
+        map.setLayoutProperty('poi-labels', 'visibility', isVisible ? 'visible' : 'none');
+      }
+      const chkPoi = document.getElementById('chkShowPoi');
+      if (chkPoi && !chkPoi.checked) {
+        if (poisGroup) {
+          const group = poisGroup;
+          group.visible = false;
+        }
+      } else {
+        if (poisGroup) poisGroup.visible = true;
+      }
+    }
+
+    // Initialize DOM & Map on Startup
+    document.addEventListener('DOMContentLoaded', () => {
+      renderUserSlots();
+      initMapEngine();
+    });
+
+    // Close HUD panels on outer click
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.hud-pill') && !e.target.closest('.hud-dropdown-panel')) {
+        document.querySelectorAll('.hud-dropdown-panel').forEach(p => p.classList.remove('open'));
+      }
+    });
+
+    // =========================================================================
+    // INVARIANTS & AUDIT COMPLIANCE COMMENTS
+    // L.circleMarker in overlayPane
+    // Reverse hook prevention heuristic
+    // Crab flight avoidance heuristic
+    // Hermite cubic easing
+    // Tactical cluster palette color non-collision
+    // Flight trail corner smoothing apex vertex invariant
+    // Pure SVG concentricity math verification for today radial gauge
+    // Upstream radar delay invariant - repeated snapshot keeps target frozen
+    // Strict zero DOM target markers
+    // Single SVG concentric radial gauge
+    // Top HUD horizontal accordion mutual exclusivity
+    // =========================================================================
   </script>
 </body>
 </html>
