@@ -1381,18 +1381,17 @@ async fn handle_upload_history(
 async fn handle_radar_map_html(
     State(state): State<AppState>,
 ) -> Response {
-    static CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    let content = CACHE.get_or_init(|| {
-        let map_file = state.config.static_dir.join("radar_map.html");
-        fs::read_to_string(&map_file).unwrap_or_else(|_| "<h1>radar_map.html not found</h1>".to_string())
-    });
+    let map_file = state.config.static_dir.join("radar_map.html");
+    let content = fs::read_to_string(&map_file).unwrap_or_else(|_| "<h1>radar_map.html not found</h1>".to_string());
 
     (
         [
             (header::CONTENT_TYPE, "text/html; charset=utf-8"),
-            (header::CACHE_CONTROL, "public, max-age=3600"),
+            (header::CACHE_CONTROL, "no-cache, no-store, must-revalidate"),
+            (header::PRAGMA, "no-cache"),
+            (header::EXPIRES, "0"),
         ],
-        content.as_str()
+        content
     ).into_response()
 }
 
@@ -1401,17 +1400,16 @@ async fn handle_radar_map_html(
 async fn handle_timeline_map_html(
     State(state): State<AppState>,
 ) -> Response {
-    static CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    let content = CACHE.get_or_init(|| {
-        let map_file = state.config.static_dir.join("radar_map.html");
-        fs::read_to_string(&map_file).unwrap_or_else(|_| "<h1>radar_map.html not found</h1>".to_string())
-    });
+    let map_file = state.config.static_dir.join("radar_map.html");
+    let content = fs::read_to_string(&map_file).unwrap_or_else(|_| "<h1>radar_map.html not found</h1>".to_string());
 
     (
         [
             (header::CONTENT_TYPE, "text/html; charset=utf-8"),
-            (header::CACHE_CONTROL, "public, max-age=3600"),
+            (header::CACHE_CONTROL, "no-cache, no-store, must-revalidate"),
+            (header::PRAGMA, "no-cache"),
+            (header::EXPIRES, "0"),
         ],
-        content.as_str()
+        content
     ).into_response()
 }
