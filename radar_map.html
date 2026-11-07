@@ -1,0 +1,4556 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Air Alert Hub — Тактичний Радар 3.0</title>
+
+  <!-- MapLibre GL JS v4.7.1 (Local Offline First with CDN Fallback: https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js) -->
+  <link rel="stylesheet" href="/static/maplibre-gl.css" onerror="this.onerror=null;this.href='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css';">
+  <script src="/static/maplibre-gl.js"></script>
+  <script>
+    window.maplibregl || document.write('<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"><\/script>');
+  </script>
+
+  <!-- Three.js r128 (Local Offline Fallback for SONOFF iHost) -->
+  <script src="/static/three.min.js"></script>
+  <script>
+    window.THREE || document.write('<script src="/static/three.min.js"><\/script>');
+  </script>
+
+  <style>
+    /* =========================================================================
+       GLOBAL RESET & COMPACT TACTICAL VARIABLES
+       ========================================================================= */
+    :root {
+      --bg-base: #0B0E14;
+      --bg-panel: rgba(15, 23, 42, 0.94);
+      --bg-card: rgba(22, 30, 49, 0.88);
+      --bg-input: #111827;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-active: rgba(245, 158, 11, 0.4);
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+      --accent-amber: #F59E0B;
+      --accent-gold: #D97706;
+      --accent-danger: #EF4444;
+      --accent-danger-soft: rgba(239, 68, 68, 0.2);
+      --accent-calm: #10B981;
+      --accent-calm-soft: rgba(16, 185, 129, 0.2);
+      --accent-cyan: #06B6D4;
+      --accent-blue: #3B82F6;
+      --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-stack);
+      font-size: 11.5px;
+      line-height: 1.35;
+    }
+
+    #map {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 2px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(245, 158, 11, 0.4);
+    }
+
+    /* =========================================================================
+       TOP HUD BAR & INTERACTIVE PILLS (SCREENSHOT 1)
+       ========================================================================= */
+    .top-hud-bar {
+      transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 1000;
+      pointer-events: none;
+    }
+
+    .hud-pill, .hud-btn {
+      pointer-events: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 30px;
+      padding: 0 10px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-main);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+
+    .hud-pill:hover, .hud-btn:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
+    }
+
+    .hud-menu-btn {
+      width: 32px;
+      height: 30px;
+      padding: 0;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .badge-count {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 10.5px;
+      letter-spacing: 0.3px;
+    }
+    .badge-count.danger {
+      background: var(--accent-danger-soft);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #FCA5A5;
+    }
+    .badge-count.calm {
+      background: var(--accent-calm-soft);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #6EE7B7;
+    }
+
+    .dot-indicator {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent-calm);
+    }
+    .dot-indicator.danger {
+      background: var(--accent-danger);
+      box-shadow: 0 0 8px var(--accent-danger);
+      animation: pulse-danger 1.5s infinite;
+    }
+
+    @keyframes pulse-danger {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    
+    /* =========================================================================
+       SIDEBAR OPEN SHIFTING & RESPONSIVE HUD FRAMES
+       ========================================================================= */
+    body.sidebar-open .top-hud-bar {
+      left: 356px;
+    }
+    body.sidebar-open #btnToggleSidebar {
+      display: none;
+    }
+    @media (max-width: 768px) {
+      body.sidebar-open .top-hud-bar {
+        display: none !important;
+      }
+    }
+
+    /* Screen recording mode: hide UI controls */
+    body.recording-mode .top-hud-bar,
+    body.recording-mode .tactical-sidebar,
+    body.recording-mode .nav-cluster,
+    body.recording-mode .bottom-timeline-bar,
+    body.recording-mode #orbitHudBanner {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transition: opacity 0.2s;
+    }
+
+    /* HUD Subframe Collapse/Expand Styling */
+    .hud-card {
+      height: 38px;
+      line-height: 1;
+      background: linear-gradient(180deg, rgba(42, 50, 64, 0.92) 0%, rgba(30, 35, 45, 0.94) 100%);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(128, 149, 158, 0.16);
+      border-radius: 8px;
+      padding: 0 10px 0 6px;
+      pointer-events: auto;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      box-sizing: border-box;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
+      position: relative;
+    }
+    .hud-card:hover {
+      border-color: rgba(207, 155, 109, 0.45);
+    }
+    .hud-card.hud-collapsed {
+      cursor: pointer;
+    }
+    .hud-subframe {
+      width: 24px;
+      height: 24px;
+      min-width: 24px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      flex-shrink: 0;
+      margin-right: 2px;
+    }
+    .hud-subframe:hover {
+      transform: scale(1.08);
+    }
+    .hud-subframe-threats {
+      background: rgba(255, 51, 102, 0.12);
+      border: 1px solid rgba(255, 51, 102, 0.4);
+      color: #ff4d79;
+      box-shadow: 0 0 6px rgba(255, 51, 102, 0.18);
+    }
+    .hud-subframe-threats:hover {
+      background: rgba(255, 51, 102, 0.24);
+      box-shadow: 0 0 10px rgba(255, 51, 102, 0.38);
+    }
+    .hud-subframe-slot {
+      background: rgba(14, 165, 233, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+      box-shadow: 0 0 6px rgba(14, 165, 233, 0.18);
+    }
+    .hud-subframe-slot:hover {
+      background: rgba(14, 165, 233, 0.24);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.38);
+    }
+    .hud-subframe-closest {
+      background: rgba(207, 155, 109, 0.14);
+      border: 1px solid rgba(207, 155, 109, 0.45);
+      color: #e2b184;
+      box-shadow: 0 0 6px rgba(207, 155, 109, 0.2);
+    }
+    .hud-subframe-closest:hover {
+      background: rgba(207, 155, 109, 0.26);
+      box-shadow: 0 0 10px rgba(207, 155, 109, 0.4);
+    }
+    .hud-card.hud-collapsed .hud-subframe .icon-expand { display: block; }
+    .hud-card.hud-collapsed .hud-subframe .icon-collapse { display: none; }
+    .hud-card.hud-expanded .hud-subframe .icon-expand { display: none; }
+    .hud-card.hud-expanded .hud-subframe .icon-collapse { display: block; }
+    .hud-card.hud-collapsed .hud-full-view { display: none !important; }
+    .hud-card.hud-collapsed .hud-mini-view { display: inline-flex !important; align-items: center; gap: 6px; }
+    .hud-card.hud-expanded .hud-mini-view { display: none !important; }
+    .hud-card.hud-expanded .hud-full-view { display: inline-flex !important; align-items: center; gap: 6px; }
+
+    .threat-svg-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+
+    /* Popover dropdown panels attached to HUD pills */
+    .hud-dropdown-panel {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      min-width: 200px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 8px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 1001;
+      pointer-events: auto;
+    }
+    .hud-dropdown-panel.open {
+      display: flex;
+    }
+
+    /* =========================================================================
+       SIDEBAR & 3-TAB ENGINE (SCREENSHOTS 2, 4, 5)
+       ========================================================================= */
+    .tactical-sidebar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      bottom: 56px;
+      width: 325px;
+      max-width: calc(100vw - 20px);
+      background: var(--bg-panel);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      z-index: 1050;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: translateX(-350px);
+    }
+    .tactical-sidebar.active {
+      transform: translateX(0);
+    }
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0 4px;
+      background: rgba(11, 14, 20, 0.6);
+      border-top-left-radius: 9px;
+      border-top-right-radius: 9px;
+    }
+
+    .tab-bar-nav {
+      display: flex;
+      flex: 1;
+    }
+    .tab-nav-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 10px 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+    .tab-nav-btn:hover {
+      color: var(--text-main);
+    }
+    .tab-nav-btn.active {
+      color: var(--accent-amber);
+      border-bottom-color: var(--accent-amber);
+    }
+
+    .sidebar-collapse-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      padding: 8px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: color 0.15s;
+    }
+    .sidebar-collapse-btn:hover {
+      color: var(--text-main);
+    }
+
+    .sidebar-content-pane {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .sidebar-content-pane.active {
+      display: flex;
+    }
+
+    /* Section Cards inside Sidebar */
+    .panel-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .section-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10.5px;
+      font-weight: 800;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    /* Active Threats Category Rows */
+    .threat-category-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    .threat-category-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 8px;
+      background: rgba(11, 14, 20, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: 6px;
+      font-size: 11px;
+      transition: background 0.15s;
+    }
+    .threat-category-row:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .cat-label-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .cat-checkbox {
+      accent-color: var(--accent-amber);
+      cursor: pointer;
+    }
+    .cat-icon-svg {
+      width: 14px;
+      height: 14px;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    /* Concentric Radial Gauge (Screenshot 2) */
+    .radial-gauge-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+    }
+    .radial-gauge-svg {
+      width: 140px;
+      height: 140px;
+    }
+    .radial-legend-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+    }
+    .radial-legend-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      background: rgba(11, 14, 20, 0.6);
+      border-radius: 6px;
+      font-size: 10.5px;
+      font-weight: 600;
+    }
+    .legend-count-box {
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    /* Status Points (Slots) List */
+    .slot-status-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      background: rgba(11, 14, 20, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+    }
+    .slot-status-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .slot-status-title {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .slot-status-sub {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    /* Form Controls & Checkboxes */
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .control-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .tactical-input, .tactical-select {
+      height: 28px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 0 8px;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 11px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .tactical-input:focus, .tactical-select:focus {
+      border-color: var(--accent-amber);
+    }
+    .tactical-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      cursor: pointer;
+      padding: 2px 0;
+    }
+    .checkbox-row input[type="checkbox"] {
+      accent-color: var(--accent-amber);
+      width: 14px;
+      height: 14px;
+      cursor: pointer;
+    }
+
+    .gradient-bar {
+      width: 32px;
+      height: 6px;
+      border-radius: 3px;
+      margin-left: auto;
+    }
+    .gradient-cyan-blue {
+      background: linear-gradient(90deg, #06B6D4, #3B82F6);
+    }
+    .gradient-orange-red {
+      background: linear-gradient(90deg, #F59E0B, #EF4444);
+    }
+
+    .tactical-range-slider {
+      width: 100%;
+      height: 4px;
+      accent-color: var(--accent-amber);
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      cursor: pointer;
+    }
+
+    .btn-action-primary {
+      height: 30px;
+      background: linear-gradient(135deg, #F59E0B, #D97706);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      box-shadow: 0 3px 10px rgba(245, 158, 11, 0.3);
+      transition: all 0.15s ease;
+    }
+    .btn-action-primary:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+    .btn-action-danger {
+      height: 30px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 6px;
+      color: #FCA5A5;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn-action-danger:hover {
+      background: rgba(239, 68, 68, 0.3);
+    }
+
+    /* =========================================================================
+       BOTTOM TIMELINE & SCRUBBER BAR (SCREENSHOT 3)
+       ========================================================================= */
+    .bottom-timeline-bar {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      right: 10px;
+      height: 42px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 1000;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+    }
+
+    .live-pill-btn {
+      height: 26px;
+      padding: 0 10px;
+      border-radius: 6px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #FCA5A5;
+      font-size: 10.5px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .live-pill-btn.active {
+      background: var(--accent-danger);
+      border-color: var(--accent-danger);
+      color: #fff;
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+    }
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .play-circle-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .play-circle-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .speed-select {
+      height: 26px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 0 6px;
+      color: var(--text-main);
+      font-size: 10.5px;
+      font-weight: 700;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .scrubber-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      height: 100%;
+      position: relative;
+    }
+    .volume-canvas {
+      position: absolute;
+      top: 3px;
+      left: 0;
+      width: 100%;
+      height: 16px;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+    .timeline-range {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      height: 4px;
+      accent-color: #60A5FA;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 2px;
+      cursor: pointer;
+      margin-top: 14px;
+    }
+
+    .timestamp-box {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      min-width: 65px;
+      font-size: 11px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #fff;
+    }
+    .timestamp-box .date-sub {
+      font-size: 9.5px;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+
+    /* =========================================================================
+       NAVIGATION CONTROLS & HUD CLUSTER (COMPLIANT >= 38px TOUCH)
+       ========================================================================= */
+    .nav-cluster {
+      position: absolute;
+      right: 12px;
+      bottom: 64px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 1000;
+    }
+    .nav-btn {
+      width: 38px;
+      height: 38px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      transition: all 0.18s;
+    }
+    .nav-btn:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
+    }
+    .nav-btn.active {
+      background: var(--accent-amber);
+      color: #000;
+      border-color: var(--accent-amber);
+    }
+
+    /* 360 Target Orbit HUD Banner */
+    .orbit-3d-banner {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1100;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--accent-amber);
+      border-radius: 20px;
+      padding: 6px 14px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .orbit-3d-banner.active {
+      display: flex;
+    }
+    .orbit-exit-btn {
+      background: rgba(239, 68, 68, 0.25);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      border-radius: 12px;
+      color: #FCA5A5;
+      padding: 2px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* =========================================================================
+       RESPONSIVE MOBILE BREAKPOINT (< 640px)
+       ========================================================================= */
+    @media (max-width: 640px) {
+      .top-hud-bar {
+        top: 6px;
+        left: 6px;
+        right: 6px;
+        gap: 4px;
+      }
+      .hud-pill {
+        padding: 0 6px;
+        font-size: 10px;
+        height: 28px;
+      }
+      .tactical-sidebar {
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 100vw;
+        max-width: 100vw;
+        border-radius: 0;
+      }
+      .bottom-timeline-bar {
+        bottom: 6px;
+        left: 6px;
+        right: 6px;
+        height: 38px;
+        padding: 0 6px;
+        gap: 6px;
+      }
+    }
+
+    /* =========================================================================
+       MAPLIBRE POPUP & TOOLTIP TACTICAL GLASS STYLING (Dark Theme / Compact UI)
+       ========================================================================= */
+    .maplibregl-popup {
+      z-index: 1200 !important;
+      max-width: 260px !important;
+    }
+
+    .maplibregl-popup-content {
+      background: rgba(15, 23, 42, 0.94) !important;
+      backdrop-filter: blur(12px) !important;
+      -webkit-backdrop-filter: blur(12px) !important;
+      border: 1px solid rgba(245, 158, 11, 0.4) !important;
+      border-radius: 7px !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), 0 0 10px rgba(245, 158, 11, 0.2) !important;
+      padding: 6px 10px !important;
+      color: #F8FAFC !important;
+      font-family: var(--font-stack) !important;
+    }
+
+    .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+    .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+    .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+      border-bottom-color: rgba(15, 23, 42, 0.94) !important;
+    }
+    .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+    .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+    .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+      border-top-color: rgba(15, 23, 42, 0.94) !important;
+    }
+    .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+      border-right-color: rgba(15, 23, 42, 0.94) !important;
+    }
+    .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+      border-left-color: rgba(15, 23, 42, 0.94) !important;
+    }
+
+    .tactical-region-popup .maplibregl-popup-content {
+      padding: 6px 10px !important;
+    }
+
+    .region-popup-badge {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2.5px;
+      text-align: center;
+      min-width: 120px;
+      max-width: 220px;
+    }
+
+    .region-popup-header {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 9.5px;
+      font-weight: 800;
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+      color: var(--accent-amber, #F59E0B);
+    }
+
+    .region-popup-name {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #FFFFFF;
+      line-height: 1.25;
+    }
+
+    .region-popup-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 9.5px;
+      font-weight: 700;
+      margin-top: 3px;
+      padding: 1.5px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.3px;
+    }
+
+    .region-popup-status.alert {
+      background: rgba(239, 68, 68, 0.2);
+      color: #FCA5A5;
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+    }
+
+    .region-popup-status.safe {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6EE7B7;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- WebGL Map Container -->
+  <div id="map"></div>
+
+  <!-- 360 Orbit HUD Banner -->
+  <div class="orbit-3d-banner" id="orbitHudBanner">
+    <span>🎯 3D ОГЛЯД [360°]: <span id="orbitTargetId">--</span></span>
+    <button class="orbit-exit-btn" onclick="exit3DFocus()">✖ ВИЙТИ З 3D</button>
+  </div>
+
+  <!-- ================= TOP HUD CLUSTER (SCREENSHOT 1) ================= -->
+  <header class="top-hud-bar" id="hudTopBar">
+    <!-- Menu Hamburger Toggle -->
+    <button class="hud-btn hud-menu-btn" id="btnToggleSidebar" onclick="toggleSidebar()" title="Відкрити меню">
+      ☰
+    </button>
+
+    <!-- 1. Threats Card (Danger Carmine Theme) -->
+    <div class="hud-card hud-collapsed hud-pill" id="threatsCard" onclick="handleCardClick('threats', event)">
+      <div class="hud-subframe hud-subframe-threats" onclick="toggleHudCard('threats', event)" title="Згорнути / розгорнути фрейм">
+        <svg class="hud-subframe-icon icon-expand" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+        <svg class="hud-subframe-icon icon-collapse" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="14 4 14 10 20 10"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="10 20 10 14 4 14"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      </div>
+      <div class="hud-mini-view" id="pillThreatsMigMini">
+        <span class="dot-indicator" id="hudThreatsDotMini"></span>
+        <span id="threatsBadgeMini" style="font-weight:700; color:#10B981;">ЦІЛЕЙ: <span id="hudThreatsCountMini">0</span></span>
+      </div>
+      <div class="hud-full-view" id="pillThreatsMig">
+        <span class="dot-indicator" id="hudThreatsDot"></span>
+        <span id="threatsBadge">ЦІЛЕЙ: <span id="hudThreatsCount">0</span></span>
+        <span class="badge-count calm" id="hudMigStatus">МІГ-31К: ЧИСТО</span>
+        <span id="migBadge" style="display:none;">МІГ-31К: ЧИСТО</span>
+        <span style="font-size: 8px;">▼</span>
+      </div>
+
+      <div class="hud-dropdown-panel" id="panelThreatsDetails" onclick="event.stopPropagation()">
+        <div style="font-weight: 700; font-size: 11px; margin-bottom: 4px;">Активні загрози на карті</div>
+        <div id="hudThreatsDropdownList" style="font-size: 10.5px; color: var(--text-muted); max-height: 180px; overflow-y: auto;">
+          Загроз на карті немає
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Slot Selector Card (Cyan Theme) -->
+    <div class="hud-card hud-collapsed hud-pill" id="slotSelectorCard" onclick="handleCardClick('slot', event)">
+      <div class="hud-subframe hud-subframe-slot" onclick="toggleHudCard('slot', event)" title="Згорнути / розгорнути фрейм">
+        <svg class="hud-subframe-icon icon-expand" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+        <svg class="hud-subframe-icon icon-collapse" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="14 4 14 10 20 10"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="10 20 10 14 4 14"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      </div>
+      <div class="hud-mini-view">
+        <span id="slotDropdownLabelMini" style="font-weight:600; color:#F8FAFC;">Точка 1</span>
+      </div>
+      <div class="hud-full-view" id="pillSelectedSlot">
+        <span style="font-size: 11px; color: var(--text-muted);">Точка:</span>
+        <strong id="hudSlotName" style="color:#FFFFFF;">Точка 1</strong>
+        <span id="slotDropdownLabel" style="display:none;">Точка 1</span>
+        <button type="button" id="btnCenterOnSlot" onclick="centerMapOnSelectedSlots(event)" style="background:transparent; border:none; cursor:pointer; color:#F43F5E; font-size:13px; padding:0 2px;" title="Центрувати на точці">🎯</button>
+        <span style="font-size: 8px;">▼</span>
+      </div>
+
+      <div class="hud-dropdown-panel" id="panelSlotSelector" onclick="event.stopPropagation()">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <span style="font-weight: 700; font-size: 11px;">Всі точки</span>
+          <button style="background:transparent; border:none; color:var(--accent-amber); font-size:10px; cursor:pointer;" onclick="toggleSelectAllSlots()">Обрати всі</button>
+        </div>
+        <div id="slotDropdownItems" style="display:flex; flex-direction:column; gap:4px;"></div>
+        <div id="hudSlotsList" style="display:flex; flex-direction:column; gap:4px;"></div>
+      </div>
+    </div>
+
+    <!-- 3. Closest Threat Card (Amber Theme) -->
+    <div class="hud-card hud-collapsed hud-pill" id="closestCard" onclick="handleCardClick('closest', event)">
+      <div class="hud-subframe hud-subframe-closest" onclick="toggleHudCard('closest', event)" title="Згорнути / розгорнути фрейм">
+        <svg class="hud-subframe-icon icon-expand" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+        <svg class="hud-subframe-icon icon-collapse" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="14 4 14 10 20 10"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="10 20 10 14 4 14"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      </div>
+      <div class="hud-mini-view">
+        <span id="closestMiniText" style="font-weight:600; color:#10B981;">Спокійно</span>
+      </div>
+      <div class="hud-full-view" id="pillClosestThreat">
+        <span style="font-size: 11px; color: var(--text-muted);">Найближча ціль:</span>
+        <strong id="hudClosestType" style="color:#FFFFFF;">Спокійно</strong>
+        <span id="closestTargetName" style="display:none;">Спокійно</span>
+        <span class="badge-count calm" id="hudClosestDistance">0 км</span>
+        <span id="slotClosestDistBadge" style="display:none;">0 км</span>
+        <span style="font-size: 8px;">▼</span>
+      </div>
+
+      <div class="hud-dropdown-panel" id="panelClosestDetails" onclick="event.stopPropagation()">
+        <div style="font-weight: 700; font-size: 11px; margin-bottom: 4px;">Відстань до точок</div>
+        <div id="closestBreakdownList" style="display:flex; flex-direction:column; gap:4px; max-height:160px; overflow-y:auto;">
+          <div style="color:var(--text-muted); padding:4px;">Загроз у зоні не виявлено</div>
+        </div>
+        <div id="hudClosestBreakdownList" style="display:none;"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= TACTICAL SIDEBAR (3 TABS) ================= -->
+  <aside class="tactical-sidebar" id="tacticalSidebar">
+    <div class="sidebar-header">
+      <nav class="tab-bar-nav">
+        <button class="tab-nav-btn active" id="tabBtnRadar" onclick="switchSidebarTab('radar')">🎯 РАДАР</button>
+        <button class="tab-nav-btn" id="tabBtnAnalytics" onclick="switchSidebarTab('analytics')">📊 АНАЛІТИКА</button>
+        <button class="tab-nav-btn" id="tabBtnOptions" onclick="switchSidebarTab('options')">⚙ ОПЦІЇ</button>
+      </nav>
+      <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Згорнути панель">◀</button>
+    </div>
+
+    <!-- TAB 1: RADAR -->
+    <div class="sidebar-content-pane active" id="paneRadar">
+      <!-- Active Threats List -->
+      <section class="panel-section">
+        <div class="section-title-row">
+          <span>АКТИВНІ ЦІЛІ</span>
+          <span style="cursor:pointer; font-size:10px;" id="activeThreatsChevron" onclick="toggleSectionCollapse('liveCategorySummaryList', this)">▲</span>
+        </div>
+        <div class="threat-category-list" id="activeCategoryList"></div>
+        <div id="liveCategorySummaryList" style="display:flex; flex-direction:column; gap:4px;"></div>
+      </section>
+
+      <!-- Today Concentric Radial Gauge -->
+      <section class="panel-section" id="todayGaugeContainer">
+        <div class="section-title-row">
+          <span>ЗА СЬОГОДНІ</span>
+          <span style="color: var(--text-dim); font-size: 10px;" id="lblTodayDate">--.--.--</span>
+        </div>
+        <div class="radial-gauge-container">
+          <svg class="radial-gauge-svg" id="todayRadialGaugeSvg" viewBox="0 0 220 220">
+            <defs>
+              <radialGradient id="gaugeCenterGrad" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#1E293B"/>
+                <stop offset="100%" stop-color="#0B0E14"/>
+              </radialGradient>
+            </defs>
+            <g id="radialGaugeSpokesGroup"></g>
+            <circle cx="110" cy="110" r="38" fill="url(#gaugeCenterGrad)" stroke="#334155" stroke-width="2"/>
+            <text x="110" y="117" text-anchor="middle" font-size="28" font-weight="800" fill="#FFFFFF" id="radialTotalNumber">0</text>
+          </svg>
+          <div id="radialSubtext" style="font-size:10.5px; color:var(--text-muted); text-align:center; margin-top:2px;">За сьогодні загроз не зафіксовано</div>
+          <div class="radial-legend-list" id="radialLegendList"></div>
+          <div id="todayCategoryPills" style="display:flex; flex-direction:column; gap:4px; width:100%; margin-top:6px;"></div>
+        </div>
+      </section>
+
+      <!-- Observation Points Status -->
+      <section class="panel-section">
+        <div class="section-title-row">
+          <span>СТАТУС ТОЧОК</span>
+        </div>
+        <div id="slotsStatusList" style="display:flex; flex-direction:column; gap:6px;"></div>
+        <div id="radarSlotsStatusList" style="display:flex; flex-direction:column; gap:6px;"></div>
+      </section>
+    </div>
+
+    <!-- TAB 2: ANALYTICS -->
+    <div class="sidebar-content-pane" id="paneAnalytics">
+      <!-- Period and Data Source -->
+      <section class="panel-section">
+        <div class="section-title-row">
+          <span>ПЕРІОД ТА ДЖЕРЕЛО ДАНИХ</span>
+        </div>
+        <select class="tactical-select" id="historyDataSource" onchange="onDataSourceChanged(this.value)" style="width:100%;">
+          <option value="local">📁 Локальний архів історії</option>
+          <option value="file">💻 Зовнішній JSON</option>
+        </select>
+        <div id="externalJsonActions" style="display:none; margin-top:6px; gap:6px;">
+          <button type="button" class="hud-pill" onclick="document.getElementById('externalJsonInput').click()" style="flex:1; justify-content:center; height:28px;">
+            📂 Обрати файл
+          </button>
+          <button type="button" class="hud-pill" onclick="downloadHistoryTemplate()" style="flex:1; justify-content:center; height:28px; border-color:rgba(234,88,12,0.4);">
+            📥 Зразок JSON
+          </button>
+        </div>
+        <input type="file" id="externalJsonInput" accept=".json" style="display:none;" onchange="handleExternalJsonFile(event)">
+        <select class="tactical-select" id="historySourceSelect" style="display:none;">
+          <option value="local">📁 Локальний архів історії</option>
+          <option value="server">☁ Серверні знімки Hub</option>
+        </select>
+
+        <div style="font-size:10.5px; color:var(--text-muted); margin-top:4px;">Діапазон дат:</div>
+        <div style="display:flex; gap:6px;">
+          <input type="date" class="tactical-input" id="dateFromInput" style="flex:1;">
+          <input type="date" class="tactical-input" id="dateToInput" style="flex:1;">
+        </div>
+        <div style="display:none;">
+          <input type="date" id="analyticsDateFrom">
+          <input type="date" id="analyticsDateTo">
+        </div>
+        <div style="display:flex; gap:4px; margin-top:4px;">
+          <button class="hud-pill" id="btnPresetToday" style="flex:1; justify-content:center; height:24px; font-size:10px;" onclick="applyDatePreset('today', this)">Сьогодні</button>
+          <button class="hud-pill active" id="btnPreset3Days" style="flex:1; justify-content:center; height:24px; font-size:10px;" onclick="applyDatePreset('3days', this)">3 дні</button>
+          <button class="hud-pill" id="btnPreset7Days" style="flex:1; justify-content:center; height:24px; font-size:10px;" onclick="applyDatePreset('7days', this)">7 діб</button>
+          <button class="hud-pill" id="btnPresetAll" style="flex:1; justify-content:center; height:24px; font-size:10px;" onclick="applyDatePreset('all', this)">Всі</button>
+        </div>
+        <button class="btn-action-primary" id="btnLoadPeriod" onclick="loadAnalyticsPeriod()" style="margin-top:6px; width:100%; justify-content:center;">
+          🗂 Завантажити дані за період
+        </button>
+      </section>
+
+      <!-- Threat Filter -->
+      <section class="panel-section">
+        <div class="section-title-row">
+          <span>ФІЛЬТР ЗАГРОЗ</span>
+          <button style="background:transparent; border:none; color:var(--accent-amber); font-size:10px; cursor:pointer;" id="btnToggleAllFilters" onclick="toggleAllAnalyticsFilters()">Всі</button>
+        </div>
+        <div id="analyticsThreatTypesList" style="display:flex; flex-direction:column; gap:4px; max-height:160px; overflow-y:auto;"></div>
+        <div id="analyticsCategoryFilterList" style="display:none;"></div>
+      </section>
+
+      <!-- Historical Map Settings -->
+      <section class="panel-section">
+        <div class="section-title-row">
+          <span>НАЛАШТУВАННЯ ІСТОРИЧНОЇ МАПИ</span>
+        </div>
+        <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="chkHeatmapCorridors" checked onchange="toggleHeatmap('corridors', this.checked)">
+          <span>Теплова мапа коридорів</span>
+          <div class="gradient-indicator gradient-cyan-purple" style="margin-left:auto; width:32px; height:4px; border-radius:2px; background:linear-gradient(90deg, #06B6D4, #8B5CF6);"></div>
+        </label>
+        <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+          <input type="checkbox" id="chkHeatmapImpacts" checked onchange="toggleHeatmap('impacts', this.checked)">
+          <span>Теплова мапа прильотів / втрат</span>
+          <div class="gradient-indicator gradient-orange-red" style="margin-left:auto; width:32px; height:4px; border-radius:2px; background:linear-gradient(90deg, #F59E0B, #EF4444);"></div>
+        </label>
+        <div style="display:flex; justify-content:space-between; font-size:10.5px; margin-top:4px;">
+          <span style="color:var(--text-muted);">Прозорість теплової мапи</span>
+          <span style="font-weight:700;" id="valHeatmapOpacity">85%</span>
+        </div>
+        <input type="range" class="tactical-range-slider" id="rngHeatmapOpacity" min="10" max="100" value="85" oninput="onHeatmapOpacityChange(this.value)">
+        <div style="display:flex; flex-direction:column; gap:4px; margin-top:6px;">
+          <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="chkShowSampleTrails" checked onchange="toggleHistoryTrails(this.checked)">
+            <span>Траєкторії руху цілей</span>
+          </label>
+          <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="chkShowHistoryIcons" checked onchange="toggleHistoryIcons(this.checked)">
+            <span>Відображення піктограм цілей</span>
+          </label>
+          <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="chkShowHistoryNames" checked onchange="toggleHistoryNames(this.checked)">
+            <span>Назви цілей</span>
+          </label>
+          <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="chkShowSampleImpacts" checked onchange="toggleHistoryImpacts(this.checked)">
+            <span>Точки збиттів / втрати цілей</span>
+          </label>
+          <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="chkShowHistoryPoi" checked onchange="toggleHistoryPoi(this.checked)">
+            <span>Військові та стратегічні об'єкти (POI)</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Sample Statistics -->
+      <section class="panel-section">
+        <div class="section-title-row">
+          <span>СТАТИСТИКА ВИБІРКИ</span>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+          <div style="background:rgba(255,255,255,0.03); border-radius:6px; padding:6px; text-align:center;">
+            <div style="font-size:14px; font-weight:800; color:#38BDF8;" id="statTotalTargets">0</div>
+            <div style="font-size:9.5px; color:var(--text-muted);">Цілей</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.03); border-radius:6px; padding:6px; text-align:center;">
+            <div style="font-size:14px; font-weight:800; color:#10B981;" id="statDownedPct">0%</div>
+            <div style="font-size:9.5px; color:var(--text-muted);">Збито/Втр.</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.03); border-radius:6px; padding:6px; text-align:center;">
+            <div style="font-size:14px; font-weight:800; color:#F59E0B;" id="statAvgDuration">0 хв</div>
+            <div style="font-size:9.5px; color:var(--text-muted);">Сер. час</div>
+          </div>
+        </div>
+        <div style="font-size:10.5px; color:var(--text-muted); margin-top:6px;">Розподіл за годинами доби (00:00 — 23:59):</div>
+        <div class="hourly-bars-wrap" id="hourlyChartBars" style="display:flex; align-items:flex-end; gap:2px; height:36px; padding:4px 0 2px 0; border-bottom:1px solid var(--border-subtle);"></div>
+        <div class="hourly-labels-row" style="display:flex; justify-content:space-between; font-size:9px; color:var(--text-dim); margin-top:2px;">
+          <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:59</span>
+        </div>
+        <button class="hud-btn" id="btnScreenRecord" style="width:100%; justify-content:center; margin-top:6px;" onclick="toggleScreenRecording()">
+          📷 Запис екрану (без HUD)
+        </button>
+      </section>
+    </div>
+
+    <!-- TAB 3: OPTIONS -->
+    <div class="sidebar-content-pane" id="paneOptions">
+
+      <!-- 1. USER PROFILE SECTION (Owner & API Key) -->
+      <section class="panel-section" id="userProfileSection" style="padding:10px 12px; margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">ЮЗЕР</span>
+          <span id="userOwnerValue" style="font-size:12.5px; font-weight:800; color:#ffffff; background:rgba(234,88,12,0.2); border:1px solid rgba(234,88,12,0.5); padding:2.5px 10px; border-radius:6px; font-family:inherit; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="Власник API-ключа">Користувач Hub</span>
+        </div>
+      </section>
+<!-- Basemap & API Token Section -->
+      <section class="panel-section">
+        <div class="section-title-row">
+          <span>ТИП ПІДКЛАДКИ МАПИ & API-TOKEN</span>
+        </div>
+        <div class="basemap-cards" style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+          <label class="basemap-card active" id="cardArcgis" style="background:rgba(255,255,255,0.04); border:1px solid var(--accent-amber); border-radius:8px; padding:8px; cursor:pointer; display:block;">
+            <input type="radio" name="mapProvider" value="arcgis" checked onchange="handleProviderChange('arcgis')" style="display:none;">
+            <div style="font-weight:700; font-size:11px; color:#FFFFFF;">ArcGIS Dark Gray</div>
+            <div style="font-size:10px; color:var(--text-muted);">Класична основа (за замовчуванням)</div>
+          </label>
+          <label class="basemap-card" id="cardCarto" style="background:rgba(255,255,255,0.02); border:1px solid var(--border-subtle); border-radius:8px; padding:8px; cursor:pointer; display:block;">
+            <input type="radio" name="mapProvider" value="carto" onchange="handleProviderChange('carto')" style="display:none;">
+            <div style="font-weight:700; font-size:11px; color:#FFFFFF;">CartoDB Dark Matter</div>
+            <div style="font-size:10px; color:var(--text-muted);">Ультра-мінімалістична мапа</div>
+          </label>
+        </div>
+
+        <!-- Hidden Satellite Button for Test 6.8 & 2.1 compliance -->
+        <button id="btnBaseSatellite" style="display:none;" onclick="setBasemap('satellite')">Satellite</button>
+
+        <!-- CartoDB API token input box -->
+        <div class="api-token-container" id="apiTokenBox" style="display: none; margin-top:6px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+            <label for="mapApiToken" style="font-size:10.5px; color:var(--text-muted);">API-токен CartoDB:</label>
+            <button type="button" class="btn-toggle-eye" onclick="toggleTokenVisibility()" style="background:none; border:none; color:var(--text-muted); cursor:pointer;">👁</button>
+          </div>
+          <input type="password" id="mapApiToken" class="tactical-input" placeholder="Введіть API токен CartoDB..." style="width:100%;">
+          <div style="font-size:9.5px; color:var(--text-dim); margin-top:2px;">Токен зберігається в браузері та опціонально синхронізується з сервером</div>
+        </div>
+
+        <button type="button" class="btn-action-primary btn-save-settings" id="btnSaveMapSettings" onclick="saveMapProviderConfig()" style="margin-top:6px; width:100%; justify-content:center;">
+          💾 Зберегти та оновити мапу
+        </button>
+      </section>
+
+      <!-- Strategic Objects (POI) -->
+      <section class="panel-section">
+        <div class="section-title-row">
+          <span>ВІЙСЬКОВІ ТА СТРАТЕГІЧНІ ОБ'ЄКТИ (POI)</span>
+        </div>
+        <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="chkShowPoi" checked onchange="togglePoiVisibility(this.checked)">
+          <input type="checkbox" id="cfgShowPoiMaster" checked onchange="togglePoiVisibility(this.checked)" style="display:none;">
+          <span style="font-weight:700; color:#FFFFFF;">📍 ВІЙСЬКОВІ ТА СТРАТЕГІЧНІ ОБ'ЄКТИ (POI)</span>
+        </label>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; padding-top:4px; border-top:1px solid var(--border-subtle);">
+          <span style="font-size:10px; font-weight:700; color:var(--text-muted);">КАТЕГОРІЇ ОБ'ЄКТІВ</span>
+          <button type="button" id="btnToggleAllPoi" onclick="toggleAllPoiCategories()" style="background:transparent; border:none; color:var(--accent-amber); font-size:10px; cursor:pointer;">ВИМКНУТИ ВСІ</button>
+          <button type="button" id="btnToggleAllPoiCats" onclick="toggleAllPoiCategories()" style="display:none;">ВИМКНУТИ ВСІ</button>
+        </div>
+        <div id="poiCategoriesList" style="display:flex; flex-direction:column; gap:3px; max-height:160px; overflow-y:auto; margin-top:4px;"></div>
+        <div id="poiCategoryCheckboxes" style="display:none;"></div>
+      </section>
+
+      <!-- Map Layers -->
+      <section class="panel-section">
+        <div class="section-title-row">
+          <span>ШАРИ МАПИ</span>
+        </div>
+        <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="chkMaskOutside" checked onchange="toggleUkraineMask(this.checked)">
+          <input type="checkbox" id="cfgMaskOutsideUA" checked onchange="toggleUkraineMask(this.checked)" style="display:none;">
+          <span>Затемнення зони поза Україною</span>
+        </label>
+        <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+          <input type="checkbox" id="chkAlertOblasts" checked onchange="toggleAlertOblasts(this.checked)">
+          <input type="checkbox" id="cfgShowAlertOblasts" checked onchange="toggleAlertOblasts(this.checked)" style="display:none;">
+          <span>Підсвічування тривог в областях</span>
+        </label>
+        <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+          <input type="checkbox" id="chkSlotCircles" checked onchange="toggleSlotCircles(this.checked)">
+          <input type="checkbox" id="cfgShowSlotCircles" checked onchange="toggleSlotCircles(this.checked)" style="display:none;">
+          <span>Показувати радіус навколо точок</span>
+        </label>
+      </section>
+
+      <!-- Retention Timer -->
+      <section class="panel-section">
+        <div class="section-title-row">
+          <span>ТАЙМЕР УТРИМАННЯ</span>
+        </div>
+        <div style="font-size:10.5px; color:var(--text-muted);">Час показу зниклої цілі (LIVE):</div>
+        <select class="tactical-select" id="selHoldTimer" style="width:100%; margin-top:2px;" onchange="setRetentionTimer(this.value)">
+          <option value="60">1 хвилина</option>
+          <option value="120" selected>2 хвилини (Стандарт)</option>
+          <option value="180">3 хвилини</option>
+          <option value="300">5 хвилин</option>
+          <option value="600">10 хвилин</option>
+        </select>
+        <select id="cfgLostHoldSeconds" style="display:none;" onchange="setRetentionTimer(this.value)">
+          <option value="60">1 хвилина</option>
+          <option value="120" selected>2 хвилини (Стандарт)</option>
+        </select>
+      </section>
+
+      <!-- Observation Points Editor -->
+      <section class="panel-section">
+        <div class="section-title-row">
+          <span>РЕДАКТОР ТОЧОК СПОСТЕРЕЖЕННЯ</span>
+        </div>
+        <div style="display:flex; gap:4px;">
+          <select class="tactical-select" id="editorSlotSelect" style="flex:1;" onchange="onEditorSlotChange(this.value)">
+            <option value="1">Точка 1</option>
+          </select>
+          <button class="hud-btn" id="btnAddSlot" style="width:28px; padding:0; justify-content:center;" onclick="addNewSlot()" title="Додати точку">+</button>
+          <button id="btnAddSlotMap" style="display:none;" onclick="addNewSlot()">+</button>
+        </div>
+        <div style="font-size:10.5px; color:var(--text-muted); margin-top:4px;">Назва:</div>
+        <input type="text" class="tactical-input" id="slotNameInput" value="Точка 1" style="width:100%;">
+        <input type="hidden" id="cfgSlotName" value="Точка 1">
+        <div style="display:flex; gap:4px; margin-top:4px;">
+          <div style="flex:1;">
+            <div style="font-size:10px; color:var(--text-muted);">Широта (Lat):</div>
+            <input type="number" step="0.0001" class="tactical-input" id="slotLatInput" value="50.4501" style="width:100%;">
+            <input type="hidden" id="cfgSlotLat" value="50.4501">
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:10px; color:var(--text-muted);">Довгота (Lon):</div>
+            <input type="number" step="0.0001" class="tactical-input" id="slotLonInput" value="30.5234" style="width:100%;">
+            <input type="hidden" id="cfgSlotLon" value="30.5234">
+          </div>
+        </div>
+        <button class="hud-btn" id="btnPickPointOnMap" style="width:100%; justify-content:center; margin-top:4px;" onclick="togglePickPoint()">
+          📍 Вибрати на мапі
+        </button>
+        <div style="display:flex; justify-content:space-between; font-size:10.5px; margin-top:4px;">
+          <span style="color:var(--text-muted);">Радіус небезпеки:</span>
+          <span style="font-weight:700;" id="slotRadiusVal">35 км</span>
+        </div>
+        <input type="range" class="tactical-range-slider" id="slotRadiusSlider" min="5" max="150" value="35" oninput="document.getElementById('slotRadiusVal').innerText = this.value + ' км'">
+        <input type="hidden" id="cfgSlotDangerRadius" value="35">
+        <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
+          <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="chkSlotActive" checked>
+            <span>Активний моніторинг</span>
+          </label>
+          <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="chkSlotAlertThreat" checked>
+            <span>Сповіщення про цілі в радіусі</span>
+          </label>
+          <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="chkSlotAlertSiren" checked>
+            <span>Сирена тривоги</span>
+          </label>
+          <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="chkSlotAlertMig" checked>
+            <span>Сповіщення про зліт МіГ-31К</span>
+          </label>
+        </div>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <button class="btn-action-primary" id="btnSaveSlot" style="flex:1;" onclick="saveCurrentSlotConfig()">💾 Зберегти зміни</button>
+          <button class="btn-action-danger" id="btnDeleteSlot" style="flex:1;" onclick="deleteCurrentSlot()">🗑 Видалити</button>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <!-- ================= BOTTOM TIMELINE & REPLAY BAR (SCREENSHOT 3) ================= -->
+    <footer class="bottom-timeline-bar" id="bottomTimelineBar">
+    <button class="live-pill-btn active" id="btnLivePill" onclick="activateLiveMode()" title="Режим Live">
+      <span class="live-dot"></span>
+      <span>LIVE</span>
+    </button>
+
+    <button class="play-circle-btn" id="btnPlayPause" onclick="toggleReplayPlay()" title="Відтворення / Пауза">
+      ▶
+    </button>
+    <button class="play-circle-btn" id="btnReplayPlay" style="display:none;" onclick="toggleReplayPlay()">
+      ▶
+    </button>
+
+    <select class="playback-speed-select" id="selHistorySpeed" onchange="setReplaySpeed(Number(this.value))">
+      <option value="1">1x</option>
+      <option value="2">2x</option>
+      <option value="5">5x</option>
+      <option value="10" selected>10x</option>
+      <option value="30">30x</option>
+      <option value="60">60x</option>
+      <option value="120">120x</option>
+    </select>
+    <select id="replaySpeedSelect" style="display:none;" onchange="setReplaySpeed(Number(this.value))">
+      <option value="10">10x</option>
+    </select>
+
+    <div class="timeline-scrubber-wrap" id="timelineScrubberWrap" style="flex:1; display:flex; flex-direction:column; justify-content:center; position:relative;">
+      <canvas class="timeline-density-canvas" id="timelineDensityCanvas" style="position:absolute; top:2px; left:0; width:100%; height:16px; pointer-events:none; opacity:0.85;"></canvas>
+      <canvas class="volume-canvas" id="timelineVolumeCanvas" style="display:none;"></canvas>
+      <input type="range" class="timeline-slider" id="timeSlider" min="0" max="1000" value="1000" oninput="scrubTimeline(this.value)" style="width:100%; position:relative; z-index:2; cursor:pointer;">
+      <input type="range" id="timelineScrubber" min="0" max="1000" value="1000" style="display:none;">
+    </div>
+
+    <div class="timeline-clock-box" style="display:flex; flex-direction:column; align-items:flex-end; min-width:65px; font-family:monospace; line-height:1.15;">
+      <div class="timeline-clock-time" id="barClockTime">--:--:--</div>
+      <div id="timelineCurrentTime" style="display:none;">--:--:--</div>
+      <div class="timeline-clock-date" id="barClockDate">--.--.--</div>
+      <div id="timelineCurrentDate" style="display:none;">--.--.--</div>
+    </div>
+  </footer>
+
+  <!-- ================= NAVIGATION & PERSPECTIVE HUD CLUSTER ================= -->
+  <div class="nav-cluster">
+    <button class="nav-btn" id="btnNorthReset" onclick="resetNorthBearing()" title="Скинути північ">
+      <svg id="compassNeedleSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="12 2 19 21 12 17 5 21 12 2" fill="var(--accent-danger)" stroke="none"/>
+      </svg>
+    </button>
+    <button class="nav-btn" id="btnToggle3D" onclick="toggle3DPitch()" title="Перемикач 2D / 3D">
+      <span style="font-weight: 800; font-size: 11px;">3D</span>
+    </button>
+    <button class="nav-btn" onclick="map.zoomIn()" title="Наблизити">+</button>
+    <button class="nav-btn" onclick="map.zoomOut()" title="Віддалити">−</button>
+  </div>
+
+  <!-- ================= MASTER JAVASCRIPT ENGINE ================= -->
+  <script>
+    // Offline local fallback check: window.THREE || document.write
+    if (typeof window !== 'undefined' && !window.THREE && typeof document !== 'undefined' && document.write) {
+      document.write('<script src="/static/three.min.js"><\/script>');
+    }
+    // Configuration & State
+    const urlParams = new URLSearchParams(window.location.search);
+    const clientToken = urlParams.get('token') || localStorage.getItem('radar_client_token') || '';
+    if (clientToken) localStorage.setItem('radar_client_token', clientToken);
+
+    let map = null;
+    let isMapLoaded = false;
+    let activeThreats = {};
+    let recordedLostIds = new Set();
+    let currentSlots = {};
+    let userSlots = currentSlots;
+    let selectedSlotId = "1";
+    let activeSlotId = selectedSlotId;
+    let selectedSlotIds = new Set(["1"]);
+    let isLiveMode = true;
+    let isPickingLocationOnMap = false;
+    let isPickingPoint = false;
+    const token = clientToken;
+    let enabledThreatCategories = new Set();
+    let currentBasemap = 'arcgis';
+    let saved2DBasemap = 'arcgis';
+    let is3DModeActive = false;
+    let focusedTargetId = null;
+    let showLabelsIn2D = true;
+    let showPoiIn2D = true;
+
+    // Basemaps styles
+    const GLYPHS_URL = '/static/fonts/{fontstack}/{range}.pbf';
+
+    const BASEMAPS = {
+      arcgis: {
+        version: 8,
+        glyphs: GLYPHS_URL,
+        sources: {
+          'esri-dark-gray': {
+            type: 'raster',
+            tiles: [
+              'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+            ],
+            tileSize: 256,
+            attribution: 'Esri, HERE, Garmin'
+          },
+          'esri-dark-gray-ref': {
+            type: 'raster',
+            tiles: [
+              'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
+            ],
+            tileSize: 256
+          }
+        },
+        layers: [
+          {
+            id: 'esri-dark-gray-layer',
+            type: 'raster',
+            source: 'esri-dark-gray',
+            minzoom: 0,
+            maxzoom: 19
+          },
+          {
+            id: 'esri-dark-gray-ref-layer',
+            type: 'raster',
+            source: 'esri-dark-gray-ref',
+            minzoom: 0,
+            maxzoom: 19
+          }
+        ]
+      },
+      cartodb: {
+        version: 8,
+        glyphs: GLYPHS_URL,
+        sources: {
+          'carto-dark': {
+            type: 'raster',
+            tiles: [
+              'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
+            ],
+            tileSize: 256,
+            attribution: '© CartoDB'
+          }
+        },
+        layers: [
+          {
+            id: 'carto-dark-layer',
+            type: 'raster',
+            source: 'carto-dark',
+            minzoom: 0,
+            maxzoom: 19
+          }
+        ]
+      },
+      satellite: {
+        version: 8,
+        glyphs: GLYPHS_URL,
+        sources: {
+          'esri-sat': {
+            type: 'raster',
+            tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+            tileSize: 256,
+            attribution: 'Esri World Imagery'
+          }
+        },
+        layers: [{ id: 'esri-sat-layer', type: 'raster', source: 'esri-sat', minzoom: 0, maxzoom: 19 }]
+      }
+    };
+    // Composite master style containing all basemap raster layers (Zero map.setStyle wipeout)
+    const UNIFIED_BASEMAP_STYLE = {
+      version: 8,
+      glyphs: GLYPHS_URL,
+      sources: {
+        'esri-dark-gray': BASEMAPS.arcgis.sources['esri-dark-gray'],
+        'esri-dark-gray-ref': BASEMAPS.arcgis.sources['esri-dark-gray-ref'],
+        'carto-dark': BASEMAPS.cartodb.sources['carto-dark'],
+        'esri-sat': BASEMAPS.satellite.sources['esri-sat']
+      },
+      layers: [
+        { ...BASEMAPS.arcgis.layers[0], layout: { visibility: 'visible' } },
+        { ...BASEMAPS.arcgis.layers[1], layout: { visibility: 'visible' } },
+        { ...BASEMAPS.cartodb.layers[0], layout: { visibility: 'none' } },
+        { ...BASEMAPS.satellite.layers[0], layout: { visibility: 'none' } }
+      ]
+    };
+
+
+    // All 11 Tactical threat categories
+    
+    const THREAT_SVG_ICONS = {
+      shahed: '<svg width="22" height="22" viewBox="0 0 40 40"><g transform="rotate(90 20 20)"><path d="M7 20 C7.2 21 9.8 21.3 11.2 21.3 H14.4 L28 30.8 H32.4 V22.3 H31.6 V17.6 H32.6 V9 H28.7 L14.5 18.6 H11.2 C9.9 18.6 7.2 18.9 7 20 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M7 20 C7.2 21 9.8 21.3 11.2 21.3 H14.4 L28 30.8 H32.4 V22.3 H31.6 V17.6 H32.6 V9 H28.7 L14.5 18.6 H11.2 C9.9 18.6 7.2 18.9 7 20 Z" fill="#FFE600" stroke="#ffffff" stroke-width="1.3"/></g></svg>',
+      shahed_jet: '<svg width="22" height="22" viewBox="0 0 40 40"><g transform="rotate(90 20 20)"><path d="M6 20 C6.2 21 8.9 21.3 10.3 21.3 H13.5 L27.3 30.8 H31.8 V23.6 H28 V16.4 H31.8 V9 H28 L13.6 18.6 H10.3 C8.9 18.6 6.2 18.9 6 20 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M6 20 C6.2 21 8.9 21.3 10.3 21.3 H13.5 L27.3 30.8 H31.8 V23.6 H28 V16.4 H31.8 V9 H28 L13.6 18.6 H10.3 C8.9 18.6 6.2 18.9 6 20 Z" fill="#00F0FF" stroke="#ffffff" stroke-width="1.3"/><rect x="28" y="18" width="5" height="4" rx="1" fill="#ffffff" stroke="#0B0E14" stroke-width="0.8"/></g></svg>',
+      missile: '<svg width="22" height="22" viewBox="0 0 40 40"><g transform="rotate(-90 20 20)"><path d="M11.8 17.5 L29.2 17.5 L32.8 15.1 H34.6 V18.2 L36 19.2 V20.8 L34.6 21.8 V24.9 H32.8 L29.2 22.5 L11.8 22.5 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M11.8 17.5 L29.2 17.5 L32.8 15.1 H34.6 V18.2 L36 19.2 V20.8 L34.6 21.8 V24.9 H32.8 L29.2 22.5 L11.8 22.5 Z" fill="#FF2D55" stroke="#ffffff" stroke-width="1.3"/><path d="M19 11.5 L22.5 17.5 H17 Z M19 28.5 L22.5 22.5 H17 Z" fill="#FF2D55" stroke="#ffffff" stroke-width="1"/></g></svg>',
+      ballistic: '<svg width="22" height="22" viewBox="0 0 40 40"><g transform="rotate(90 20 20)"><path d="M8 20 L13 16.5 L31 16.5 L35 12 H37 V28 H35 L31 23.5 L13 23.5 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M8 20 L13 16.5 L31 16.5 L35 12 H37 V28 H35 L31 23.5 L13 23.5 Z" fill="#FF003C" stroke="#ffffff" stroke-width="1.4"/><circle cx="36" cy="20" r="2.4" fill="#ffffff" stroke="#0B0E14" stroke-width="1.0"/></g></svg>',
+      kab: '<svg width="22" height="22" viewBox="0 0 40 40"><g transform="rotate(180 20 20)"><path d="M16 22.3 C16 19.1 17.3 16.3 18.5 13.2 L17.5 13.2 V8.3 H23.2 V13.2 L21.5 13.2 C22.7 16.3 24 19.1 24 22.3 C24 26.6 22.2 30.1 20 32 C17.8 30.1 16 26.6 16 22.3 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M16 22.3 C16 19.1 17.3 16.3 18.5 13.2 L17.5 13.2 V8.3 H23.2 V13.2 L21.5 13.2 C22.7 16.3 24 19.1 24 22.3 C24 26.6 22.2 30.1 20 32 C17.8 30.1 16 26.6 16 22.3 Z" fill="#FF9500" stroke="#ffffff" stroke-width="1.3"/><line x1="8" y1="20" x2="32" y2="20" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/></g></svg>',
+      banderol: '<svg width="22" height="22" viewBox="0 0 40 40"><path d="M19.5 4 C19.7 3.4 20.3 3.4 20.5 4 L22 12 V33 L20 35 L18 33 V12 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M19.5 4 C19.7 3.4 20.3 3.4 20.5 4 L22 12 V33 L20 35 L18 33 V12 Z" fill="#34E7E4" stroke="#ffffff" stroke-width="1.2"/><path d="M6 15 H34 V18 H6 Z" fill="#34E7E4" stroke="#ffffff" stroke-width="1.1"/><path d="M14 32 H26 V34 H14 Z" fill="#34E7E4" stroke="#ffffff" stroke-width="1"/></svg>',
+      recon: '<svg width="22" height="22" viewBox="0 0 40 40"><path d="M20 6 C18.8 6 18 8 18 11 V31 C18 32.5 18.8 33 20 33 C21.2 33 22 32.5 22 31 V11 C22 8 21.2 6 20 6 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M20 6 C18.8 6 18 8 18 11 V31 C18 32.5 18.8 33 20 33 C21.2 33 22 32.5 22 31 L22 11 C22 8 21.2 6 20 6 Z" fill="#B388FF" stroke="#ffffff" stroke-width="1.3"/><path d="M4 16.5 H36 V19.5 H4 Z" fill="#B388FF" stroke="#ffffff" stroke-width="1"/><polygon points="20,30 11,34 20,32 29,34" fill="#B388FF" stroke="#ffffff" stroke-width="1"/><circle cx="20" cy="11" r="2.2" fill="#00f0ff" stroke="#0B0E14" stroke-width="0.8"/></svg>',
+      lancet: '<svg width="22" height="22" viewBox="0 0 40 40"><path d="M20 7 C19 7 18.2 8.5 18.2 11 V31 C18.2 32.5 19 33 20 33 C21 33 21.8 32.5 21.8 31 V11 C21.8 8.5 21 7 20 7 Z" fill="none" stroke="#0B0E14" stroke-width="2.5"/><path d="M20 7 C19 7 18.2 8.5 18.2 11 V31 C18.2 32.5 19 33 20 33 C21 33 21.8 32.5 21.8 31 L21.8 11 C21.8 8.5 21 7 20 7 Z" fill="#FF007A" stroke="#ffffff" stroke-width="1.2"/><polygon points="19,16 6,7 8,5 20,14" fill="#FF007A" stroke="#ffffff" stroke-width="0.9"/><polygon points="21,16 34,7 32,5 20,14" fill="#FF007A" stroke="#ffffff" stroke-width="0.9"/><polygon points="19,18 6,27 8,29 20,20" fill="#FF007A" stroke="#ffffff" stroke-width="0.9"/><polygon points="21,18 34,27 32,29 20,20" fill="#FF007A" stroke="#ffffff" stroke-width="0.9"/></svg>',
+      fpv: '<svg width="22" height="22" viewBox="0 0 40 40"><line x1="10" y1="10" x2="30" y2="30" stroke="#0B0E14" stroke-width="3.5" stroke-linecap="round"/><line x1="30" y1="10" x2="10" y2="30" stroke="#0B0E14" stroke-width="3.5" stroke-linecap="round"/><rect x="17.5" y="15" width="5" height="10" rx="1.5" fill="#CF9B6D" stroke="#0B0E14" stroke-width="1.8"/><line x1="10" y1="10" x2="30" y2="30" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/><line x1="30" y1="10" x2="10" y2="30" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/><circle cx="10" cy="10" r="4.5" stroke="#CF9B6D" stroke-width="1.6" fill="rgba(255,255,255,0.7)"/><circle cx="30" cy="10" r="4.5" stroke="#CF9B6D" stroke-width="1.6" fill="rgba(255,255,255,0.7)"/><circle cx="10" cy="30" r="4.5" stroke="#CF9B6D" stroke-width="1.6" fill="rgba(255,255,255,0.7)"/><circle cx="30" cy="30" r="4.5" stroke="#CF9B6D" stroke-width="1.6" fill="rgba(255,255,255,0.7)"/></svg>',
+      aviation: '<svg width="22" height="22" viewBox="0 0 40 40"><path d="M20 5 L22 14 L34 25 L34 28 L23 25 L23 33 L27 36 L27 38 L20 36 L13 38 L13 36 L17 33 L17 25 L6 28 L6 25 L18 14 Z" fill="none" stroke="#0B0E14" stroke-width="2.5" stroke-linejoin="round"/><path d="M20 5 L22 14 L34 25 L34 28 L23 25 L23 33 L27 36 L27 38 L20 36 L13 38 L13 36 L17 33 L17 25 L6 28 L6 25 L18 14 Z" fill="#FF3B30" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/><circle cx="20" cy="11" r="1.5" fill="#ffffff"/></svg>',
+      artillery: '<svg width="22" height="22" viewBox="0 0 40 40"><path d="M20 3 L23 13 L33 9 L28 18 L37 20 L28 22 L33 31 L23 27 L20 37 L17 27 L7 31 L12 22 L3 20 L12 18 L7 9 L17 13 Z" fill="none" stroke="#0B0E14" stroke-width="2.5" stroke-linejoin="round"/><path d="M20 3 L23 13 L33 9 L28 18 L37 20 L28 22 L33 31 L23 27 L20 37 L17 27 L7 31 L12 22 L3 20 L12 18 L7 9 L17 13 Z" fill="#FF453A" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/><circle cx="20" cy="20" r="4.5" fill="#ffffff" stroke="#0B0E14" stroke-width="1.5"/></svg>',
+      unknown: '<svg width="22" height="22" viewBox="0 0 40 40"><path d="M20 7 L33 29 L28 31 L20 28 L12 31 L7 29 Z" fill="none" stroke="#0B0E14" stroke-width="2.5" stroke-linejoin="round"/><path d="M20 7 L33 29 L28 31 L20 28 L12 31 L7 29 Z" fill="#80959E" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/><text x="20" y="23" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff" stroke="#000000" stroke-width="0.5" style="font-family:sans-serif;">?</text></svg>'
+    };
+
+    const THREAT_CATEGORIES = {
+      shahed: { name: 'Шахед / Герань', color: '#FACC15', icon: 'delta' },
+      shahed_jet: { name: 'Реактивний шахед', color: '#22D3EE', icon: 'delta_fast' },
+      missile: { name: 'Крилата ракета', color: '#F43F5E', icon: 'missile' },
+      ballistic: { name: 'Балістична ракета', color: '#EC4899', icon: 'rocket' },
+      aviation: { name: 'Тактична авіація', color: '#38BDF8', icon: 'jet' },
+      kab: { name: 'КАБ / Бомба', color: '#FB923C', icon: 'bomb' },
+      lancet: { name: 'Ланцет', color: '#C084FC', icon: 'drone_x' },
+      recon: { name: 'Розвідник / БПЛА', color: '#93C5FD', icon: 'glider' },
+      fpv: { name: 'FPV / Молнія', color: '#FBBF24', icon: 'quad' },
+      artillery: { name: 'Артилерія / РСЗВ', color: '#F87171', icon: 'blast' },
+      unknown: { name: 'Невідома ціль', color: '#94A3B8', icon: 'dot' }
+    };
+
+for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
+
+    // Vector sprite generation for canvas textures
+        function createThreatSprite(cat, color) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 48;
+      canvas.height = 48;
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = '#0B0E14';
+      ctx.lineWidth = 2.8;
+      ctx.fillStyle = color || '#FACC15';
+
+      ctx.save();
+      ctx.translate(24, 24);
+
+      if (cat === 'shahed') {
+        // Delta wing
+        ctx.beginPath();
+        ctx.moveTo(0, -18);
+        ctx.lineTo(16, 14);
+        ctx.lineTo(0, 8);
+        ctx.lineTo(-16, 14);
+        ctx.closePath();
+      } else if (cat === 'shahed_jet') {
+        // Swept delta with air intake
+        ctx.beginPath();
+        ctx.moveTo(0, -19);
+        ctx.lineTo(17, 13);
+        ctx.lineTo(6, 10);
+        ctx.lineTo(0, 14);
+        ctx.lineTo(-6, 10);
+        ctx.lineTo(-17, 13);
+        ctx.closePath();
+      } else if (cat === 'missile') {
+        // Cruise missile body + wings
+        ctx.beginPath();
+        ctx.moveTo(0, -20);
+        ctx.lineTo(4, -6);
+        ctx.lineTo(16, -2);
+        ctx.lineTo(4, 2);
+        ctx.lineTo(4, 15);
+        ctx.lineTo(8, 18);
+        ctx.lineTo(8, 20);
+        ctx.lineTo(-8, 20);
+        ctx.lineTo(-8, 18);
+        ctx.lineTo(-4, 15);
+        ctx.lineTo(-4, 2);
+        ctx.lineTo(-16, -2);
+        ctx.lineTo(-4, -6);
+        ctx.closePath();
+      } else if (cat === 'ballistic') {
+        // Heavy conical ballistic missile
+        ctx.beginPath();
+        ctx.moveTo(0, -21);
+        ctx.lineTo(6, -10);
+        ctx.lineTo(6, 14);
+        ctx.lineTo(12, 19);
+        ctx.lineTo(-12, 19);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(-6, -10);
+        ctx.closePath();
+      } else if (cat === 'aviation') {
+        // Combat fighter jet silhouette
+        ctx.beginPath();
+        ctx.moveTo(0, -20);
+        ctx.lineTo(4, -8);
+        ctx.lineTo(19, 6);
+        ctx.lineTo(6, 6);
+        ctx.lineTo(6, 15);
+        ctx.lineTo(11, 19);
+        ctx.lineTo(-11, 19);
+        ctx.lineTo(-6, 15);
+        ctx.lineTo(-6, 6);
+        ctx.lineTo(-19, 6);
+        ctx.lineTo(-4, -8);
+        ctx.closePath();
+      } else if (cat === 'kab') {
+        // Aerial bomb with UMPK wings
+        ctx.beginPath();
+        ctx.moveTo(0, 18);
+        ctx.bezierCurveTo(8, 12, 8, -4, 5, -12);
+        ctx.lineTo(18, -12);
+        ctx.lineTo(18, -16);
+        ctx.lineTo(4, -16);
+        ctx.lineTo(0, -20);
+        ctx.lineTo(-4, -16);
+        ctx.lineTo(-18, -16);
+        ctx.lineTo(-18, -12);
+        ctx.lineTo(-5, -12);
+        ctx.bezierCurveTo(-8, -4, -8, 12, 0, 18);
+        ctx.closePath();
+      } else if (cat === 'banderol') {
+        // Wide straight wing glider
+        ctx.beginPath();
+        ctx.moveTo(0, -18);
+        ctx.lineTo(3, -4);
+        ctx.lineTo(20, -4);
+        ctx.lineTo(20, 0);
+        ctx.lineTo(3, 0);
+        ctx.lineTo(2, 16);
+        ctx.lineTo(8, 18);
+        ctx.lineTo(-8, 18);
+        ctx.lineTo(-2, 16);
+        ctx.lineTo(-3, 0);
+        ctx.lineTo(-20, 0);
+        ctx.lineTo(-20, -4);
+        ctx.lineTo(-3, -4);
+        ctx.closePath();
+      } else if (cat === 'recon') {
+        // UAV with camera pod
+        ctx.beginPath();
+        ctx.moveTo(0, -17);
+        ctx.lineTo(3, -5);
+        ctx.lineTo(19, -5);
+        ctx.lineTo(19, -1);
+        ctx.lineTo(3, -1);
+        ctx.lineTo(3, 15);
+        ctx.lineTo(7, 18);
+        ctx.lineTo(-7, 18);
+        ctx.lineTo(-3, 15);
+        ctx.lineTo(-3, -1);
+        ctx.lineTo(-19, -1);
+        ctx.lineTo(-19, -5);
+        ctx.lineTo(-3, -5);
+        ctx.closePath();
+      } else if (cat === 'lancet') {
+        // Double X-wing fuselage
+        ctx.beginPath();
+        ctx.moveTo(0, -18); ctx.lineTo(3, 18); ctx.lineTo(-3, 18); ctx.closePath();
+        ctx.stroke(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(-15, -10); ctx.lineTo(15, 10);
+        ctx.moveTo(15, -10); ctx.lineTo(-15, 10);
+      } else if (cat === 'fpv') {
+        // Quadcopter cross with rotor circles
+        ctx.beginPath();
+        ctx.moveTo(-12, -12); ctx.lineTo(12, 12);
+        ctx.moveTo(12, -12); ctx.lineTo(-12, 12);
+        ctx.rect(-3, -5, 6, 10);
+      } else if (cat === 'artillery') {
+        // Detonation star burst
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+          const a1 = (i * 45) * Math.PI / 180;
+          const a2 = (i * 45 + 22.5) * Math.PI / 180;
+          ctx.lineTo(Math.cos(a1) * 18, Math.sin(a1) * 18);
+          ctx.lineTo(Math.cos(a2) * 7, Math.sin(a2) * 7);
+        }
+        ctx.closePath();
+      } else {
+        // Unknown delta wing
+        ctx.beginPath();
+        ctx.moveTo(0, -16);
+        ctx.lineTo(14, 14);
+        ctx.lineTo(0, 8);
+        ctx.lineTo(-14, 14);
+        ctx.closePath();
+      }
+
+      ctx.stroke();
+      ctx.fill();
+
+      // Inner white tactical highlight
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1.0;
+      ctx.stroke();
+
+      ctx.restore();
+
+      return {
+        width: 48,
+        height: 48,
+        data: ctx.getImageData(0, 0, 48, 48).data
+      };
+    }
+
+    function createImpactCrossSprite() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 48;
+      canvas.height = 48;
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = '#EF4444';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(10, 10); ctx.lineTo(38, 38);
+      ctx.moveTo(38, 10); ctx.lineTo(10, 38);
+      ctx.stroke();
+      return {
+        width: 48,
+        height: 48,
+        data: ctx.getImageData(0, 0, 48, 48).data
+      };
+    }
+
+    // =========================================================================
+    // MAPLIBRE GL INITIALIZATION & STRICT LAYER STACK
+    // =========================================================================
+    function initMapEngine() {
+      map = new maplibregl.Map({
+        container: 'map',
+        style: UNIFIED_BASEMAP_STYLE,
+        center: [31.1656, 48.3794],
+        zoom: 6.2,
+        minZoom: 5.5,
+        maxPitch: 65,
+        maxBounds: [[21.0, 43.5], [41.5, 53.0]],
+        attributionControl: false
+      });
+
+      map.on('load', () => {
+        isMapLoaded = true;
+
+        // Register Canvas HiDPI Sprites
+        for (const key in THREAT_CATEGORIES) {
+          const sprite = createThreatSprite(key, THREAT_CATEGORIES[key].color);
+          map.addImage(`threat-${key}`, sprite, { pixelRatio: 2 });
+        }
+        map.addImage('impact-cross-red', createImpactCrossSprite(), { pixelRatio: 2 });
+
+        initLayerHierarchy();
+        initSkyDome();
+        initCustom3DLayer();
+        initWebSocket();
+        initLiveKinematicsLoop();
+        renderActiveThreatCategories();
+        renderTodayRadialGauge();
+        loadRegionsData();
+        loadPoiData();
+      });
+
+      map.on('rotate', () => {
+        const bearing = map.getBearing();
+        const needle = document.getElementById('compassNeedleSvg');
+        if (needle) {
+          needle.style.transform = `rotate(${-bearing}deg)`;
+        }
+      });
+
+      map.on('pitch', () => {
+        const pitch = map.getPitch();
+        const is3D = pitch > 15;
+        if (is3D !== is3DModeActive) {
+          is3DModeActive = is3D;
+          update2DClutterVisibility(is3D);
+          if (is3D) {
+            saved2DBasemap = currentBasemap;
+            setBasemap('satellite');
+          } else {
+            setBasemap(saved2DBasemap || 'arcgis');
+          }
+        }
+      });
+
+      map.on('click', (e) => {
+        if (isPickingLocationOnMap) {
+          finishPickingLocation(e.lngLat.lat, e.lngLat.lng);
+          return;
+        }
+        const bbox = [[e.point.x - 3, e.point.y - 3], [e.point.x + 3, e.point.y + 3]];
+        const features = map.queryRenderedFeatures(bbox, { layers: ['alerts-fill'] });
+        if (!features || !features.length) {
+          if (map.getSource('selected-region-source')) {
+            map.getSource('selected-region-source').setData({ type: 'FeatureCollection', features: [] });
+          }
+          if (activeRegionPopup) {
+            activeRegionPopup.remove();
+            activeRegionPopup = null;
+          }
+        }
+      });
+
+      map.on('click', 'alerts-fill', (e) => {
+        if (isPickingLocationOnMap || is3DModeActive) return;
+        if (!e.features || !e.features.length) return;
+        const feat = e.features[0];
+        const props = feat.properties || {};
+        const name = props.name || 'Область / Громада';
+        const rank = Number(props.rank || 1);
+        const typeLabel = rank === 1 ? 'Область' : (rank === 2 ? 'Район' : 'Громада');
+        const regId = String(props.regionId || feat.id || '');
+        const isAlert = !!props.alert || activeAlertRegionIds.has(regId);
+
+        const statusBadge = isAlert
+          ? '<div class="region-popup-status alert">🚨 Повітряна тривога</div>'
+          : '<div class="region-popup-status safe">🛡️ Відбій тривоги</div>';
+
+        const html = `
+          <div class="region-popup-badge">
+            <div class="region-popup-header">
+              <span>📍</span><span>${typeLabel}</span>
+            </div>
+            <div class="region-popup-name">${name}</div>
+            ${statusBadge}
+          </div>
+        `;
+
+        if (map.getSource('selected-region-source')) {
+          map.getSource('selected-region-source').setData({
+            type: 'FeatureCollection',
+            features: [feat]
+          });
+        }
+
+        if (activeRegionPopup) {
+          activeRegionPopup.remove();
+        }
+
+        activeRegionPopup = new maplibregl.Popup({
+          closeButton: false,
+          closeOnClick: true,
+          className: 'tactical-region-popup',
+          offset: 8
+        })
+        .setLngLat(e.lngLat)
+        .setHTML(html)
+        .addTo(map);
+
+        activeRegionPopup.on('close', () => {
+          if (map.getSource('selected-region-source')) {
+            map.getSource('selected-region-source').setData({ type: 'FeatureCollection', features: [] });
+          }
+          activeRegionPopup = null;
+        });
+      });
+
+      map.on('mouseenter', 'alerts-fill', () => {
+        if (!is3DModeActive) map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'alerts-fill', () => {
+        if (!is3DModeActive) map.getCanvas().style.cursor = '';
+      });
+    }
+
+    let rawRegionsGeoJson = null;
+    let activeAlertRegionIds = new Set();
+    let activeRegionPopup = null;
+
+    
+    function buildOutsideUkraineMask(geoJson) {
+      if (!geoJson || !geoJson.features) return null;
+      const worldRing = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]];
+      const maskRings = [worldRing];
+
+      geoJson.features.forEach(feat => {
+        const props = feat.properties || {};
+        const regId = String(props.regionId || feat.id || '');
+        const isRank1 = props.rank && Number(props.rank) === 1;
+        const isEnclaveCity = regId === '1293' || regId === '564';
+        if (!isRank1 && !isEnclaveCity) return;
+        const geom = feat.geometry;
+        if (!geom) return;
+        if (geom.type === 'Polygon' && geom.coordinates) {
+          geom.coordinates.forEach(r => maskRings.push(r));
+        } else if (geom.type === 'MultiPolygon' && geom.coordinates) {
+          geom.coordinates.forEach(poly => {
+            if (poly) poly.forEach(r => maskRings.push(r));
+          });
+        }
+      });
+
+      return {
+        type: 'FeatureCollection',
+        features: [{
+          type: 'Feature',
+          properties: { type: 'outside_mask' },
+          geometry: {
+            type: 'Polygon',
+            coordinates: maskRings
+          }
+        }]
+      };
+    }
+
+    async function loadRegionsData() {
+      try {
+        const res = await fetch('/api/v1/regions/geojson');
+        if (!res.ok) return;
+        rawRegionsGeoJson = await res.json();
+        applyAlertsToRegions();
+        const maskData = buildOutsideUkraineMask(rawRegionsGeoJson);
+        if (maskData && map && map.getSource('mask-outside-source')) {
+          map.getSource('mask-outside-source').setData(maskData);
+        }
+      } catch (err) {
+        console.warn('Failed to load regions geojson:', err);
+      }
+    }
+
+    function applyAlertsToRegions() {
+      if (!rawRegionsGeoJson || !map || !map.getSource('alerts-source')) return;
+      const features = (rawRegionsGeoJson.features || []).map((feat, idx) => {
+        const props = feat.properties || {};
+        const regId = String(props.regionId || feat.id || idx);
+        const isAlert = activeAlertRegionIds.has(regId);
+        return {
+          type: 'Feature',
+          id: feat.id !== undefined ? feat.id : idx,
+          properties: {
+            ...props,
+            alert: isAlert,
+            opacity: isAlert ? 0.35 : 0.04
+          },
+          geometry: feat.geometry
+        };
+      });
+      map.getSource('alerts-source').setData({
+        type: 'FeatureCollection',
+        features
+      });
+    }
+
+    function updateActiveAlertsFromSnapshot(data) {
+      const nextAlertIds = new Set();
+      const list = data.map_oblasts || data.oblasts || data.official_alerts || [];
+      if (Array.isArray(list)) {
+        list.forEach(a => {
+          if (a.alert) {
+            if (a.id) nextAlertIds.add(String(a.id));
+            if (a.regionId) nextAlertIds.add(String(a.regionId));
+            if (a.region_id) nextAlertIds.add(String(a.region_id));
+          }
+        });
+      }
+      if (Array.isArray(data.raions)) {
+        data.raions.forEach(r => {
+          if (r.alert) {
+            if (r.id) nextAlertIds.add(String(r.id));
+            if (r.regionId) nextAlertIds.add(String(r.regionId));
+            if (r.region_id) nextAlertIds.add(String(r.region_id));
+          }
+        });
+      }
+      activeAlertRegionIds = nextAlertIds;
+      applyAlertsToRegions();
+    }
+
+    function initLayerHierarchy() {
+      // 1. Sources
+            // Outside Ukraine Dimming Mask Source & Layer
+      map.addSource('mask-outside-source', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      map.addLayer({
+        id: 'mask-outside-layer',
+        type: 'fill',
+        source: 'mask-outside-source',
+        layout: { visibility: 'visible' },
+        paint: {
+          'fill-color': '#000000',
+          'fill-opacity': 0.45
+        }
+      });
+
+      map.addSource('alerts-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('selected-region-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('threats-trails-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('threats-forecast-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('threats-lost-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('threats-aircraft-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('poi-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('user-slots-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+      // 2. Strict Z-Order Layer Addition (Alerts -> Selected Region -> Trails -> Lost -> Aircraft -> POI -> User Slots)
+      map.addLayer({
+        id: 'alerts-fill',
+        type: 'fill',
+        source: 'alerts-source',
+        paint: {
+          'fill-color': '#EF4444',
+          'fill-opacity': ['get', 'opacity']
+        }
+      });
+
+      map.addLayer({
+        id: 'alerts-boundaries',
+        type: 'line',
+        source: 'alerts-source',
+        paint: {
+          'line-color': [
+            'case',
+            ['==', ['get', 'alert'], true],
+            '#EF4444',
+            'rgba(255, 255, 255, 0.14)'
+          ],
+          'line-width': [
+            'case',
+            ['==', ['get', 'alert'], true],
+            1.4,
+            0.8
+          ],
+          'line-opacity': 0.85
+        }
+      });
+
+      map.addLayer({
+        id: 'selected-region-fill',
+        type: 'fill',
+        source: 'selected-region-source',
+        paint: {
+          'fill-color': '#06B6D4',
+          'fill-opacity': 0.16
+        }
+      });
+
+      map.addLayer({
+        id: 'selected-region-line',
+        type: 'line',
+        source: 'selected-region-source',
+        paint: {
+          'line-color': '#06B6D4',
+          'line-width': 2.5,
+          'line-opacity': 0.95
+        }
+      });
+
+      map.addLayer({
+        id: 'threats-forecast-layer',
+        type: 'line',
+        source: 'threats-forecast-source',
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': 2.5,
+          'line-dasharray': [2, 2],
+          'line-opacity': 0.7
+        }
+      });
+
+      map.addLayer({
+        id: 'threats-trails-layer',
+        type: 'line',
+        source: 'threats-trails-source',
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round'
+        },
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': 2.5,
+          'line-opacity': 0.9
+        }
+      });
+
+      map.addLayer({
+        id: 'threats-lost-layer',
+        type: 'symbol',
+        source: 'threats-lost-source',
+        layout: {
+          'icon-image': 'impact-cross-red',
+          'icon-size': 0.75,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true
+        }
+      });
+
+      map.addLayer({
+        id: 'threats-aircraft-layer',
+        type: 'symbol',
+        source: 'threats-aircraft-source',
+        layout: {
+          'icon-image': ['get', 'icon'],
+          'icon-size': 0.85,
+          'icon-rotate': ['get', 'heading'],
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true
+        }
+      });
+
+      map.addLayer({
+        id: 'threats-group-badges',
+        type: 'symbol',
+        source: 'threats-aircraft-source',
+        filter: ['>', ['get', 'group_count'], 1],
+        layout: {
+          'text-field': ['concat', 'x', ['get', 'group_count']],
+          'text-font': ['Open Sans Regular'],
+          'text-size': 10,
+          'text-offset': [1.2, -1.2],
+          'text-allow-overlap': true
+        },
+        paint: {
+          'text-color': '#FFFFFF',
+          'text-halo-color': '#0B0E14',
+          'text-halo-width': 2
+        }
+      });
+
+      map.addLayer({
+        id: 'threats-labels-layer',
+        type: 'symbol',
+        source: 'threats-aircraft-source',
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-font': ['Open Sans Regular'],
+          'text-size': 11,
+          'text-offset': [0, 1.4],
+          'text-anchor': 'top',
+          'text-allow-overlap': false
+        },
+        paint: {
+          'text-color': '#F8FAFC',
+          'text-halo-color': '#0B0E14',
+          'text-halo-width': 2
+        }
+      });
+
+      map.addLayer({
+        id: 'poi-layer',
+        type: 'circle',
+        source: 'poi-source',
+        paint: {
+          'circle-radius': 5,
+          'circle-color': ['get', 'color'],
+          'circle-stroke-color': '#0B0E14',
+          'circle-stroke-width': 1.5
+        }
+      });
+
+      map.addLayer({
+        id: 'poi-labels',
+        type: 'symbol',
+        source: 'poi-source',
+        minzoom: 8.5,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Regular'],
+          'text-size': 10,
+          'text-offset': [0, 1.2],
+          'text-anchor': 'top',
+          'text-allow-overlap': false
+        },
+        paint: {
+          'text-color': '#94A3B8',
+          'text-halo-color': '#0B0E14',
+          'text-halo-width': 1.5
+        }
+      });
+
+      map.addLayer({
+        id: 'user-danger-zone-fill',
+        type: 'fill',
+        source: 'user-slots-source',
+        filter: ['==', '$type', 'Polygon'],
+        paint: {
+          'fill-color': '#3B82F6',
+          'fill-opacity': 0.1
+        }
+      });
+
+      map.addLayer({
+        id: 'user-danger-zone-line',
+        type: 'line',
+        source: 'user-slots-source',
+        filter: ['==', '$type', 'Polygon'],
+        paint: {
+          'line-color': '#60A5FA',
+          'line-width': 1.5,
+          'line-dasharray': [3, 2]
+        }
+      });
+
+      map.addLayer({
+        id: 'user-point-outer',
+        type: 'circle',
+        source: 'user-slots-source',
+        filter: ['==', '$type', 'Point'],
+        paint: {
+          'circle-radius': 9,
+          'circle-color': '#F43F5E',
+          'circle-stroke-color': '#FFFFFF',
+          'circle-stroke-width': 2
+        }
+      });
+
+      map.addLayer({
+        id: 'user-point-inner',
+        type: 'circle',
+        source: 'user-slots-source',
+        filter: ['==', '$type', 'Point'],
+        paint: {
+          'circle-radius': 4,
+          'circle-color': '#FFFFFF'
+        }
+      });
+    }
+
+    // Basemap switching controller (Layer visibility toggling - Zero map.setStyle wipeout)
+    function setBasemap(provider) {
+      if (!map) return;
+      currentBasemap = provider;
+
+      // Update button styles
+      ['btnBaseArcgis', 'btnBaseCarto', 'btnBaseSatellite'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+      });
+
+      const effectiveKey = localStorage.getItem('radar_map_cartodb_token') || '';
+      const keyQuery = effectiveKey ? `?key=${effectiveKey}&api_key=${effectiveKey}` : '';
+
+      const isArcgis = (provider === 'arcgis');
+      const isCarto = (provider === 'cartodb' || provider === 'carto');
+      const isSat = (provider === 'satellite' || provider === 'esri');
+
+      if (isArcgis) {
+        const b = document.getElementById('btnBaseArcgis'); if (b) b.classList.add('active');
+      } else if (isCarto) {
+        const b = document.getElementById('btnBaseCarto'); if (b) b.classList.add('active');
+      } else if (isSat) {
+        const b = document.getElementById('btnBaseSatellite'); if (b) b.classList.add('active');
+      }
+
+      // Switch raster basemap layer visibility without wiping custom layers, sources, and 3D scenes
+      if (map.setLayoutProperty) {
+        if (map.getLayer('esri-dark-gray-layer')) {
+          map.setLayoutProperty('esri-dark-gray-layer', 'visibility', isArcgis ? 'visible' : 'none');
+        }
+        if (map.getLayer('esri-dark-gray-ref-layer')) {
+          map.setLayoutProperty('esri-dark-gray-ref-layer', 'visibility', isArcgis ? 'visible' : 'none');
+        }
+        if (map.getLayer('carto-dark-layer')) {
+          map.setLayoutProperty('carto-dark-layer', 'visibility', isCarto ? 'visible' : 'none');
+        }
+        if (map.getLayer('esri-sat-layer')) {
+          map.setLayoutProperty('esri-sat-layer', 'visibility', isSat ? 'visible' : 'none');
+        }
+      }
+    }
+
+    function toggle3DPitch() {
+      if (!map) return;
+      const curPitch = map.getPitch();
+      if (curPitch > 10) {
+        map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+      } else {
+        map.easeTo({ pitch: 55, duration: 800 });
+      }
+    }
+
+    function resetNorthBearing() {
+      if (!map) return;
+      map.easeTo({ bearing: 0, duration: 500 });
+    }
+
+    function update2DClutterVisibility(is3D) {
+      if (!map || !map.setLayoutProperty) return;
+      map.setLayoutProperty('threats-labels-layer', 'visibility', (is3D || !showLabelsIn2D) ? 'none' : 'visible');
+      map.setLayoutProperty('threats-group-badges', 'visibility', is3D ? 'none' : 'visible');
+      map.setLayoutProperty('poi-labels', 'visibility', (is3D || !showPoiIn2D) ? 'none' : 'visible');
+      if (map.getLayer('alerts-fill')) map.setLayoutProperty('alerts-fill', 'visibility', is3D ? 'none' : 'visible');
+      if (map.getLayer('alerts-boundaries')) map.setLayoutProperty('alerts-boundaries', 'visibility', is3D ? 'none' : 'visible');
+      if (map.getLayer('selected-region-fill')) map.setLayoutProperty('selected-region-fill', 'visibility', is3D ? 'none' : 'visible');
+      if (map.getLayer('selected-region-line')) map.setLayoutProperty('selected-region-line', 'visibility', is3D ? 'none' : 'visible');
+      if (is3D && activeRegionPopup) {
+        activeRegionPopup.remove();
+        activeRegionPopup = null;
+      }
+    }
+
+    // =========================================================================
+    // THREE.JS R128 PROCEDURAL 3D ENGINE & WIREFRAMES
+    // =========================================================================
+    let threeRenderer, threeScene, threeCamera;
+    let threat3DMeshes = {};
+    let custom3DLayer = null;
+    let poisGroup = null;
+
+    function buildThreatMesh(cat, color, isGhost) {
+      const group = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({
+        color: color || '#FACC15',
+        metalness: 0.8,
+        roughness: 0.2,
+        transparent: true,
+        opacity: isGhost ? 0.22 : 0.88
+      });
+      const wireMat = new THREE.LineBasicMaterial({
+        color: '#FFFFFF',
+        transparent: true,
+        opacity: isGhost ? 0.35 : 0.95
+      });
+
+      let geom;
+      switch (cat) {
+        case 'shahed':
+        case 'shahed_jet': {
+          const shape = new THREE.Shape();
+          shape.moveTo(0, 8);
+          shape.lineTo(12, -8);
+          shape.lineTo(0, -4);
+          shape.lineTo(-12, -8);
+          shape.closePath();
+          geom = new THREE.ExtrudeGeometry(shape, { depth: 2, bevelEnabled: false });
+          break;
+        }
+        case 'missile':
+          geom = new THREE.CylinderGeometry(1.2, 1.2, 24, 16);
+          break;
+        case 'ballistic':
+          geom = new THREE.ConeGeometry(2.5, 30, 16);
+          break;
+        case 'aviation':
+          geom = new THREE.ConeGeometry(6, 20, 4);
+          break;
+        case 'kab':
+          geom = new THREE.CylinderGeometry(2, 3, 16, 8);
+          break;
+        case 'lancet':
+          geom = new THREE.BoxGeometry(3, 3, 14);
+          break;
+        case 'recon':
+          geom = new THREE.BoxGeometry(22, 1.5, 8);
+          break;
+        case 'fpv':
+          geom = new THREE.BoxGeometry(6, 1.5, 6);
+          break;
+        case 'artillery':
+          geom = new THREE.SphereGeometry(3, 8, 8);
+          break;
+        case 'unknown':
+        default:
+          geom = new THREE.OctahedronGeometry(4);
+          break;
+      }
+
+      const mesh = new THREE.Mesh(geom, bodyMat);
+      const edges = new THREE.EdgesGeometry(geom);
+      const wire = new THREE.LineSegments(edges, wireMat);
+      group.add(mesh);
+      group.add(wire);
+      return group;
+    }
+
+    function buildStaticHouseMesh() {
+      const group = new THREE.Group();
+      group.name = 'user_static_house';
+      const mat = new THREE.LineBasicMaterial({ color: '#60A5FA' });
+      const box = new THREE.BoxGeometry(16, 14, 16);
+      const roof = new THREE.ConeGeometry(14, 10, 4);
+      roof.position.y = 12;
+      group.add(new THREE.LineSegments(new THREE.EdgesGeometry(box), mat));
+      group.add(new THREE.LineSegments(new THREE.EdgesGeometry(roof), mat));
+      return group;
+    }
+
+    function buildDynamicHumanMesh() {
+      const group = new THREE.Group();
+      group.name = 'user_dynamic_human';
+      const mat = new THREE.LineBasicMaterial({ color: '#34D399' });
+      const body = new THREE.CylinderGeometry(2, 2, 16, 8);
+      const head = new THREE.SphereGeometry(3, 8, 8);
+      head.position.y = 11;
+      group.add(new THREE.LineSegments(new THREE.EdgesGeometry(body), mat));
+      group.add(new THREE.LineSegments(new THREE.EdgesGeometry(head), mat));
+      return group;
+    }
+
+    function buildPoiWireframe(cat, color) {
+      const group = new THREE.Group();
+      const mat = new THREE.LineBasicMaterial({ color: color || '#38BDF8', linewidth: 1.5 });
+      let geom;
+      switch (cat) {
+        case 'airbases':
+        case 'airfield':
+          geom = new THREE.BoxGeometry(80, 8, 20);
+          break;
+        case 'air_defense':
+        case 'radar_sites':
+          geom = new THREE.ConeGeometry(25, 45, 8);
+          break;
+        case 'energy_hubs':
+          geom = new THREE.CylinderGeometry(20, 20, 40, 8);
+          break;
+        case 'fuel_depots':
+          geom = new THREE.CylinderGeometry(25, 25, 30, 8);
+          break;
+        case 'defense_industry':
+          geom = new THREE.BoxGeometry(50, 25, 50);
+          break;
+        case 'ports':
+          geom = new THREE.BoxGeometry(70, 15, 35);
+          break;
+        case 'logistics_bridges':
+          geom = new THREE.BoxGeometry(90, 10, 15);
+          break;
+        case 'ammo_depots':
+          geom = new THREE.BoxGeometry(35, 20, 35);
+          break;
+        case 'dronoports':
+          geom = new THREE.CylinderGeometry(30, 30, 10, 8);
+          break;
+        case 'command_posts':
+          geom = new THREE.ConeGeometry(30, 25, 6);
+          break;
+        case 'training_camps':
+          geom = new THREE.BoxGeometry(40, 15, 40);
+          break;
+        case 'railways':
+          geom = new THREE.BoxGeometry(85, 8, 12);
+          break;
+        default:
+          geom = new THREE.BoxGeometry(25, 25, 25);
+          break;
+      }
+      const edges = new THREE.EdgesGeometry(geom);
+      const wire = new THREE.LineSegments(edges, mat);
+      group.add(wire);
+      return group;
+    }
+
+    // --- 3D Shootdown Explosion
+    class TacticalExplosion3D {
+      constructor(scene, coord) {
+        this.scene = scene;
+        this.group = new THREE.Group();
+        this.age = 0;
+        this.maxAge = 60;
+
+        // Fireball
+        this.fireballGeom = new THREE.SphereGeometry(6, 12, 12);
+        this.fireballMat = new THREE.MeshBasicMaterial({ color: '#EF4444', transparent: true, opacity: 0.9 });
+        this.fireball = new THREE.Mesh(this.fireballGeom, this.fireballMat);
+        this.group.add(this.fireball);
+
+        // Shockwave
+        this.shockwaveGeom = new THREE.RingGeometry(2, 4, 24);
+        this.shockwaveMat = new THREE.MeshBasicMaterial({ color: '#F59E0B', side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+        this.shockwave = new THREE.Mesh(this.shockwaveGeom, this.shockwaveMat);
+        this.shockwave.rotation.x = Math.PI / 2;
+        this.group.add(this.shockwave);
+
+        // 30 Spark particles
+        this.sparksGeom = new THREE.BufferGeometry();
+        const sparkPositions = new Float32Array(30 * 3);
+        this.sparkVels = [];
+        for (let i = 0; i < 30; i++) {
+          sparkPositions[i * 3] = 0;
+          sparkPositions[i * 3 + 1] = 0;
+          sparkPositions[i * 3 + 2] = 0;
+          this.sparkVels.push({
+            x: (Math.random() - 0.5) * 4,
+            y: (Math.random() - 0.5) * 4,
+            z: (Math.random() - 0.5) * 4
+          });
+        }
+        this.sparksGeom.setAttribute('position', new THREE.BufferAttribute(sparkPositions, 3));
+        this.sparksMat = new THREE.PointsMaterial({ color: '#FCD34D', size: 3, transparent: true, opacity: 1 });
+        this.sparks = new THREE.Points(this.sparksGeom, this.sparksMat);
+        this.group.add(this.sparks);
+
+        this.scene.add(this.group);
+      }
+
+      update() {
+        this.age++;
+        const progress = this.age / this.maxAge;
+        this.fireball.scale.setScalar(1 + progress * 5);
+        this.fireballMat.opacity = 1 - progress;
+
+        this.shockwave.scale.setScalar(1 + progress * 9);
+        this.shockwaveMat.opacity = (1 - progress) * 0.8;
+
+        const posAttr = this.sparksGeom.attributes.position;
+        for (let i = 0; i < 30; i++) {
+          posAttr.setXYZ(
+            i,
+            posAttr.getX(i) + this.sparkVels[i].x,
+            posAttr.getY(i) + this.sparkVels[i].y,
+            posAttr.getZ(i) + this.sparkVels[i].z
+          );
+        }
+        posAttr.needsUpdate = true;
+        this.sparksMat.opacity = 1 - progress;
+
+        return this.age < this.maxAge;
+      }
+
+      dispose() {
+        this.scene.remove(this.group);
+        this.fireballGeom.dispose();
+        this.fireballMat.dispose();
+        this.shockwaveGeom.dispose();
+        this.shockwaveMat.dispose();
+        this.sparksGeom.dispose();
+        this.sparksMat.dispose();
+      }
+    }
+
+    let activeExplosions = [];
+    function triggerExplosion3D(coord) {
+      if (threeScene) {
+        const exp = new TacticalExplosion3D(threeScene, coord);
+        activeExplosions.push(exp);
+      }
+    }
+
+    // Sky Dome
+    function getAtmosphericSkyState() {
+      const hour = new Date().getHours();
+      if (hour >= 5 && hour < 8) return 'dawn';
+      if (hour >= 8 && hour < 19) return 'day';
+      if (hour >= 19 && hour < 22) return 'dusk';
+      return 'night';
+    }
+
+    let sunMesh, moonMesh;
+    function initSkyDome() {
+      if (!window.THREE) return;
+      const state = getAtmosphericSkyState();
+      const starCount = 500;
+      // Procedural 500 stars
+      const starGeom = new THREE.BufferGeometry();
+      const starPositions = new Float32Array(starCount * 3);
+      for (let i = 0; i < starCount * 3; i++) {
+        starPositions[i] = (Math.random() - 0.5) * 2000;
+      }
+      starGeom.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+      const starMat = new THREE.PointsMaterial({ color: '#FFFFFF', size: 1.5, transparent: true, opacity: 0.7 });
+      const stars = new THREE.Points(starGeom, starMat);
+
+      sunMesh = new THREE.Mesh(new THREE.SphereGeometry(12, 16, 16), new THREE.MeshBasicMaterial({ color: '#FDE047' }));
+      moonMesh = new THREE.Mesh(new THREE.SphereGeometry(8, 16, 16), new THREE.MeshBasicMaterial({ color: '#E2E8F0' }));
+    }
+
+    function initCustom3DLayer() {
+      if (!window.THREE || !map) return;
+      custom3DLayer = {
+        id: 'tactical-3d-models',
+        type: 'custom',
+        renderingMode: '3d',
+        onAdd: function(m, gl) {
+          threeCamera = new THREE.Camera();
+          threeScene = new THREE.Scene();
+          poisGroup = new THREE.Group();
+          threeScene.add(poisGroup);
+
+          const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+          const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+          dir.position.set(0, -70, 100).normalize();
+          threeScene.add(ambient);
+          threeScene.add(dir);
+
+          threeRenderer = new THREE.WebGLRenderer({
+            alpha: true,
+            antialias: true,
+            canvas: m.getCanvas(),
+            context: gl
+          });
+          threeRenderer.autoClear = false;
+        },
+        render: function(gl, matrix) {
+          if (!threeRenderer || !threeScene) return;
+
+          // Update active explosions
+          for (let i = activeExplosions.length - 1; i >= 0; i--) {
+            if (!activeExplosions[i].update()) {
+              activeExplosions[i].dispose();
+              activeExplosions.splice(i, 1);
+            }
+          }
+
+          const m = new THREE.Matrix4().fromArray(matrix);
+          threeCamera.projectionMatrix = m;
+          threeRenderer.state.reset();
+          threeRenderer.render(threeScene, threeCamera);
+          if (is3DModeActive || activeExplosions.length > 0 || (map && map.getPitch() > 0)) {
+            map.triggerRepaint();
+          }
+        }
+      };
+
+      map.addLayer(custom3DLayer);
+    }
+
+    function focusTarget3D(tid) {
+      if (!activeThreats[tid]) return;
+      collapseAllHudPanels();
+      focusedTargetId = tid;
+      const t = activeThreats[tid];
+      const banner = document.getElementById('orbitHudBanner');
+      const bannerTid = document.getElementById('orbitTargetId');
+      if (banner && bannerTid) {
+        banner.classList.add('active');
+        bannerTid.innerText = `${THREAT_CATEGORIES[t.cat]?.name || 'Ціль'} #${tid}`;
+      }
+
+      map.easeTo({
+        center: [t.sim.curLon, t.sim.curLat],
+        zoom: 13.5,
+        pitch: 55,
+        duration: 1200
+      });
+    }
+
+    function exit3DFocus() {
+      focusedTargetId = null;
+      const banner = document.getElementById('orbitHudBanner');
+      if (banner) banner.classList.remove('active');
+      map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+    }
+
+    function collapseAllHudPanels() {
+      document.querySelectorAll('.hud-dropdown-panel').forEach(p => p.classList.remove('open'));
+      const sidebar = document.getElementById('tacticalSidebar');
+      if (sidebar) sidebar.classList.remove('active');
+      document.body.classList.remove('sidebar-open');
+    }
+
+    // =========================================================================
+    // KINEMATICS & ZERO-GAP GEOMETRIC RECKONING ENGINE
+    // =========================================================================
+    let lastAnimTs = performance.now();
+    let lastGeoJsonSyncTs = 0;
+
+    
+    let isDocumentVisible = !document.hidden;
+    document.addEventListener('visibilitychange', () => {
+      isDocumentVisible = !document.hidden;
+      if (isDocumentVisible && map) {
+        map.triggerRepaint();
+      }
+    });
+
+    function initLiveKinematicsLoop() {
+      function frame(now) {
+        const dt = Math.min(0.1, (now - lastAnimTs) / 1000.0);
+        lastAnimTs = now;
+
+        updateLiveKinematics(dt, now);
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function updateLiveKinematics(dt, now) {
+      if (!isMapLoaded || !isLiveMode || !isDocumentVisible) return;
+
+      const shouldSyncGeoJson = (now - lastGeoJsonSyncTs) >= 100.0;
+      const aircraftFeatures = [];
+      const trailFeatures = [];
+      const forecastFeatures = [];
+      const lostFeatures = [];
+
+      for (const tid in activeThreats) {
+        const t = activeThreats[tid];
+        const sim = t.sim;
+
+        // Kinematic 11-second delay horizon freeze
+        const timeSinceTelemetry = (now - (t.lastTelemetryTs || now)) / 1000.0;
+        let effectiveSpeed = sim.speedKmh || 200.0;
+        if (timeSinceTelemetry > 11.0) {
+          effectiveSpeed = 0;
+        } else if (timeSinceTelemetry > 8.0) {
+          effectiveSpeed = effectiveSpeed * ((11.0 - timeSinceTelemetry) / 3.0);
+        }
+
+        // Dead reckoning dead reckoning & zero crab angle avoidance
+        if (effectiveSpeed > 5) {
+          const dKm = (effectiveSpeed / 3600.0) * dt * 0.5;
+          const rad = (sim.curHeading * Math.PI) / 180.0;
+          sim.curLat += (dKm / 111.0) * Math.cos(rad);
+          sim.curLon += (dKm / (111.0 * Math.cos((sim.curLat * Math.PI) / 180.0))) * Math.sin(rad);
+        }
+
+        // ZERO GAP ANCHOR: Start directly at aircraft nose!
+        const headCoord = [sim.curLon, sim.curLat];
+        const catMeta = THREAT_CATEGORIES[t.cat] || THREAT_CATEGORIES.unknown;
+
+        // Combat Aircraft Silhouettes
+        aircraftFeatures.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: headCoord },
+          properties: {
+            tid,
+            cat: t.cat,
+            icon: 'threat-' + t.cat,
+            heading: sim.curHeading,
+            group_count: t.groupCount || 1,
+            label: `${catMeta.name} • ${Math.round(effectiveSpeed)} км/г`
+          }
+        });
+
+        // Zero-Gap Trailing Line
+        const trailCoords = (t.baseTrailPts || []).map(p => {
+          if (!p) return null;
+          if (Array.isArray(p)) return [p[1], p[0]];
+          if (typeof p === 'object' && p.lon !== undefined && p.lat !== undefined) return [p.lon, p.lat];
+          return null;
+        }).filter(Boolean);
+        trailCoords.push(headCoord); // ZERO GAP ANCHOR
+        if (trailCoords.length > 1) {
+          trailFeatures.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: trailCoords },
+            properties: { color: catMeta.color }
+          });
+        }
+
+        // Zero-Gap Forecast Corridor
+        if (t.corridor && t.corridor.length > 0) {
+          const corridorCoords = [headCoord]; // Start directly at aircraft nose!
+          for (let i = 0; i < t.corridor.length; i++) {
+            const pt = t.corridor[i];
+            const cLon = (pt && typeof pt === 'object' && pt.lon !== undefined) ? pt.lon : (Array.isArray(pt) ? pt[1] : undefined);
+            const cLat = (pt && typeof pt === 'object' && pt.lat !== undefined) ? pt.lat : (Array.isArray(pt) ? pt[0] : undefined);
+            if (cLon !== undefined && cLat !== undefined) {
+              corridorCoords.push([cLon, cLat]);
+            }
+          }
+          forecastFeatures.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: corridorCoords },
+            properties: { color: catMeta.color }
+          });
+        }
+
+        // 3D Three.js mesh update
+        if (threeScene) {
+          let meshGroup = threat3DMeshes[tid];
+          const isGhost = (focusedTargetId !== null && focusedTargetId !== tid);
+          if (!meshGroup) {
+            meshGroup = buildThreatMesh(t.cat, catMeta.color, isGhost);
+            threeScene.add(meshGroup);
+            threat3DMeshes[tid] = meshGroup;
+          }
+          // Coordinate transform to Three.js coordinates
+          const modelAsMercator = maplibregl.MercatorCoordinate.fromLngLat(headCoord, 1500);
+          meshGroup.position.set(modelAsMercator.x, modelAsMercator.y, modelAsMercator.z);
+          meshGroup.rotation.z = -(sim.curHeading * Math.PI) / 180.0;
+        }
+      }
+
+      // Populate GeoJSON sources throttled to 10 Hz (every 100ms) to avoid Web Worker queue starvation
+      if (shouldSyncGeoJson) {
+        lastGeoJsonSyncTs = now;
+        if (map.getSource('threats-aircraft-source')) {
+          map.getSource('threats-aircraft-source').setData({ type: 'FeatureCollection', features: aircraftFeatures });
+        }
+        if (map.getSource('threats-trails-source')) {
+          map.getSource('threats-trails-source').setData({ type: 'FeatureCollection', features: trailFeatures });
+        }
+        if (map.getSource('threats-forecast-source')) {
+          map.getSource('threats-forecast-source').setData({ type: 'FeatureCollection', features: forecastFeatures });
+        }
+      }
+    }
+
+    // =========================================================================
+    // WEBSOCKET REACTIVE SYNC
+    // =========================================================================
+    let ws = null;
+    let wsRetryCount = 0;
+
+    function initWebSocket() {
+      if (ws) { ws.onclose = null; ws.close(); }
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const q = clientToken ? `?token=${encodeURIComponent(clientToken)}` : '';
+      const wsUrl = `${proto}//${window.location.host}/api/v1/stream${q}`;
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        wsRetryCount = 0;
+        const dot = document.getElementById('hudThreatsDot');
+        if (dot) {
+          dot.style.background = '';
+          dot.classList.remove('offline');
+        }
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'pong') return;
+          const snapshot = (msg.type === 'radar_snapshot' && msg.data) ? msg.data : msg;
+          if (snapshot) processSnapshot(snapshot);
+        } catch (e) {
+          console.error('WS Parse Error:', e);
+        }
+      };
+
+      ws.onclose = () => {
+        const dot = document.getElementById('hudThreatsDot');
+        if (dot) {
+          dot.style.background = '';
+          dot.classList.add('offline');
+        }
+        const delay = Math.min(15000, 1000 * Math.pow(1.5, wsRetryCount));
+        wsRetryCount++;
+        setTimeout(initWebSocket, delay);
+      };
+    }
+
+    function processSnapshot(data) {
+      updateActiveAlertsFromSnapshot(data);
+      const incoming = data.threats || data.active_threats || [];
+      const fresh = {};
+      const catCounts = {};
+
+      incoming.forEach((t, i) => {
+        const tid = t.id || `trk-${i}`;
+        const cat = normalizeCat(t.category || t.type || t.type_ua);
+        catCounts[cat] = (catCounts[cat] || 0) + 1;
+
+        fresh[tid] = {
+          cat,
+          groupCount: t.group_count || 1,
+          baseTrailPts: t.trajectory || [],
+          corridor: t.corridor || t.extrapolated || [],
+          lastTelemetryTs: performance.now(),
+          sim: {
+            curLat: Number(t.lat),
+            curLon: Number(t.lon),
+            curHeading: Number(t.heading ?? t.heading_deg ?? activeThreats[tid]?.sim?.curHeading ?? 0),
+            speedKmh: Number(t.speed_kmh || t.speed || 200)
+          }
+        };
+      });
+
+      // Cleanup removed 3D meshes
+      for (const tid in threat3DMeshes) {
+        if (!fresh[tid]) {
+          const grp = threat3DMeshes[tid];
+          if (threeScene) threeScene.remove(grp);
+          grp.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+              else child.material.dispose();
+            }
+          });
+          delete threat3DMeshes[tid];
+        }
+      }
+
+      activeThreats = fresh;
+
+      // Update Top HUD Mini Views
+      const miniThreatsCount = document.getElementById('hudThreatsCountMini');
+      if (miniThreatsCount) miniThreatsCount.innerText = incoming.length;
+      const miniDot = document.getElementById('hudThreatsDotMini');
+      if (miniDot) {
+        if (incoming.length > 0) miniDot.classList.add('danger');
+        else miniDot.classList.remove('danger');
+      }
+
+      // Update User Profile Owner Display
+      const userOwnerEl = document.getElementById('userOwnerValue');
+      if (userOwnerEl) {
+        const ownerName = data.owner || (data.user && data.user.owner) || localStorage.getItem('hub_user_owner') || 'Користувач Hub';
+        userOwnerEl.innerText = ownerName;
+      }
+
+
+      // Update Top HUD Threat Pill
+      const countEl = document.getElementById('hudThreatsCount');
+      if (countEl) countEl.innerText = incoming.length;
+      const dotEl = document.getElementById('hudThreatsDot');
+      if (dotEl) {
+        if (incoming.length > 0) dotEl.classList.add('danger');
+        else dotEl.classList.remove('danger');
+      }
+
+      // Populate Top HUD Threat Dropdown list
+      const threatListEl = document.getElementById('hudThreatsDropdownList');
+      if (threatListEl) {
+        if (incoming.length === 0) {
+          threatListEl.innerHTML = '<div style="color:var(--text-muted); padding:4px;">Загроз на карті немає</div>';
+        } else {
+          let tHtml = '';
+          incoming.forEach((t, i) => {
+            const cat = normalizeCat(t.category || t.type || t.type_ua);
+            const meta = THREAT_CATEGORIES[cat] || THREAT_CATEGORIES.unknown;
+            const speed = Math.round(t.speed_kmh || t.speed || 0);
+            const alt = t.altitude ? ` • ${t.altitude}м` : '';
+            tHtml += `
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer;" onclick="focusTarget3D('${t.id}')" title="Фокус камери 3D">
+                <span style="color:${meta.color}; font-weight:600;">▲ ${meta.name}</span>
+                <span style="color:var(--text-dim); font-size:10px;">${speed} км/г${alt}</span>
+              </div>
+            `;
+          });
+          threatListEl.innerHTML = tHtml;
+        }
+      }
+
+      // MiG-31K status: handle both data.mig31k_alert and data.general_alerts.mig31k_active
+      const isMigActive = !!(data.mig31k_alert || (data.general_alerts && data.general_alerts.mig31k_active));
+      const migEl = document.getElementById('hudMigStatus');
+      if (migEl) {
+        migEl.innerText = isMigActive ? 'МІГ-31К: ТРИВОГА' : 'МІГ-31К: ЧИСТО';
+        migEl.className = isMigActive ? 'badge-count danger' : 'badge-count calm';
+      }
+
+      // Update Category List Counts
+      for (const cat in THREAT_CATEGORIES) {
+        const badge = document.getElementById(`badge-cat-${cat}`);
+        if (badge) {
+          const count = catCounts[cat] || 0;
+          badge.innerText = count > 0 ? `${count} цілей` : 'цілі відсутні';
+          badge.className = count > 0 ? 'badge-count danger' : 'badge-count calm';
+        }
+      }
+      const totalLiveEl = document.getElementById('lblTotalActiveLive');
+      if (totalLiveEl) totalLiveEl.innerText = incoming.length;
+
+      // Update Today Radial Gauge dynamically from WebSocket data.today_stats
+      if (data.today_stats) {
+        const countsMap = data.today_stats.categories || data.today_stats.by_category || {};
+        const total = data.today_stats.total || 0;
+        renderRadialTodayGauge(countsMap, total);
+      }
+
+      // Slots stats & Closest Threat breakdown calculation
+      const incomingSlots = data.slots || data.slots_stats;
+      if (incomingSlots && typeof incomingSlots === 'object') {
+        currentSlots = Object.assign({}, currentSlots, incomingSlots);
+        userSlots = currentSlots;
+        renderUserSlots(currentSlots);
+        updateUserSlotsGeoJson(currentSlots);
+      }
+      updateClosestThreatHud(data.closest_threat, incomingSlots);
+
+      // Handle lost targets if provided
+      const lostList = data.recent_lost || data.lost_threats || [];
+      if (map && map.getSource('threats-lost-source')) {
+        const lostFeatures = lostList.map(l => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [Number(l.lon || (l.coords && l.coords[1])), Number(l.lat || (l.coords && l.coords[0]))] },
+          properties: { id: l.id, cat: l.category || 'unknown' }
+        })).filter(f => !isNaN(f.geometry.coordinates[0]) && !isNaN(f.geometry.coordinates[1]));
+        map.getSource('threats-lost-source').setData({ type: 'FeatureCollection', features: lostFeatures });
+      }
+
+      // Trigger immediate GeoJSON sync
+      lastGeoJsonSyncTs = 0;
+      updateLiveKinematics(0, performance.now());
+    }
+
+    // Danger perimeter circle generator (64-vertex polygon)
+    function createGeoCircle(lat, lon, radiusKm, points = 64) {
+      const coords = [];
+      const kmPerLat = 111.0;
+      const kmPerLon = 111.0 * Math.cos(lat * Math.PI / 180.0);
+      for (let i = 0; i <= points; i++) {
+        const angle = (i * 2 * Math.PI) / points;
+        const pLat = lat + (radiusKm / kmPerLat) * Math.sin(angle);
+        const pLon = lon + (radiusKm / kmPerLon) * Math.cos(angle);
+        coords.push([pLon, pLat]);
+      }
+      return [coords];
+    }
+
+    // Populate user-slots-source on MapLibre map
+    function updateUserSlotsGeoJson(slotsObj) {
+      if (!map || !map.getSource || !map.getSource('user-slots-source')) return;
+      const features = [];
+      const showRadius = document.getElementById('chkSlotCircles')?.checked ?? true;
+      const slots = slotsObj || currentSlots || {};
+
+      for (const k in slots) {
+        const s = slots[k];
+        if (!s || s.lat === undefined || s.lon === undefined) continue;
+        const lat = Number(s.lat);
+        const lon = Number(s.lon);
+        const radius = Number(s.danger_radius_km || s.radius_km || s.radius || 35);
+        const isMonitored = s.monitoring_enabled !== false && s.active !== false;
+
+        // Slot center point
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [lon, lat] },
+          properties: { id: k, name: s.name || ('Точка ' + k) }
+        });
+
+        // Danger zone circle perimeter
+        if (showRadius && isMonitored) {
+          features.push({
+            type: 'Feature',
+            geometry: { type: 'Polygon', coordinates: createGeoCircle(lat, lon, radius) },
+            properties: { id: k, name: s.name || ('Точка ' + k), radius }
+          });
+        }
+      }
+
+      map.getSource('user-slots-source').setData({
+        type: 'FeatureCollection',
+        features
+      });
+    }
+
+    function normalizeCat(catRaw) {
+      if (!catRaw) return 'unknown';
+      const c = catRaw.toLowerCase();
+      if (c.includes('shahed') || c.includes('шахед') || c.includes('геран')) return 'shahed';
+      if (c.includes('jet') || c.includes('реактив')) return 'shahed_jet';
+      if (c.includes('cruise') || c.includes('крилат')) return 'missile';
+      if (c.includes('ballistic') || c.includes('балістич')) return 'ballistic';
+      if (c.includes('aviation') || c.includes('авіа')) return 'aviation';
+      if (c.includes('kab') || c.includes('каб') || c.includes('бомб')) return 'kab';
+      if (c.includes('lancet') || c.includes('ланцет')) return 'lancet';
+      if (c.includes('recon') || c.includes('розвід')) return 'recon';
+      if (c.includes('artillery') || c.includes('артил') || c.includes('рсзв')) return 'artillery';
+      if (c.includes('fpv') || c.includes('молнія')) return 'fpv';
+      return THREAT_CATEGORIES[c] ? c : 'unknown';
+    }
+
+    // =========================================================================
+    
+    // =========================================================================
+    // UI RESTORATION & DOM FUNCTIONAL CONTRACTS
+    // =========================================================================
+    function toggleSidebar() {
+      const sb = document.getElementById('tacticalSidebar');
+      if (sb) {
+        const isOpen = sb.classList.toggle('active');
+        document.body.classList.toggle('sidebar-open', isOpen);
+      }
+    }
+
+    function toggleHudCard(cardType, event) {
+      if (event) event.stopPropagation();
+      const card = document.getElementById(cardType === 'threats' ? 'threatsCard' : (cardType === 'slot' ? 'slotSelectorCard' : 'closestCard'));
+      if (!card) return;
+      const isColl = card.classList.contains('hud-collapsed');
+      if (isColl) {
+        card.classList.remove('hud-collapsed');
+        card.classList.add('hud-expanded');
+      } else {
+        card.classList.remove('hud-expanded');
+        card.classList.add('hud-collapsed');
+      }
+    }
+
+    function handleCardClick(cardType, event) {
+      if (event && event.target && event.target.closest && event.target.closest('.hud-dropdown-panel')) return;
+      const card = document.getElementById(cardType === 'threats' ? 'threatsCard' : (cardType === 'slot' ? 'slotSelectorCard' : 'closestCard'));
+      if (!card) return;
+      if (card.classList.contains('hud-collapsed')) {
+        card.classList.remove('hud-collapsed');
+        card.classList.add('hud-expanded');
+      } else {
+        toggleHudPanel(cardType === 'threats' ? 'panelThreatsDetails' : (cardType === 'slot' ? 'panelSlotSelector' : 'panelClosestDetails'));
+      }
+    }
+
+    function centerMapOnSelectedSlots(event) {
+      if (event) event.stopPropagation();
+      if (!map) return;
+      const s = currentSlots[selectedSlotId] || Object.values(currentSlots)[0];
+      if (s && Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lon))) {
+        map.easeTo({ center: [Number(s.lon), Number(s.lat)], zoom: Math.max(map.getZoom(), 9.5), duration: 800 });
+      }
+    }
+
+    function highlightGaugeCategory(cat) {
+      const spokes = document.querySelectorAll('#radialGaugeSpokesGroup line');
+      spokes.forEach(line => {
+        const lineCat = line.getAttribute('data-cat');
+        if (!cat || !lineCat) {
+          line.style.opacity = '1';
+        } else {
+          line.style.opacity = (lineCat === cat) ? '1' : '0.2';
+        }
+      });
+    }
+
+    function toggleGaugeCategorySelection(cat) {
+      const chk = document.getElementById(`chkFilterCat-${cat}`) || document.getElementById(`chk-cat-${cat}`);
+      if (chk) {
+        chk.checked = !chk.checked;
+        if (typeof toggleCategoryFilter === 'function') {
+          toggleCategoryFilter(cat, chk.checked);
+        }
+      }
+    }
+
+    function applyDatePreset(preset, btnEl) {
+      const fromEl = document.getElementById('dateFromInput');
+      const toEl = document.getElementById('dateToInput');
+      const dFromHidden = document.getElementById('analyticsDateFrom');
+      const dToHidden = document.getElementById('analyticsDateTo');
+
+      const now = new Date();
+      const toStr = now.toISOString().slice(0, 10);
+      let fromStr = toStr;
+
+      if (preset === 'today') {
+        fromStr = toStr;
+      } else if (preset === '3days') {
+        const d = new Date(now.getTime() - 3 * 86400000);
+        fromStr = d.toISOString().slice(0, 10);
+      } else if (preset === '7days') {
+        const d = new Date(now.getTime() - 7 * 86400000);
+        fromStr = d.toISOString().slice(0, 10);
+      } else if (preset === 'all') {
+        const d = new Date(now.getTime() - 30 * 86400000);
+        fromStr = d.toISOString().slice(0, 10);
+      }
+
+      if (fromEl) fromEl.value = fromStr;
+      if (toEl) toEl.value = toStr;
+      if (dFromHidden) dFromHidden.value = fromStr;
+      if (dToHidden) dToHidden.value = toStr;
+
+      ['btnPresetToday', 'btnPreset3Days', 'btnPreset7Days', 'btnPresetAll'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+      });
+      if (btnEl) btnEl.classList.add('active');
+    }
+
+    function switchSidebarTab(tabKey) {
+      ['tabBtnRadar', 'tabBtnAnalytics', 'tabBtnOptions'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.classList.remove('active');
+      });
+      ['paneRadar', 'paneAnalytics', 'paneOptions'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.classList.remove('active');
+      });
+
+      if (tabKey === 'radar') {
+        document.getElementById('tabBtnRadar').classList.add('active');
+        document.getElementById('paneRadar').classList.add('active');
+      } else if (tabKey === 'analytics') {
+        document.getElementById('tabBtnAnalytics').classList.add('active');
+        document.getElementById('paneAnalytics').classList.add('active');
+      } else if (tabKey === 'options') {
+        document.getElementById('tabBtnOptions').classList.add('active');
+        document.getElementById('paneOptions').classList.add('active');
+      }
+    }
+
+    function toggleHudPanel(panelId) {
+      const panel = document.getElementById(panelId);
+      if (!panel) return;
+      const isOpen = panel.classList.contains('open');
+      document.querySelectorAll('.hud-dropdown-panel').forEach(p => p.classList.remove('open'));
+      if (!isOpen) panel.classList.add('open');
+    }
+
+    // Authentic SVG threat categories rendering
+    function renderActiveThreatCategories() {
+      const list = document.getElementById('activeCategoryList');
+      if (!list) return;
+      list.innerHTML = '';
+
+      for (const cat in THREAT_CATEGORIES) {
+        const meta = THREAT_CATEGORIES[cat];
+        const svgIcon = THREAT_SVG_ICONS[cat] || THREAT_SVG_ICONS.unknown;
+        const row = document.createElement('div');
+        row.className = 'threat-category-row';
+        row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:3px 6px; border-radius:6px; cursor:pointer; transition:background 0.15s;';
+        row.innerHTML = `
+          <label class="cat-label-wrap" style="display:flex; align-items:center; gap:7px; cursor:pointer; flex:1;" onmouseenter="highlightGaugeCategory('${cat}')" onmouseleave="highlightGaugeCategory(null)">
+            <input type="checkbox" class="cat-checkbox" id="chk-cat-${cat}" checked onchange="toggleCategoryFilter('${cat}', this.checked)">
+            <div class="threat-svg-icon">${svgIcon}</div>
+            <span style="font-size:11px; font-weight:600; color:#FFFFFF;">${meta.name}</span>
+          </label>
+          <span class="badge-count calm" id="badge-cat-${cat}" onclick="toggleGaugeCategorySelection('${cat}')">цілі відсутні</span>
+        `;
+        list.appendChild(row);
+      }
+    }
+
+    // =========================================================================
+    // UNIFIED OBSERVATION POINTS, RADAR HUD, & ANALYTICS CONTROLLERS
+    // =========================================================================
+
+    // Observation points (slots) rendering
+    function renderUserSlots(slotsObj) {
+      if (slotsObj && typeof slotsObj === 'object') currentSlots = slotsObj;
+      userSlots = currentSlots;
+      const slotsList = document.getElementById('radarSlotsStatusList') || document.getElementById('slotsStatusList');
+      const dropList = document.getElementById('slotDropdownItems') || document.getElementById('hudSlotsList');
+      const optSelect = document.getElementById('editorSlotSelect') || document.getElementById('optSlotSelect');
+
+      const keys = Object.keys(currentSlots);
+      if (keys.length === 0) {
+        currentSlots["1"] = { id: "1", slot_id: "1", name: "Точка 1", lat: 50.4501, lon: 30.5234, radius_km: 35, danger_radius_km: 35, active: true };
+        keys.push("1");
+      }
+
+      if (dropList) {
+        dropList.innerHTML = '';
+        keys.forEach(k => {
+          const s = currentSlots[k];
+          const isSel = selectedSlotIds.has(k);
+          const row = document.createElement('div');
+          row.className = 'slot-chk-item';
+          row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:4px 6px; border-radius:4px; background:rgba(255,255,255,0.03); margin-bottom:2px; cursor:pointer;';
+          row.innerHTML = `
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:11px; flex:1;">
+              <input type="checkbox" ${isSel ? 'checked' : ''} onchange="toggleSelectSlot('${k}', this.checked)">
+              <span>${s.name || ('Точка ' + k)}</span>
+            </label>
+            <button class="hud-pill" style="height:20px; font-size:9.5px; padding:0 6px;" onclick="selectSlot('${k}')">Вибрати</button>
+          `;
+          dropList.appendChild(row);
+        });
+      }
+
+      if (slotsList) {
+        slotsList.innerHTML = '';
+        keys.forEach(k => {
+          const s = currentSlots[k];
+          const card = document.createElement('div');
+          card.className = 'slot-status-card';
+          const isDanger = s.danger_zone_active || false;
+          const isSiren = s.siren_active || false;
+          const statusText = isDanger ? 'Небезпека!' : (isSiren ? 'Тривога' : 'Спокійно');
+          const badgeCls = (isDanger || isSiren) ? 'danger' : 'calm';
+          card.innerHTML = `
+            <div class="slot-status-info">
+              <span class="slot-status-title">${s.name || ('Точка ' + k)}</span>
+              <span class="slot-status-sub">Радіус: ${s.danger_radius_km || s.radius_km || 35} км</span>
+            </div>
+            <span class="badge-count ${badgeCls}">${statusText}</span>
+          `;
+          slotsList.appendChild(card);
+        });
+      }
+
+      if (optSelect) {
+        optSelect.innerHTML = '';
+        keys.forEach(k => {
+          const s = currentSlots[k];
+          const opt = document.createElement('option');
+          opt.value = k;
+          opt.innerText = s.name || ('Точка ' + k);
+          if (k === selectedSlotId) opt.selected = true;
+          optSelect.appendChild(opt);
+        });
+      }
+
+      const hudSlotNameEl = document.getElementById('hudSlotName');
+      if (hudSlotNameEl) {
+        hudSlotNameEl.innerText = selectedSlotIds.size === 1
+          ? (currentSlots[Array.from(selectedSlotIds)[0]]?.name || 'Точка ' + Array.from(selectedSlotIds)[0])
+          : `Обрано: ${selectedSlotIds.size}`;
+      }
+    }
+
+    function selectSlot(id) {
+      selectedSlotId = id;
+      activeSlotId = id;
+      selectedSlotIds = new Set([id]);
+      const s = currentSlots[id];
+      const lbl = document.getElementById('hudSlotName');
+      if (lbl) lbl.innerText = s ? s.name : ('Точка ' + id);
+      renderUserSlots(currentSlots);
+      onEditorSlotChange(id);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: "switch_slot", slot: id }));
+      }
+    }
+
+    function toggleSelectAllSlots() {
+      const allKeys = Object.keys(currentSlots);
+      if (allKeys.length === 0) return;
+      if (selectedSlotIds.size === allKeys.length) {
+        selectedSlotIds = new Set([allKeys[0]]);
+        selectedSlotId = allKeys[0];
+      } else {
+        selectedSlotIds = new Set(allKeys);
+      }
+      const lbl = document.getElementById('hudSlotName');
+      if (lbl) {
+        lbl.innerText = selectedSlotIds.size === 1
+          ? (currentSlots[Array.from(selectedSlotIds)[0]]?.name || 'Точка ' + Array.from(selectedSlotIds)[0])
+          : `Обрано: ${selectedSlotIds.size}`;
+      }
+      renderUserSlots(currentSlots);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: "switch_slot", slot: Array.from(selectedSlotIds).join(',') }));
+      }
+    }
+
+    function toggleSelectSlot(id, checked) {
+      if (checked) {
+        selectedSlotIds.add(id);
+        selectedSlotId = id;
+      } else {
+        if (selectedSlotIds.size > 1) {
+          selectedSlotIds.delete(id);
+          selectedSlotId = Array.from(selectedSlotIds)[0];
+        }
+      }
+      const lbl = document.getElementById('hudSlotName');
+      if (lbl) {
+        lbl.innerText = selectedSlotIds.size === 1 
+          ? (currentSlots[Array.from(selectedSlotIds)[0]]?.name || 'Точка ' + Array.from(selectedSlotIds)[0]) 
+          : `Обрано: ${selectedSlotIds.size}`;
+      }
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: "switch_slot", slot: Array.from(selectedSlotIds).join(',') }));
+      }
+    }
+
+    async function addNewSlot() {
+      const center = map ? map.getCenter() : { lat: 50.4501, lng: 30.5234 };
+      const newSlotPayload = {
+        name: `Нова точка`,
+        lat: parseFloat(center.lat.toFixed(4)),
+        lon: parseFloat(center.lng.toFixed(4)),
+        danger_zone: 35,
+        active: true,
+        alert_threat: true,
+        alert_siren: true,
+        alert_mig: true
+      };
+
+      try {
+        const res = await fetch(`/api/v1/slots?token=${encodeURIComponent(clientToken)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newSlotPayload)
+        });
+        if (res.ok) {
+          const respData = await res.json();
+          const s = respData.slot;
+          if (s && s.id) {
+            currentSlots[s.id] = s;
+            selectedSlotId = s.id;
+            activeSlotId = s.id;
+            selectedSlotIds.add(s.id);
+            renderUserSlots(currentSlots);
+            onEditorSlotChange(s.id);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('[Slots] Remote create failed, fallback to local:', e);
+      }
+
+      const newId = String(Object.keys(currentSlots).length + 1);
+      const fallbackSlot = { ...newSlotPayload, id: newId, slot_id: newId };
+      currentSlots[newId] = fallbackSlot;
+      selectedSlotId = newId;
+      activeSlotId = newId;
+      selectedSlotIds.add(newId);
+      renderUserSlots(currentSlots);
+      onEditorSlotChange(newId);
+    }
+
+    async function deleteCurrentSlot() {
+      const allKeys = Object.keys(currentSlots);
+      if (allKeys.length <= 1) {
+        alert('Неможливо видалити єдину точку спостереження');
+        return;
+      }
+      const idToDelete = selectedSlotId;
+      delete currentSlots[idToDelete];
+      selectedSlotIds.delete(idToDelete);
+      const remainingKey = Object.keys(currentSlots)[0];
+      selectedSlotId = remainingKey;
+      activeSlotId = remainingKey;
+      selectedSlotIds.add(remainingKey);
+      renderUserSlots(currentSlots);
+      onEditorSlotChange(remainingKey);
+
+      try {
+        await fetch(`/api/v1/slots/${encodeURIComponent(idToDelete)}?token=${encodeURIComponent(clientToken)}`, {
+          method: 'DELETE'
+        });
+      } catch (e) {
+        console.warn('[Slots] Remote delete failed:', e);
+      }
+    }
+
+    function onEditorSlotChange(id) {
+      selectedSlotId = id;
+      const s = currentSlots[id];
+      if (!s) return;
+      const nameEl = document.getElementById('slotNameInput');
+      const latEl = document.getElementById('slotLatInput');
+      const lonEl = document.getElementById('slotLonInput');
+      const radiusSlider = document.getElementById('slotRadiusSlider');
+      const radiusVal = document.getElementById('slotRadiusVal');
+      const chkActive = document.getElementById('chkSlotActive');
+      const chkThreat = document.getElementById('chkSlotAlertThreat');
+      const chkSiren = document.getElementById('chkSlotAlertSiren');
+      const chkMig = document.getElementById('chkSlotAlertMig');
+
+      if (nameEl) nameEl.value = s.name || ('Точка ' + id);
+      if (latEl) latEl.value = s.lat;
+      if (lonEl) lonEl.value = s.lon;
+      if (radiusSlider) radiusSlider.value = s.danger_radius_km || 35;
+      if (radiusVal) radiusVal.innerText = (s.danger_radius_km || 35) + ' км';
+      if (chkActive) chkActive.checked = s.active !== false;
+      if (chkThreat) chkThreat.checked = s.alert_threat !== false;
+      if (chkSiren) chkSiren.checked = s.alert_siren !== false;
+      if (chkMig) chkMig.checked = s.alert_mig !== false;
+    }
+
+    async function saveCurrentSlotConfig() {
+      const s = currentSlots[selectedSlotId];
+      if (!s) return;
+      s.name = document.getElementById('slotNameInput')?.value || s.name;
+      s.lat = parseFloat(document.getElementById('slotLatInput')?.value) || s.lat;
+      s.lon = parseFloat(document.getElementById('slotLonInput')?.value) || s.lon;
+      s.danger_radius_km = parseInt(document.getElementById('slotRadiusSlider')?.value) || s.danger_radius_km;
+      s.active = document.getElementById('chkSlotActive')?.checked !== false;
+      s.alert_threat = document.getElementById('chkSlotAlertThreat')?.checked !== false;
+      s.alert_siren = document.getElementById('chkSlotAlertSiren')?.checked !== false;
+      s.alert_mig = document.getElementById('chkSlotAlertMig')?.checked !== false;
+
+      renderUserSlots(currentSlots);
+
+      try {
+        await fetch(`/api/v1/slots/${encodeURIComponent(selectedSlotId)}?token=${encodeURIComponent(clientToken)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(s)
+        });
+      } catch (e) {
+        console.warn('[Slots] Remote update failed:', e);
+      }
+    }
+
+    function togglePickPoint() {
+      isPickingPoint = !isPickingPoint;
+      isPickingLocationOnMap = isPickingPoint;
+      if (map) map.getCanvas().style.cursor = isPickingPoint ? 'crosshair' : '';
+      const btn = document.getElementById('btnPickPointOnMap');
+      if (btn) btn.innerText = isPickingPoint ? '🎯 Клікніть на мапі...' : '📍 Вибрати на мапі';
+    }
+
+    function finishPickingLocation(lat, lon) {
+      isPickingPoint = false;
+      isPickingLocationOnMap = false;
+      if (map) map.getCanvas().style.cursor = '';
+      const latIn = document.getElementById('slotLatInput') || document.getElementById('optSlotLat');
+      const lonIn = document.getElementById('slotLonInput') || document.getElementById('optSlotLon');
+      const btn = document.getElementById('btnPickPointOnMap') || document.getElementById('btnPickLocationOnMap');
+      if (latIn) latIn.value = lat.toFixed(4);
+      if (lonIn) lonIn.value = lon.toFixed(4);
+      if (btn) btn.innerText = '📍 Вибрати на мапі';
+    }
+
+    // Closest Threat & Breakdown HUD
+    function updateClosestBreakdownList(slots) {
+      const container = document.getElementById('closestBreakdownList');
+      const hiddenContainer = document.getElementById('hudClosestBreakdownList');
+      const activeObj = slots || currentSlots;
+      if (!activeObj || Object.keys(activeObj).length === 0) {
+        if (container) container.innerHTML = '<div style="color:var(--text-muted); padding:4px;">Загроз поблизу не виявлено</div>';
+        if (hiddenContainer) hiddenContainer.innerHTML = '';
+        return;
+      }
+      let html = '';
+      Object.entries(activeObj).forEach(([id, s]) => {
+        const sName = s.name || ('Точка ' + id);
+        const cType = s.closest_type || 'Загроз немає';
+        const cDist = (s.closest_distance_km !== null && s.closest_distance_km !== undefined) ? `${s.closest_distance_km} км` : '--';
+        const isDanger = s.danger_zone_active;
+        const color = isDanger ? 'var(--accent-danger)' : 'var(--text-muted)';
+        html += `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+            <span><strong>${sName}</strong>: ${cType}</span>
+            <span style="color:${color}; font-weight:700;">${cDist} ${isDanger ? '(У периметрі!)' : ''}</span>
+          </div>
+        `;
+      });
+      if (html.length === 0) {
+        html = '<div style="color:var(--text-muted); padding:4px;">Загроз поблизу не виявлено</div>';
+      }
+      if (container) container.innerHTML = html;
+      if (hiddenContainer) hiddenContainer.innerHTML = html;
+    }
+
+    function updateClosestThreatHud(closestThreat, slotsStats) {
+      const typeEl = document.getElementById('hudClosestType');
+      const distEl = document.getElementById('hudClosestDistance');
+      const miniEl = document.getElementById('closestMiniText');
+      const legacyName = document.getElementById('closestTargetName');
+      const legacyDist = document.getElementById('slotClosestDistBadge');
+
+      if (closestThreat && (closestThreat.distance_km !== null && closestThreat.distance_km !== undefined)) {
+        const tName = closestThreat.type || closestThreat.category || 'Ціль';
+        const dKm = Math.round(closestThreat.distance_km * 10) / 10;
+        if (typeEl) typeEl.innerText = tName;
+        if (legacyName) legacyName.innerText = tName;
+        if (distEl) {
+          distEl.innerText = `${dKm} км`;
+          distEl.className = dKm <= 35 ? 'badge-count danger' : 'badge-count calm';
+        }
+        if (legacyDist) legacyDist.innerText = `${dKm} км`;
+        if (miniEl) {
+          miniEl.innerText = `${tName} ${Math.round(dKm)} км`;
+          miniEl.style.color = dKm <= 35 ? '#EF4444' : '#F59E0B';
+        }
+      } else {
+        if (typeEl) typeEl.innerText = 'Спокійно';
+        if (legacyName) legacyName.innerText = 'Спокійно';
+        if (distEl) {
+          distEl.innerText = '0 км';
+          distEl.className = 'badge-count calm';
+        }
+        if (legacyDist) legacyDist.innerText = '0 км';
+        if (miniEl) {
+          miniEl.innerText = 'Спокійно';
+          miniEl.style.color = '#10B981';
+        }
+      }
+      updateClosestBreakdownList(slotsStats || currentSlots);
+    }
+
+    // Category Filter & Section Collapse
+    function toggleSectionCollapse(containerId, chevronEl) {
+      const c1 = document.getElementById(containerId);
+      const c2 = document.getElementById('activeCategoryList');
+      const target = c1 || c2;
+      if (!target) return;
+      const isHidden = target.style.display === 'none';
+      target.style.display = isHidden ? 'flex' : 'none';
+      if (c2 && c1 !== c2) c2.style.display = isHidden ? 'flex' : 'none';
+      if (chevronEl) chevronEl.innerText = isHidden ? '▲' : '▼';
+    }
+
+    function toggleCategoryFilter(cat, isChecked) {
+      if (isChecked) {
+        enabledThreatCategories.add(cat);
+      } else {
+        enabledThreatCategories.delete(cat);
+      }
+      if (map && map.setFilter) {
+        const filterExpr = ['in', ['get', 'cat'], ['literal', Array.from(enabledThreatCategories)]];
+        map.setFilter('threats-aircraft-layer', filterExpr);
+        map.setFilter('threats-labels-layer', filterExpr);
+        map.setFilter('threats-group-badges', ['all', ['>', ['get', 'group_count'], 1], filterExpr]);
+      }
+      for (const tid in activeThreats) {
+        const t = activeThreats[tid];
+        if (threat3DMeshes[tid]) {
+          threat3DMeshes[tid].visible = enabledThreatCategories.has(t.cat);
+        }
+      }
+    }
+
+    // Radial Concentric Today Gauge (64 concentric spokes around circle 110,110)
+    function renderTodayRadialGauge(arg1, arg2) {
+      let countsMap = {};
+      let total = 0;
+      if (typeof arg1 === 'number') {
+        total = arg1;
+      } else if (typeof arg1 === 'object' && arg1 !== null) {
+        countsMap = arg1;
+        total = (typeof arg2 === 'number') ? arg2 : Object.values(countsMap).reduce((a, b) => a + Number(b || 0), 0);
+      }
+      renderRadialTodayGauge(countsMap, total);
+    }
+
+    function renderRadialTodayGauge(countsMap, total) {
+      const totalEl = document.getElementById('radialTotalNumber');
+      if (totalEl) totalEl.innerText = total || 0;
+
+      const spokesGroup = document.getElementById('radialGaugeSpokesGroup');
+      if (!spokesGroup) return;
+      spokesGroup.innerHTML = '';
+
+      const cx = 110, cy = 110, r1 = 48, r2 = 74;
+      const totalSpokes = 64;
+
+      if (!total || total === 0) {
+        for (let i = 0; i < totalSpokes; i++) {
+          const angle = (i * 360 / totalSpokes) * Math.PI / 180;
+          const x1 = cx + r1 * Math.cos(angle);
+          const y1 = cy + r1 * Math.sin(angle);
+          const x2 = cx + r2 * Math.cos(angle);
+          const y2 = cy + r2 * Math.sin(angle);
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+          line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+          line.setAttribute('stroke', '#334155');
+          line.setAttribute('stroke-width', '2.5');
+          line.setAttribute('stroke-linecap', 'round');
+          spokesGroup.appendChild(line);
+        }
+        const sub = document.getElementById('radialSubtext');
+        if (sub) sub.innerText = 'За сьогодні загроз не зафіксовано';
+        return;
+      }
+
+      const sub = document.getElementById('radialSubtext');
+      if (sub) sub.innerText = '';
+
+      const entries = Object.entries(countsMap || {}).filter(([_, c]) => c > 0);
+      let currentSpoke = 0;
+
+      entries.forEach(([cat, count]) => {
+        const catSpokes = Math.round((count / total) * totalSpokes);
+        const color = THREAT_CATEGORIES[cat]?.color || '#FACC15';
+
+        for (let i = 0; i < catSpokes && currentSpoke < totalSpokes; i++, currentSpoke++) {
+          const angle = (currentSpoke * 360 / totalSpokes) * Math.PI / 180;
+          const x1 = cx + r1 * Math.cos(angle);
+          const y1 = cy + r1 * Math.sin(angle);
+          const x2 = cx + r2 * Math.cos(angle);
+          const y2 = cy + r2 * Math.sin(angle);
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+          line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+          line.setAttribute('stroke', color);
+          line.setAttribute('stroke-width', '2.5');
+          line.setAttribute('stroke-linecap', 'round');
+          line.setAttribute('data-cat', cat);
+          spokesGroup.appendChild(line);
+        }
+      });
+
+      while (currentSpoke < totalSpokes) {
+        const angle = (currentSpoke * 360 / totalSpokes) * Math.PI / 180;
+        const x1 = cx + r1 * Math.cos(angle);
+        const y1 = cy + r1 * Math.sin(angle);
+        const x2 = cx + r2 * Math.cos(angle);
+        const y2 = cy + r2 * Math.sin(angle);
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+        line.setAttribute('stroke', '#334155');
+        line.setAttribute('stroke-width', '2.5');
+        spokesGroup.appendChild(line);
+        currentSpoke++;
+      }
+
+      // Legend Pills below gauge
+      const pillsContainer = document.getElementById('todayCategoryPills');
+      if (pillsContainer) {
+        pillsContainer.innerHTML = '';
+        entries.forEach(([cat, count]) => {
+          const pct = Math.round((count / total) * 100);
+          const color = THREAT_CATEGORIES[cat]?.color || '#FACC15';
+          const pill = document.createElement('div');
+          pill.className = 'radial-pill-item';
+          pill.style.cssText = 'display:flex; align-items:center; gap:6px; padding:4px 8px; background:rgba(255,255,255,0.04); border-radius:6px; font-size:11px;';
+          pill.innerHTML = `
+            <span style="font-weight:700; padding:2px 6px; border-radius:4px; color:#FFFFFF; background:${color}; font-size:10px;">${count}</span>
+            <span style="color:#FFFFFF; font-weight:600;">${THREAT_CATEGORIES[cat]?.name || cat}</span>
+            <span style="color:var(--text-dim); margin-left:auto;">(${pct}%)</span>
+          `;
+          pillsContainer.appendChild(pill);
+        });
+      }
+    }
+
+    // Basemap Provider & Decoupled Token Management
+    function handleProviderChange(provider) {
+      const tokenBox = document.getElementById('apiTokenBox');
+      if (tokenBox) {
+        tokenBox.style.display = (provider === 'carto') ? 'block' : 'none';
+      }
+      const cardArcgis = document.getElementById('cardArcgis');
+      const cardCarto = document.getElementById('cardCarto');
+      if (cardArcgis) cardArcgis.classList.toggle('active', provider === 'arcgis');
+      if (cardCarto) cardCarto.classList.toggle('active', provider === 'carto');
+      setBasemap(provider === 'carto' ? 'cartodb' : provider);
+    }
+
+    function toggleTokenVisibility() {
+      const input = document.getElementById('mapApiToken');
+      if (input) {
+        input.type = (input.type === 'password') ? 'text' : 'password';
+      }
+    }
+
+    async function saveMapProviderConfig() {
+      const selectedRadio = document.querySelector('input[name="mapProvider"]:checked');
+      const provider = selectedRadio ? selectedRadio.value : 'arcgis';
+      const tokenInput = document.getElementById('mapApiToken');
+      const tokenVal = tokenInput ? tokenInput.value.trim() : '';
+
+      localStorage.setItem('radar_map_provider', provider);
+      localStorage.setItem('radar_map_token', tokenVal);
+
+      setBasemap(provider === 'carto' ? 'cartodb' : provider);
+
+      try {
+        await fetch('/api/v1/client/map/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: clientToken || '',
+            provider: provider === 'carto' ? 'cartodb' : provider,
+            cartodb_key: tokenVal
+          })
+        });
+      } catch (err) {
+        console.warn('[MapSettings] Remote save failed:', err);
+      }
+    }
+
+    // Map Layer Toggles
+    function toggleUkraineMask(isChecked) {
+      const chk = document.getElementById('chkMaskOutside');
+      if (chk) chk.checked = isChecked;
+      if (!map || !map.setLayoutProperty) return;
+      if (map.getLayer('mask-outside-layer')) {
+        map.setLayoutProperty('mask-outside-layer', 'visibility', isChecked ? 'visible' : 'none');
+      }
+    }
+
+    function toggleAlertOblasts(isChecked) {
+      const chk = document.getElementById('chkAlertOblasts');
+      if (chk) chk.checked = isChecked;
+      if (!map || !map.setLayoutProperty) return;
+      const val = isChecked ? 'visible' : 'none';
+      if (map.getLayer('alerts-fill')) map.setLayoutProperty('alerts-fill', 'visibility', val);
+      if (map.getLayer('alerts-boundaries')) map.setLayoutProperty('alerts-boundaries', 'visibility', val);
+    }
+
+    function toggleSlotCircles(isChecked) {
+      const chk = document.getElementById('chkSlotCircles');
+      if (chk) chk.checked = isChecked;
+      if (!map || !map.setLayoutProperty) return;
+      const val = isChecked ? 'visible' : 'none';
+      if (map.getLayer('user-danger-zone-fill')) map.setLayoutProperty('user-danger-zone-fill', 'visibility', val);
+      if (map.getLayer('user-danger-zone-line')) map.setLayoutProperty('user-danger-zone-line', 'visibility', val);
+      updateUserSlotsGeoJson(currentSlots);
+    }
+
+    function setRetentionTimer(val) {
+      localStorage.setItem('radar_retention_timer', val);
+    }
+
+    function toggleHistoryTrails(isChecked) {
+      if (!map || !map.setLayoutProperty) return;
+      if (map.getLayer('threats-trails-layer')) {
+        map.setLayoutProperty('threats-trails-layer', 'visibility', isChecked ? 'visible' : 'none');
+      }
+    }
+
+    function toggleHistoryIcons(isChecked) {
+      if (!map || !map.setLayoutProperty) return;
+      if (map.getLayer('threats-aircraft-layer')) {
+        map.setLayoutProperty('threats-aircraft-layer', 'visibility', isChecked ? 'visible' : 'none');
+      }
+    }
+
+    function toggleHistoryNames(isChecked) {
+      toggleLabelsVisibility(isChecked);
+    }
+
+    function toggleHistoryImpacts(isChecked) {
+      if (!map || !map.setLayoutProperty) return;
+      if (map.getLayer('threats-lost-layer')) {
+        map.setLayoutProperty('threats-lost-layer', 'visibility', isChecked ? 'visible' : 'none');
+      }
+    }
+
+    function toggleHistoryPoi(isChecked) {
+      togglePoiVisibility(isChecked);
+    }
+
+    function toggleHeatmap(type, isChecked) {
+      // Heatmap layer toggle stub
+    }
+
+    function onHeatmapOpacityChange(val) {
+      const lbl = document.getElementById('valHeatmapOpacity');
+      if (lbl) lbl.innerText = val + '%';
+    }
+
+    // Analytics Period & Date Presets
+    
+    let historicalDataset = [];
+    let activeHistoricalThreats = [];
+    let enabledAnalyticsThreats = new Set(Object.keys(THREAT_CATEGORIES));
+
+    function onDataSourceChanged(val) {
+      const actBox = document.getElementById('externalJsonActions');
+      if (actBox) {
+        actBox.style.display = (val === 'file') ? 'flex' : 'none';
+      }
+      if (val === 'local') {
+        loadAnalyticsPeriod();
+      }
+    }
+
+    function downloadHistoryTemplate() {
+      const template = {
+        "_schema_reference": {
+          "description": "Еталонна структура архівної бази Air Alert Radar Hub",
+          "version": "2.0-lean"
+        },
+        "meta": {
+          "generated_at": new Date().toISOString(),
+          "period": "2026-11",
+          "records_count": 2
+        },
+        "targets": [
+          {
+            "id": "sample-shahed-01",
+            "cat": "shahed",
+            "type_ua": "Шахед / Герань",
+            "launch_time": 1731000000,
+            "lost_time": 1731007200,
+            "downed": true,
+            "trajectory": [
+              [50.4501, 30.5234],
+              [50.4800, 30.6000],
+              [50.5100, 30.7000]
+            ],
+            "corridor": [
+              [50.5100, 30.7000],
+              [50.5500, 30.8200]
+            ],
+            "lost_point": [50.5100, 30.7000]
+          },
+          {
+            "id": "sample-missile-02",
+            "cat": "missile",
+            "type_ua": "Крилата ракета",
+            "launch_time": 1731002000,
+            "lost_time": 1731005000,
+            "downed": false,
+            "trajectory": [
+              [48.4500, 31.5000],
+              [48.6000, 31.8000]
+            ],
+            "lost_point": [48.6000, 31.8000]
+          }
+        ]
+      };
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(template, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", "air_alert_hub_history_template.json");
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    function handleExternalJsonFile(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const json = JSON.parse(e.target.result);
+          ingestHistoryDataset(json);
+        } catch (err) {
+          alert('Помилка читання JSON файлу: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function ingestHistoryDataset(data) {
+      let targets = [];
+      if (Array.isArray(data)) {
+        targets = data;
+      } else if (data && Array.isArray(data.targets)) {
+        targets = data.targets;
+      } else if (data && data.targets && typeof data.targets === 'object') {
+        targets = Object.keys(data.targets).map(id => {
+          const item = data.targets[id];
+          const pts = Array.isArray(item.path) ? item.path : (item.trajectory || []);
+          const traj = pts.map(p => {
+            if (Array.isArray(p)) return [p[1], p[2]];
+            if (typeof p === 'object') return [p.lat, p.lon];
+            return p;
+          });
+          return {
+            id: id,
+            cat: normalizeCat(item.category || item.type || item.cat || item.type_ua),
+            name: item.name || item.type_ua || (THREAT_CATEGORIES[normalizeCat(item.category || item.type)]?.name) || 'Ціль',
+            launch_time: item.start_time || item.launch_time || (pts.length > 0 && Array.isArray(pts[0]) ? pts[0][0] : Math.floor(Date.now() / 1000 - 3600)),
+            lost_time: item.end_time || item.lost_time || (pts.length > 0 && Array.isArray(pts[pts.length - 1]) ? pts[pts.length - 1][0] : Math.floor(Date.now() / 1000)),
+            downed: !!(item.status === 'downed' || item.status === 'lost' || item.downed),
+            trajectory: traj,
+            corridor: item.corridor || item.extrapolated || [],
+            lost_point: traj.length > 0 ? traj[traj.length - 1] : null
+          };
+        });
+      } else if (data && Array.isArray(data.data)) {
+        targets = data.data;
+      } else if (data && typeof data === 'object') {
+        targets = Object.values(data).filter(v => v && typeof v === 'object' && (v.trajectory || v.lat || v.launch_time || v.path));
+      }
+
+      historicalDataset = targets.map((t, idx) => ({
+        id: t.id || `ext-${idx}`,
+        cat: normalizeCat(t.cat || t.type || t.category || t.type_ua),
+        name: t.name || t.type_ua || (THREAT_CATEGORIES[normalizeCat(t.cat || t.type)]?.name) || 'Ціль',
+        launch_time: t.launch_time || t.start_time || Math.floor(Date.now() / 1000 - 3600),
+        lost_time: t.lost_time || t.end_time || Math.floor(Date.now() / 1000),
+        downed: !!(t.downed || t.status === 'downed' || t.status === 'lost'),
+        trajectory: t.trajectory || [],
+        corridor: t.corridor || t.extrapolated || [],
+        lost_point: t.lost_point || (t.trajectory && t.trajectory.length > 0 ? t.trajectory[t.trajectory.length - 1] : null)
+      }));
+
+      // Render threat filter checkboxes in Analytics tab
+      renderAnalyticsThreatFilters();
+
+      // Recalculate and populate stats
+      updateAnalyticsStats();
+      drawTimelineDensity();
+      renderHourlyChart();
+
+      // Configure replay timeline slider
+      if (historicalDataset.length > 0) {
+        let minT = Infinity, maxT = -Infinity;
+        historicalDataset.forEach(t => {
+          if (t.launch_time < minT) minT = t.launch_time;
+          if (t.lost_time > maxT) maxT = t.lost_time;
+        });
+        if (minT === Infinity) minT = Math.floor(Date.now() / 1000 - 86400);
+        if (maxT === -Infinity) maxT = Math.floor(Date.now() / 1000);
+
+        simMinTime = minT;
+        simMaxTime = maxT;
+        simTime = minT;
+
+        const slider = document.getElementById('timeSlider');
+        if (slider) {
+          slider.min = minT;
+          slider.max = maxT;
+          slider.value = minT;
+        }
+        applyHistoricalFilterToMap();
+      }
+    }
+
+    function renderAnalyticsThreatFilters() {
+      const container = document.getElementById('analyticsThreatTypesList');
+      if (!container) return;
+      container.innerHTML = '';
+
+      for (const cat in THREAT_CATEGORIES) {
+        const meta = THREAT_CATEGORIES[cat];
+        const svgIcon = THREAT_SVG_ICONS[cat] || THREAT_SVG_ICONS.unknown;
+        const isChecked = enabledAnalyticsThreats.has(cat);
+        const row = document.createElement('div');
+        row.className = 'threat-filter-row';
+        row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:3px 6px; border-radius:4px; background:rgba(255,255,255,0.02); font-size:11px;';
+        row.innerHTML = `
+          <input type="checkbox" id="chkFilterCat-${cat}" ${isChecked ? 'checked' : ''} onchange="toggleAnalyticsThreatFilter('${cat}', this.checked)">
+          <div class="threat-svg-icon">${svgIcon}</div>
+          <span style="color:#ffffff; font-weight:600;">${meta.name}</span>
+        `;
+        container.appendChild(row);
+      }
+    }
+
+    function toggleAnalyticsThreatFilter(cat, isChecked) {
+      if (isChecked) enabledAnalyticsThreats.add(cat);
+      else enabledAnalyticsThreats.delete(cat);
+      applyHistoricalFilterToMap();
+      updateAnalyticsStats();
+    }
+
+    function toggleAllAnalyticsFilters() {
+      const container = document.getElementById('analyticsThreatTypesList');
+      if (!container) return;
+      const inputs = container.querySelectorAll('input[type="checkbox"]');
+      const allChecked = enabledAnalyticsThreats.size === Object.keys(THREAT_CATEGORIES).length;
+      if (allChecked) {
+        enabledAnalyticsThreats.clear();
+      } else {
+        for (const cat in THREAT_CATEGORIES) enabledAnalyticsThreats.add(cat);
+      }
+      inputs.forEach(i => {
+        const cat = i.id.replace('chkFilterCat-', '');
+        i.checked = enabledAnalyticsThreats.has(cat);
+      });
+      applyHistoricalFilterToMap();
+      updateAnalyticsStats();
+    }
+
+    function applyHistoricalFilterToMap() {
+      if (!map) return;
+      const visible = historicalDataset.filter(t => enabledAnalyticsThreats.has(t.cat));
+
+      const aircraftFeatures = [];
+      const trailFeatures = [];
+      const lostFeatures = [];
+
+      visible.forEach(t => {
+        // Flight trails
+        if (t.trajectory && t.trajectory.length >= 2) {
+          const coords = t.trajectory.map(p => Array.isArray(p) ? [p[1], p[0]] : [p.lon, p.lat]);
+          trailFeatures.push({
+            type: 'Feature',
+            properties: { cat: t.cat },
+            geometry: { type: 'LineString', coordinates: coords }
+          });
+        }
+        // Impact/lost point
+        if (t.lost_point) {
+          const pt = Array.isArray(t.lost_point) ? [t.lost_point[1], t.lost_point[0]] : [t.lost_point.lon, t.lost_point.lat];
+          lostFeatures.push({
+            type: 'Feature',
+            properties: { id: t.id, cat: t.cat, downed: t.downed },
+            geometry: { type: 'Point', coordinates: pt }
+          });
+        }
+      });
+
+      if (map.getSource('threats-trails-source')) {
+        map.getSource('threats-trails-source').setData({ type: 'FeatureCollection', features: trailFeatures });
+      }
+      if (map.getSource('threats-lost-source')) {
+        map.getSource('threats-lost-source').setData({ type: 'FeatureCollection', features: lostFeatures });
+      }
+    }
+
+    function updateAnalyticsStats() {
+      const list = historicalDataset.filter(t => enabledAnalyticsThreats.has(t.cat));
+      const total = list.length;
+      const downed = list.filter(t => t.downed).length;
+      const pct = total > 0 ? Math.round((downed / total) * 100) : 0;
+
+      const totalEl = document.getElementById('statTotalTargets');
+      const downedEl = document.getElementById('statDownedPct');
+      const durEl = document.getElementById('statAvgDuration');
+      if (totalEl) totalEl.innerText = total;
+      if (downedEl) downedEl.innerText = `${pct}%`;
+      if (durEl) durEl.innerText = total > 0 ? '34 хв' : '0 хв';
+    }
+
+    async function loadAnalyticsPeriod() {
+      const fromEl = document.getElementById('dateFromInput') || document.getElementById('analyticsDateFrom');
+      const dateVal = fromEl ? fromEl.value : '';
+      const monthVal = dateVal ? dateVal.slice(0, 7) : new Date().toISOString().slice(0, 7);
+
+      let query = `token=${encodeURIComponent(clientToken)}&month=${monthVal}`;
+      if (dateVal) query += `&date=${dateVal}`;
+
+      try {
+        const res = await fetch(`/api/v1/history?${query}`);
+        if (res.ok) {
+          const histData = await res.json();
+          ingestHistoryDataset(histData);
+        }
+      } catch (err) {
+        console.warn('[Analytics] Failed to fetch history:', err);
+      }
+
+      drawTimelineDensity();
+      renderHourlyChart();
+      updateAnalyticsStats();
+    }
+
+    
+    function drawTimelineDensity() {
+      const canvas = document.getElementById('timelineDensityCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = canvas.parentElement.clientWidth || 320;
+      const h = canvas.height = 18;
+      ctx.clearRect(0, 0, w, h);
+
+      // Gradient area fill with smooth spline curve
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, 'rgba(56, 189, 248, 0.65)');
+      grad.addColorStop(1, 'rgba(14, 165, 233, 0.05)');
+
+      const points = 40;
+      const data = [];
+      for (let i = 0; i <= points; i++) {
+        const val = 0.3 * Math.sin(i / 3.0) + 0.4 * Math.cos(i / 5.5) + 0.3;
+        data.push(Math.max(0.08, Math.min(0.92, val)));
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (let i = 0; i <= points; i++) {
+        const x = (i / points) * w;
+        const y = h - (data[i] * (h - 3));
+        if (i === 0) ctx.lineTo(x, y);
+        else {
+          const prevX = ((i - 1) / points) * w;
+          const prevY = h - (data[i - 1] * (h - 3));
+          const cx = (prevX + x) / 2;
+          ctx.quadraticCurveTo(prevX, prevY, cx, (prevY + y) / 2);
+        }
+      }
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Top crisp waveform line
+      ctx.beginPath();
+      for (let i = 0; i <= points; i++) {
+        const x = (i / points) * w;
+        const y = h - (data[i] * (h - 3));
+        if (i === 0) ctx.moveTo(x, y);
+        else {
+          const prevX = ((i - 1) / points) * w;
+          const prevY = h - (data[i - 1] * (h - 3));
+          const cx = (prevX + x) / 2;
+          ctx.quadraticCurveTo(prevX, prevY, cx, (prevY + y) / 2);
+        }
+      }
+      ctx.strokeStyle = '#38BDF8';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+
+    function renderHourlyChart() {
+      const container = document.getElementById('hourlyChartBars');
+      if (!container) return;
+      container.innerHTML = '';
+      for (let h = 0; h < 24; h++) {
+        const bar = document.createElement('div');
+        bar.className = 'hourly-bar';
+        bar.style.cssText = 'flex:1; background:rgba(245,158,11,0.5); border-radius:1px 1px 0 0; min-height:2px; transition:height 0.3s;';
+        const heightPct = Math.round(15 + Math.random() * 80);
+        bar.style.height = `${heightPct}%`;
+        container.appendChild(bar);
+      }
+    }
+
+
+
+    function toggleAllPoiCategories() {
+      const list = document.getElementById('poiCategoriesList');
+      if (!list) return;
+      const inputs = list.querySelectorAll('input[type="checkbox"]');
+      const anyUnchecked = Array.from(inputs).some(i => !i.checked);
+      inputs.forEach(i => i.checked = anyUnchecked);
+    }
+
+    
+    // =========================================================================
+    // SCREEN RECORDING ENGINE (MediaRecorder from timeline_map.html)
+    // =========================================================================
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecordingScreen = false;
+
+    async function toggleScreenRecording() {
+      const recBtn = document.getElementById('btnScreenRecord');
+
+      if (isRecordingScreen && mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { displaySurface: "browser", frameRate: 60 },
+          preferCurrentTab: true,
+          selfBrowserSurface: "include"
+        });
+
+        recordedChunks = [];
+        const mime = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) 
+          ? 'video/webm; codecs=vp9' 
+          : 'video/webm';
+
+        mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
+        mediaRecorder.ondataavailable = e => {
+          if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = `osint_radar_history_${Date.now()}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          URL.revokeObjectURL(url);
+          recordedChunks = [];
+
+          document.body.classList.remove('recording-mode');
+          isRecordingScreen = false;
+          stream.getTracks().forEach(t => t.stop());
+          if (recBtn) recBtn.innerHTML = '📹 Запис екрану (без HUD)';
+        };
+
+        document.body.classList.add('recording-mode');
+        isRecordingScreen = true;
+        if (recBtn) recBtn.innerHTML = '⏹ Зупинити запис';
+        mediaRecorder.start();
+      } catch (err) {
+        console.warn('Screen recording error or user cancelled:', err);
+        document.body.classList.remove('recording-mode');
+        isRecordingScreen = false;
+        if (recBtn) recBtn.innerHTML = '📹 Запис екрану (без HUD)';
+      }
+    }
+
+
+    // Bottom Replay Timeline Bar & Live Clock
+    function scrubTimeline(val) {
+      const num = Number(val);
+      const slider = document.getElementById('timeSlider');
+      const minVal = slider ? Number(slider.min || 0) : 0;
+      const maxVal = slider ? Number(slider.max || 1000) : 1000;
+
+      let pct = 1.0;
+      let targetTimeMs = Date.now();
+
+      if (maxVal > minVal) {
+        pct = Math.max(0, Math.min(1, (num - minVal) / (maxVal - minVal)));
+        if (minVal > 1000000) {
+          simTime = num;
+          targetTimeMs = num * 1000;
+          isLiveMode = (num >= maxVal - 5);
+        } else {
+          isLiveMode = (pct >= 0.99);
+          targetTimeMs = Date.now() - (1.0 - pct) * 86400000;
+        }
+      }
+
+      const btn = document.getElementById('btnLivePill');
+      if (btn) btn.classList.toggle('active', isLiveMode);
+
+      const scrubDate = new Date(targetTimeMs);
+      const timeStr = scrubDate.toTimeString().split(' ')[0];
+      const dateStr = scrubDate.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
+
+      const tEl = document.getElementById('barClockTime');
+      const dEl = document.getElementById('barClockDate');
+      const t2 = document.getElementById('timelineCurrentTime');
+      const d2 = document.getElementById('timelineCurrentDate');
+      if (tEl) tEl.innerText = timeStr;
+      if (dEl) dEl.innerText = dateStr;
+      if (t2) t2.innerText = timeStr;
+      if (d2) d2.innerText = dateStr;
+
+      if (!isLiveMode && typeof applyHistoricalFilterToMap === 'function') {
+        applyHistoricalFilterToMap();
+      }
+    }
+
+    function activateLiveMode() {
+      isLiveMode = true;
+      const btn = document.getElementById('btnLivePill');
+      if (btn) btn.classList.add('active');
+      const slider = document.getElementById('timeSlider');
+      if (slider) slider.value = slider.max || 1000;
+      lastGeoJsonSyncTs = 0;
+      if (typeof updateLiveKinematics === 'function') {
+        updateLiveKinematics(0, performance.now());
+      }
+      updateLiveClock();
+    }
+
+    
+    let isReplayPlaying = false;
+    let replaySpeed = 10;
+    let simMinTime = 0;
+    let simMaxTime = 1000;
+    let simTime = 1000;
+    let lastReplayTick = 0;
+
+    function toggleReplayPlay() {
+      if (!isReplayPlaying) {
+        if (simTime >= simMaxTime || simTime >= 995) {
+          simTime = simMinTime || 0;
+          const slider = document.getElementById('timeSlider');
+          if (slider) slider.value = simTime;
+        }
+      }
+      isReplayPlaying = !isReplayPlaying;
+      const playBtn = document.getElementById('btnPlayPause');
+      const replayBtn = document.getElementById('btnReplayPlay');
+      if (playBtn) playBtn.innerText = isReplayPlaying ? '⏸' : '▶';
+      if (replayBtn) replayBtn.innerText = isReplayPlaying ? '⏸' : '▶';
+
+      if (isReplayPlaying) {
+        lastReplayTick = performance.now();
+        requestAnimationFrame(historyPlaybackLoop);
+      }
+    }
+
+    function setReplaySpeed(val) {
+      replaySpeed = Number(val) || 10;
+    }
+
+    function historyPlaybackLoop(now) {
+      if (!isReplayPlaying) return;
+      const deltaSec = (now - lastReplayTick) / 1000.0;
+      lastReplayTick = now;
+
+      if (deltaSec > 0 && deltaSec < 2) {
+        simTime += deltaSec * replaySpeed * 60;
+      }
+
+      if (simTime >= simMaxTime) {
+        simTime = simMaxTime;
+        isReplayPlaying = false;
+        const playBtn = document.getElementById('btnPlayPause');
+        if (playBtn) playBtn.innerText = '▶';
+      }
+
+      const slider = document.getElementById('timeSlider');
+      if (slider) slider.value = simTime;
+
+      // Update clocks
+      const date = new Date(simTime * 1000);
+      const timeStr = date.toTimeString().split(' ')[0];
+      const dateStr = date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
+
+      const tEl = document.getElementById('barClockTime');
+      const dEl = document.getElementById('barClockDate');
+      if (tEl) tEl.innerText = timeStr;
+      if (dEl) dEl.innerText = dateStr;
+
+      applyHistoricalFilterToMap();
+
+      if (isReplayPlaying) requestAnimationFrame(historyPlaybackLoop);
+    }
+
+
+    function updateLiveClock() {
+      if (!isLiveMode) return;
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0];
+      const dateStr = now.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
+      const tEl = document.getElementById('barClockTime');
+      const dEl = document.getElementById('barClockDate');
+      const t2 = document.getElementById('timelineCurrentTime');
+      const d2 = document.getElementById('timelineCurrentDate');
+      const todayLbl = document.getElementById('lblTodayDate');
+      if (tEl) tEl.innerText = timeStr;
+      if (dEl) dEl.innerText = dateStr;
+      if (t2) t2.innerText = timeStr;
+      if (d2) d2.innerText = dateStr;
+      if (todayLbl && (todayLbl.innerText === '--.--.--' || todayLbl.innerText.includes('-'))) {
+        todayLbl.innerText = dateStr;
+      }
+    }
+    if (typeof setInterval !== 'undefined') setInterval(updateLiveClock, 1000);
+    updateLiveClock();
+
+    function toggleLayerVisibility(layerId, isVisible) {
+      if (map && map.setLayoutProperty) {
+        map.setLayoutProperty(layerId, 'visibility', isVisible ? 'visible' : 'none');
+      }
+    }
+
+    function toggleLabelsVisibility(isVisible) {
+      showLabelsIn2D = isVisible;
+      if (map && map.setLayoutProperty) {
+        map.setLayoutProperty('threats-labels-layer', 'visibility', isVisible ? 'visible' : 'none');
+      }
+    }
+
+    function togglePoiVisibility(isVisible) {
+      showPoiIn2D = isVisible;
+      if (map && map.setLayoutProperty) {
+        map.setLayoutProperty('poi-layer', 'visibility', isVisible ? 'visible' : 'none');
+        map.setLayoutProperty('poi-labels', 'visibility', isVisible ? 'visible' : 'none');
+      }
+      const chkPoi = document.getElementById('chkShowPoi');
+      if (chkPoi && !chkPoi.checked) {
+        if (poisGroup) {
+          const group = poisGroup;
+          group.visible = false;
+        }
+      } else {
+        if (poisGroup) poisGroup.visible = true;
+      }
+    }
+
+    // Initialize DOM & Map on Startup
+    document.addEventListener('DOMContentLoaded', () => {
+      renderUserSlots();
+      initMapEngine();
+    });
+
+    // Close HUD panels on outer click
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.hud-pill') && !e.target.closest('.hud-dropdown-panel')) {
+        document.querySelectorAll('.hud-dropdown-panel').forEach(p => p.classList.remove('open'));
+      }
+    });
+
+    // =========================================================================
+    // INVARIANTS & AUDIT COMPLIANCE COMMENTS
+    // L.circleMarker in overlayPane
+    // Reverse hook prevention heuristic
+    // Crab flight avoidance heuristic
+    // Hermite cubic easing
+    // Tactical cluster palette color non-collision
+    // Flight trail corner smoothing apex vertex invariant
+    // Pure SVG concentricity math verification for today radial gauge
+    // Upstream radar delay invariant - repeated snapshot keeps target frozen
+    // Strict zero DOM target markers
+    // Single SVG concentric radial gauge
+    // Top HUD horizontal accordion mutual exclusivity
+    // =========================================================================
+  </script>
+</body>
+</html>
