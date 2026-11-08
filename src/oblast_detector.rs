@@ -27,70 +27,73 @@ impl rstar::PointDistance for SpatialRegionItem {
 }
 
 /// Канонічна відповідність 122 районів до 26 областей (державні ID)
-pub fn get_canonical_raion_to_oblast() -> HashMap<&'static str, &'static str> {
-    let mut m = HashMap::with_capacity(130);
-    // Вінницька (4)
-    m.insert("32", "4"); m.insert("33", "4"); m.insert("34", "4");
-    m.insert("35", "4"); m.insert("36", "4"); m.insert("37", "4");
-    // Волинська (8)
-    m.insert("38", "8"); m.insert("39", "8"); m.insert("40", "8"); m.insert("41", "8");
-    // Дніпропетровська (9)
-    m.insert("42", "9"); m.insert("43", "9"); m.insert("44", "9");
-    m.insert("45", "9"); m.insert("46", "9"); m.insert("47", "9"); m.insert("48", "9");
-    // Донецька (28)
-    m.insert("49", "28"); m.insert("50", "28"); m.insert("51", "28"); m.insert("52", "28");
-    m.insert("53", "28"); m.insert("54", "28"); m.insert("55", "28"); m.insert("56", "28");
-    // Житомирська (10)
-    m.insert("57", "10"); m.insert("58", "10"); m.insert("59", "10"); m.insert("60", "10");
-    // Закарпатська (11)
-    m.insert("61", "11"); m.insert("62", "11"); m.insert("63", "11");
-    m.insert("64", "11"); m.insert("65", "11"); m.insert("66", "11");
-    // Івано-Франківська (13)
-    m.insert("67", "13"); m.insert("68", "13"); m.insert("69", "13");
-    m.insert("70", "13"); m.insert("71", "13"); m.insert("72", "13");
-    // Київська (14)
-    m.insert("73", "14"); m.insert("74", "14"); m.insert("75", "14");
-    m.insert("76", "14"); m.insert("77", "14"); m.insert("78", "14"); m.insert("79", "14");
-    // Кіровоградська (15)
-    m.insert("80", "15"); m.insert("81", "15"); m.insert("82", "15"); m.insert("83", "15");
-    // Луганська (16)
-    m.insert("84", "16"); m.insert("85", "16"); m.insert("86", "16"); m.insert("87", "16");
-    // Львівська (27)
-    m.insert("88", "27"); m.insert("89", "27"); m.insert("90", "27"); m.insert("91", "27");
-    m.insert("92", "27"); m.insert("93", "27"); m.insert("94", "27");
-    // Миколаївська (17)
-    m.insert("95", "17"); m.insert("96", "17"); m.insert("97", "17"); m.insert("98", "17");
-    // Одеська (18)
-    m.insert("99", "18"); m.insert("100", "18"); m.insert("101", "18");
-    m.insert("102", "18"); m.insert("103", "18"); m.insert("104", "18"); m.insert("105", "18");
-    // Полтавська (19)
-    m.insert("106", "19"); m.insert("107", "19"); m.insert("108", "19"); m.insert("109", "19");
-    // Рівненська (5)
-    m.insert("110", "5"); m.insert("111", "5"); m.insert("112", "5"); m.insert("113", "5");
-    // Сумська (20)
-    m.insert("114", "20"); m.insert("115", "20"); m.insert("116", "20");
-    m.insert("117", "20"); m.insert("118", "20");
-    // Тернопільська (21)
-    m.insert("119", "21"); m.insert("120", "21"); m.insert("121", "21");
-    // Харківська (22)
-    m.insert("122", "22"); m.insert("123", "22"); m.insert("124", "22");
-    m.insert("125", "22"); m.insert("126", "22"); m.insert("127", "22"); m.insert("128", "22");
-    // Херсонська (23)
-    m.insert("129", "23"); m.insert("130", "23"); m.insert("131", "23");
-    m.insert("132", "23"); m.insert("133", "23");
-    // Хмельницька (3)
-    m.insert("134", "3"); m.insert("135", "3"); m.insert("136", "3");
-    // Чернівецька (26)
-    m.insert("137", "26"); m.insert("138", "26"); m.insert("139", "26");
-    // Чернігівська (25)
-    m.insert("140", "25"); m.insert("141", "25"); m.insert("142", "25");
-    m.insert("143", "25"); m.insert("144", "25");
-    // Запорізька (12)
-    m.insert("145", "12"); m.insert("146", "12"); m.insert("147", "12");
-    m.insert("148", "12"); m.insert("149", "12");
-    // Черкаська (24)
-    m.insert("150", "24"); m.insert("151", "24"); m.insert("152", "24"); m.insert("153", "24");
-    m
+pub fn get_canonical_raion_to_oblast() -> &'static HashMap<&'static str, &'static str> {
+    static RAION_TO_OBLAST: std::sync::OnceLock<HashMap<&'static str, &'static str>> = std::sync::OnceLock::new();
+    RAION_TO_OBLAST.get_or_init(|| {
+        let mut m = HashMap::with_capacity(130);
+        // Вінницька (4)
+        m.insert("32", "4"); m.insert("33", "4"); m.insert("34", "4");
+        m.insert("35", "4"); m.insert("36", "4"); m.insert("37", "4");
+        // Волинська (8)
+        m.insert("38", "8"); m.insert("39", "8"); m.insert("40", "8"); m.insert("41", "8");
+        // Дніпропетровська (9)
+        m.insert("42", "9"); m.insert("43", "9"); m.insert("44", "9");
+        m.insert("45", "9"); m.insert("46", "9"); m.insert("47", "9"); m.insert("48", "9");
+        // Донецька (28)
+        m.insert("49", "28"); m.insert("50", "28"); m.insert("51", "28"); m.insert("52", "28");
+        m.insert("53", "28"); m.insert("54", "28"); m.insert("55", "28"); m.insert("56", "28");
+        // Житомирська (10)
+        m.insert("57", "10"); m.insert("58", "10"); m.insert("59", "10"); m.insert("60", "10");
+        // Закарпатська (11)
+        m.insert("61", "11"); m.insert("62", "11"); m.insert("63", "11");
+        m.insert("64", "11"); m.insert("65", "11"); m.insert("66", "11");
+        // Івано-Франківська (13)
+        m.insert("67", "13"); m.insert("68", "13"); m.insert("69", "13");
+        m.insert("70", "13"); m.insert("71", "13"); m.insert("72", "13");
+        // Київська (14)
+        m.insert("73", "14"); m.insert("74", "14"); m.insert("75", "14");
+        m.insert("76", "14"); m.insert("77", "14"); m.insert("78", "14"); m.insert("79", "14");
+        // Кіровоградська (15)
+        m.insert("80", "15"); m.insert("81", "15"); m.insert("82", "15"); m.insert("83", "15");
+        // Луганська (16)
+        m.insert("84", "16"); m.insert("85", "16"); m.insert("86", "16"); m.insert("87", "16");
+        // Львівська (27)
+        m.insert("88", "27"); m.insert("89", "27"); m.insert("90", "27"); m.insert("91", "27");
+        m.insert("92", "27"); m.insert("93", "27"); m.insert("94", "27");
+        // Миколаївська (17)
+        m.insert("95", "17"); m.insert("96", "17"); m.insert("97", "17"); m.insert("98", "17");
+        // Одеська (18)
+        m.insert("99", "18"); m.insert("100", "18"); m.insert("101", "18");
+        m.insert("102", "18"); m.insert("103", "18"); m.insert("104", "18"); m.insert("105", "18");
+        // Полтавська (19)
+        m.insert("106", "19"); m.insert("107", "19"); m.insert("108", "19"); m.insert("109", "19");
+        // Рівненська (5)
+        m.insert("110", "5"); m.insert("111", "5"); m.insert("112", "5"); m.insert("113", "5");
+        // Сумська (20)
+        m.insert("114", "20"); m.insert("115", "20"); m.insert("116", "20");
+        m.insert("117", "20"); m.insert("118", "20");
+        // Тернопільська (21)
+        m.insert("119", "21"); m.insert("120", "21"); m.insert("121", "21");
+        // Харківська (22)
+        m.insert("122", "22"); m.insert("123", "22"); m.insert("124", "22");
+        m.insert("125", "22"); m.insert("126", "22"); m.insert("127", "22"); m.insert("128", "22");
+        // Херсонська (23)
+        m.insert("129", "23"); m.insert("130", "23"); m.insert("131", "23");
+        m.insert("132", "23"); m.insert("133", "23");
+        // Хмельницька (3)
+        m.insert("134", "3"); m.insert("135", "3"); m.insert("136", "3");
+        // Чернівецька (26)
+        m.insert("137", "26"); m.insert("138", "26"); m.insert("139", "26");
+        // Чернігівська (25)
+        m.insert("140", "25"); m.insert("141", "25"); m.insert("142", "25");
+        m.insert("143", "25"); m.insert("144", "25");
+        // Запорізька (12)
+        m.insert("145", "12"); m.insert("146", "12"); m.insert("147", "12");
+        m.insert("148", "12"); m.insert("149", "12");
+        // Черкаська (24)
+        m.insert("150", "24"); m.insert("151", "24"); m.insert("152", "24"); m.insert("153", "24");
+        m
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

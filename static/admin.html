@@ -2378,19 +2378,27 @@ ${resp.api_key}
       const key = sel ? sel.value : '';
       const verEl = document.querySelector('input[name=radarVersionSelect]:checked');
       const ver = verEl ? verEl.value : 'v3';
-      const targetPath = (ver === 'v3') ? '/map' : '/map';
+      const targetPath = (ver === 'timeline' || ver === 'replay') ? '/replay' : '/map';
 
-      if (!key) {
+      let effectiveKey = key;
+      if (!effectiveKey) {
+        if (typeof currentAdminKey !== 'undefined' && currentAdminKey) {
+          effectiveKey = currentAdminKey;
+        } else if (sel && sel.options.length > 1 && sel.options[1].value) {
+          effectiveKey = sel.options[1].value;
+        }
+      }
+
+      if (!effectiveKey) {
         const manualKey = prompt('Введіть ключ користувача:', '');
         if (manualKey && manualKey.trim()) {
-          window.open(`${targetPath}?token=${encodeURIComponent(manualKey.trim())}`, '_blank');
-          closeRadarUserModal();
+          effectiveKey = manualKey.trim();
         } else {
           alert('⚠️ Для перегляду мапи необхідно обрати користувача зі списку або ввести дійсний API-ключ.');
+          return;
         }
-        return;
       }
-      window.open(`${targetPath}?token=${encodeURIComponent(key)}`, '_blank');
+      window.open(`${targetPath}?token=${encodeURIComponent(effectiveKey)}`, '_blank');
       closeRadarUserModal();
     }
 

@@ -832,7 +832,95 @@
     /* =========================================================================
        RESPONSIVE MOBILE BREAKPOINT (< 640px)
        ========================================================================= */
+    /* Tactical Target Context Popup & 3D Flightradar Button */
+    .target-context-popup .maplibregl-popup-content {
+      background: rgba(15, 23, 42, 0.96) !important;
+      backdrop-filter: blur(14px) !important;
+      -webkit-backdrop-filter: blur(14px) !important;
+      border: 1px solid rgba(245, 158, 11, 0.45) !important;
+      border-radius: 10px !important;
+      padding: 10px 12px !important;
+      color: #F8FAFC !important;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.75) !important;
+      min-width: 215px !important;
+      font-family: var(--font-stack) !important;
+    }
+    .target-context-popup .maplibregl-popup-tip {
+      border-top-color: rgba(245, 158, 11, 0.45) !important;
+    }
+    .target-popup-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 6px;
+      margin-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      font-weight: 800;
+      font-size: 12px;
+    }
+    .target-popup-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 10px;
+      font-size: 10.5px;
+      margin-bottom: 8px;
+    }
+    .target-popup-grid span.lbl {
+      color: var(--text-muted);
+    }
+    .target-popup-grid span.val {
+      color: #FFFFFF;
+      font-weight: 700;
+      text-align: right;
+    }
+    .btn-3d-chase {
+      width: 100%;
+      height: 30px;
+      background: linear-gradient(135deg, #F59E0B, #D97706);
+      border: none;
+      border-radius: 6px;
+      color: #0B0E14;
+      font-weight: 800;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+    .btn-3d-chase:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    #pillClosestThreat .hud-dropdown-panel {
+      left: auto;
+      right: 0;
+    }
+
+    html, body, input, select, button {
+      touch-action: manipulation;
+    }
+
+    .bottom-timeline-bar {
+      bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    }
+    .nav-cluster {
+      bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    }
+
     @media (max-width: 640px) {
+      .hud-dropdown-panel {
+        position: fixed;
+        top: 44px;
+        left: 8px !important;
+        right: 8px !important;
+        width: auto;
+        max-width: calc(100vw - 16px);
+      }
       .top-hud-bar {
         top: 6px;
         left: 6px;
@@ -851,14 +939,24 @@
         width: 100vw;
         max-width: 100vw;
         border-radius: 0;
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
       }
       .bottom-timeline-bar {
-        bottom: 6px;
+        bottom: calc(6px + env(safe-area-inset-bottom, 0px));
         left: 6px;
         right: 6px;
         height: 38px;
         padding: 0 6px;
         gap: 6px;
+      }
+      .nav-cluster {
+        bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+        right: 8px;
+      }
+      .tactical-input, .tactical-select {
+        font-size: 16px;
+        height: 34px;
       }
     }
 
@@ -962,10 +1060,16 @@
   <!-- WebGL Map Container -->
   <div id="map"></div>
 
-  <!-- 360 Orbit HUD Banner -->
+  <!-- 360 Orbit HUD Banner (Flightradar24 Chase Mode) -->
   <div class="orbit-3d-banner" id="orbitHudBanner">
-    <span>🎯 3D ОГЛЯД [360°]: <span id="orbitTargetId">--</span></span>
-    <button class="orbit-exit-btn" onclick="exit3DFocus()">✖ ВИЙТИ З 3D</button>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span>🎯 3D СУПРОВІД ЦІЛІ [CHASE]: <b id="orbitTargetId">--</b></span>
+      <span id="orbitTargetTelemetry" style="font-size:11px; color:#8ea3b7; font-family:monospace;"></span>
+    </div>
+    <div style="display:flex; gap:6px;">
+      <button class="hud-btn" style="height:26px; padding:0 8px; font-size:10px;" onclick="resetChaseCameraBehind()" title="Камера за хвостом">↺ ЗА ХВОСТОМ</button>
+      <button class="orbit-exit-btn" onclick="exit3DFocus()">✖ ВИЙТИ З 3D</button>
+    </div>
   </div>
 
   <!-- ================= TOP HUD CLUSTER (SCREENSHOT 1) ================= -->
@@ -1282,7 +1386,21 @@
           <span id="userOwnerValue" style="font-size:12.5px; font-weight:800; color:#ffffff; background:rgba(234,88,12,0.2); border:1px solid rgba(234,88,12,0.5); padding:2.5px 10px; border-radius:6px; font-family:inherit; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="Власник API-ключа">Користувач Hub</span>
         </div>
       </section>
-<!-- Basemap & API Token Section -->
+
+      <!-- Client Access Key Section -->
+      <section class="panel-section">
+        <div class="section-title-row">
+          <span>КЛЮЧ ДОСТУПУ КЛІЄНТА (HUB TOKEN)</span>
+          <span id="clientTokenStatusBadge" class="badge-count calm">АКТИВНИЙ</span>
+        </div>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input type="password" id="clientAuthTokenInput" class="tactical-input" placeholder="ak_..." style="flex:1;">
+          <button type="button" class="hud-btn" onclick="toggleInputPassword('clientAuthTokenInput')" title="Показати/сховати">👁</button>
+          <button type="button" class="btn-action-primary" style="padding:0 10px;" onclick="saveClientAuthToken()">Застосувати</button>
+        </div>
+      </section>
+
+      <!-- Basemap & API Token Section -->
       <section class="panel-section">
         <div class="section-title-row">
           <span>ТИП ПІДКЛАДКИ МАПИ & API-TOKEN</span>
@@ -1884,6 +2002,26 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         renderTodayRadialGauge();
         loadRegionsData();
         loadPoiData();
+        fetchUserSlots();
+        loadMapProviderConfig();
+        initChaseCameraInputHandlers();
+
+        // Cursor pointer and click handler for threats-aircraft-layer
+        map.on('mouseenter', 'threats-aircraft-layer', () => {
+          if (!isPickingLocationOnMap) map.getCanvas().style.cursor = 'pointer';
+        });
+        map.on('mouseleave', 'threats-aircraft-layer', () => {
+          if (!isPickingLocationOnMap) map.getCanvas().style.cursor = '';
+        });
+        map.on('click', 'threats-aircraft-layer', (e) => {
+          if (isPickingLocationOnMap) return;
+          if (!e.features || !e.features.length) return;
+          if (e.originalEvent) e.originalEvent.cancelBubble = true;
+          e._targetClicked = true;
+          const feat = e.features[0];
+          const tid = feat.properties.tid;
+          openTargetContextMenu(tid, e.lngLat);
+        });
       });
 
       map.on('rotate', () => {
@@ -1928,7 +2066,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       });
 
       map.on('click', 'alerts-fill', (e) => {
-        if (isPickingLocationOnMap || is3DModeActive) return;
+        if (isPickingLocationOnMap || is3DModeActive || e._targetClicked || (e.originalEvent && e.originalEvent.cancelBubble)) return;
+        const hitTargets = map.queryRenderedFeatures(e.point, { layers: ['threats-aircraft-layer', 'poi-layer'] });
+        if (hitTargets && hitTargets.length > 0) return;
         if (!e.features || !e.features.length) return;
         const feat = e.features[0];
         const props = feat.properties || {};
@@ -2044,6 +2184,56 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
     }
 
+    const loadRegionsGeoJson = loadRegionsData;
+
+    let poiItems = [];
+    async function loadPoiData() {
+      try {
+        const res = await fetch('/api/v1/client/poi');
+        if (!res.ok) return;
+        poiItems = await res.json();
+        const features = (poiItems || []).map(p => {
+          const color = (p.category === 'airfield' || p.category === 'airbases' || p.category === 'military') ? '#F43F5E' :
+                        (p.category === 'energy_hubs' || p.category === 'energy' || p.category === 'power') ? '#F59E0B' :
+                        (p.category === 'logistics_bridges' || p.category === 'logistics' || p.category === 'industry') ? '#3B82F6' : '#10B981';
+          return {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
+            properties: {
+              id: p.id,
+              name: p.name,
+              category: p.category,
+              color: color,
+              oblast: p.oblast
+            }
+          };
+        });
+        if (map && map.getSource('poi-source')) {
+          map.getSource('poi-source').setData({ type: 'FeatureCollection', features });
+        }
+      } catch (e) {
+        console.warn('[POI] Failed to load POI data:', e);
+      }
+    }
+
+    async function fetchUserSlots() {
+      try {
+        const q = clientToken ? `?token=${encodeURIComponent(clientToken)}` : '';
+        const res = await fetch(`/api/v1/slots${q}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.slots) {
+            currentSlots = data.slots;
+            userSlots = currentSlots;
+            renderUserSlots(currentSlots);
+            updateUserSlotsGeoJson(currentSlots);
+          }
+        }
+      } catch (e) {
+        console.warn('[Slots] fetchUserSlots failed:', e);
+      }
+    }
+
     function applyAlertsToRegions() {
       if (!rawRegionsGeoJson || !map || !map.getSource('alerts-source')) return;
       const features = (rawRegionsGeoJson.features || []).map((feat, idx) => {
@@ -2094,12 +2284,20 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     function initLayerHierarchy() {
       // 1. Sources
-            // Outside Ukraine Dimming Mask Source & Layer
       map.addSource('mask-outside-source', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] }
       });
+      map.addSource('alerts-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('selected-region-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('user-slots-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('poi-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('threats-forecast-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('threats-trails-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('threats-lost-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('threats-aircraft-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
+      // 2. Strict Z-Order Layer Addition (Bottom to Top: Basemap -> Alerts -> Slots Danger -> POI -> User Points -> Trails/Forecast -> Aircraft/Threats)
       map.addLayer({
         id: 'mask-outside-layer',
         type: 'fill',
@@ -2111,16 +2309,6 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         }
       });
 
-      map.addSource('alerts-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addSource('selected-region-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addSource('threats-trails-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addSource('threats-forecast-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addSource('threats-lost-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addSource('threats-aircraft-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addSource('poi-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addSource('user-slots-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-
-      // 2. Strict Z-Order Layer Addition (Alerts -> Selected Region -> Trails -> Lost -> Aircraft -> POI -> User Slots)
       map.addLayer({
         id: 'alerts-fill',
         type: 'fill',
@@ -2173,6 +2361,89 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         }
       });
 
+      // User Slot Danger Zones (Level 2: Strictly below POIs and aircraft threats)
+      map.addLayer({
+        id: 'user-danger-zone-fill',
+        type: 'fill',
+        source: 'user-slots-source',
+        filter: ['==', '$type', 'Polygon'],
+        paint: {
+          'fill-color': '#3B82F6',
+          'fill-opacity': 0.1
+        }
+      });
+
+      map.addLayer({
+        id: 'user-danger-zone-line',
+        type: 'line',
+        source: 'user-slots-source',
+        filter: ['==', '$type', 'Polygon'],
+        paint: {
+          'line-color': '#60A5FA',
+          'line-width': 1.5,
+          'line-dasharray': [3, 2]
+        }
+      });
+
+      // Strategic Objects (POI) (Level 4: Below user markers & threats)
+      map.addLayer({
+        id: 'poi-layer',
+        type: 'circle',
+        source: 'poi-source',
+        paint: {
+          'circle-radius': 5,
+          'circle-color': ['get', 'color'],
+          'circle-stroke-color': '#0B0E14',
+          'circle-stroke-width': 1.5
+        }
+      });
+
+      map.addLayer({
+        id: 'poi-labels',
+        type: 'symbol',
+        source: 'poi-source',
+        minzoom: 8.5,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Regular'],
+          'text-size': 10,
+          'text-offset': [0, 1.2],
+          'text-anchor': 'top',
+          'text-allow-overlap': false
+        },
+        paint: {
+          'text-color': '#94A3B8',
+          'text-halo-color': '#0B0E14',
+          'text-halo-width': 1.5
+        }
+      });
+
+      // User Point Markers (Level 5)
+      map.addLayer({
+        id: 'user-point-outer',
+        type: 'circle',
+        source: 'user-slots-source',
+        filter: ['==', '$type', 'Point'],
+        paint: {
+          'circle-radius': 9,
+          'circle-color': '#F43F5E',
+          'circle-stroke-color': '#FFFFFF',
+          'circle-stroke-width': 2
+        }
+      });
+
+      map.addLayer({
+        id: 'user-point-inner',
+        type: 'circle',
+        source: 'user-slots-source',
+        filter: ['==', '$type', 'Point'],
+        paint: {
+          'circle-radius': 4,
+          'circle-color': '#FFFFFF'
+        }
+      });
+
+      // Vectors & Trails (Level 6)
       map.addLayer({
         id: 'threats-forecast-layer',
         type: 'line',
@@ -2200,6 +2471,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         }
       });
 
+      // Dynamic Aircraft & Threats (Level 7: Highest 2D Priority)
       map.addLayer({
         id: 'threats-lost-layer',
         type: 'symbol',
@@ -2263,85 +2535,6 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           'text-halo-width': 2
         }
       });
-
-      map.addLayer({
-        id: 'poi-layer',
-        type: 'circle',
-        source: 'poi-source',
-        paint: {
-          'circle-radius': 5,
-          'circle-color': ['get', 'color'],
-          'circle-stroke-color': '#0B0E14',
-          'circle-stroke-width': 1.5
-        }
-      });
-
-      map.addLayer({
-        id: 'poi-labels',
-        type: 'symbol',
-        source: 'poi-source',
-        minzoom: 8.5,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-font': ['Open Sans Regular'],
-          'text-size': 10,
-          'text-offset': [0, 1.2],
-          'text-anchor': 'top',
-          'text-allow-overlap': false
-        },
-        paint: {
-          'text-color': '#94A3B8',
-          'text-halo-color': '#0B0E14',
-          'text-halo-width': 1.5
-        }
-      });
-
-      map.addLayer({
-        id: 'user-danger-zone-fill',
-        type: 'fill',
-        source: 'user-slots-source',
-        filter: ['==', '$type', 'Polygon'],
-        paint: {
-          'fill-color': '#3B82F6',
-          'fill-opacity': 0.1
-        }
-      });
-
-      map.addLayer({
-        id: 'user-danger-zone-line',
-        type: 'line',
-        source: 'user-slots-source',
-        filter: ['==', '$type', 'Polygon'],
-        paint: {
-          'line-color': '#60A5FA',
-          'line-width': 1.5,
-          'line-dasharray': [3, 2]
-        }
-      });
-
-      map.addLayer({
-        id: 'user-point-outer',
-        type: 'circle',
-        source: 'user-slots-source',
-        filter: ['==', '$type', 'Point'],
-        paint: {
-          'circle-radius': 9,
-          'circle-color': '#F43F5E',
-          'circle-stroke-color': '#FFFFFF',
-          'circle-stroke-width': 2
-        }
-      });
-
-      map.addLayer({
-        id: 'user-point-inner',
-        type: 'circle',
-        source: 'user-slots-source',
-        filter: ['==', '$type', 'Point'],
-        paint: {
-          'circle-radius': 4,
-          'circle-color': '#FFFFFF'
-        }
-      });
     }
 
     // Basemap switching controller (Layer visibility toggling - Zero map.setStyle wipeout)
@@ -2349,13 +2542,14 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       if (!map) return;
       currentBasemap = provider;
 
-      // Update button styles
       ['btnBaseArcgis', 'btnBaseCarto', 'btnBaseSatellite'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.remove('active');
       });
 
-      const effectiveKey = localStorage.getItem('radar_map_cartodb_token') || '';
+      const effectiveKey = (typeof getEffectiveCartoToken === 'function')
+        ? getEffectiveCartoToken()
+        : (localStorage.getItem('radar_map_cartodb_token') || localStorage.getItem('radar_map_token') || '');
       const keyQuery = effectiveKey ? `?key=${effectiveKey}&api_key=${effectiveKey}` : '';
 
       const isArcgis = (provider === 'arcgis');
@@ -2366,11 +2560,13 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         const b = document.getElementById('btnBaseArcgis'); if (b) b.classList.add('active');
       } else if (isCarto) {
         const b = document.getElementById('btnBaseCarto'); if (b) b.classList.add('active');
+        if (effectiveKey && typeof applyCartoTilesWithToken === 'function') {
+          applyCartoTilesWithToken(effectiveKey);
+        }
       } else if (isSat) {
         const b = document.getElementById('btnBaseSatellite'); if (b) b.classList.add('active');
       }
 
-      // Switch raster basemap layer visibility without wiping custom layers, sources, and 3D scenes
       if (map.setLayoutProperty) {
         if (map.getLayer('esri-dark-gray-layer')) {
           map.setLayoutProperty('esri-dark-gray-layer', 'visibility', isArcgis ? 'visible' : 'none');
@@ -2425,69 +2621,151 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     let custom3DLayer = null;
     let poisGroup = null;
 
-    function buildThreatMesh(cat, color, isGhost) {
+    function getNominalAltitudeMeters(cat) {
+      switch (cat) {
+        case 'ballistic': return 4500;
+        case 'aviation': return 2800;
+        case 'kab': return 1800;
+        case 'missile': return 650;
+        case 'shahed_jet': return 550;
+        case 'recon': return 900;
+        case 'shahed': return 350;
+        case 'lancet':
+        case 'fpv': return 180;
+        default: return 450;
+      }
+    }
+
+    function buildThreatMesh(cat, color, isGhost, altMeters = 400) {
       const group = new THREE.Group();
+      const mainColor = color || '#FACC15';
+
       const bodyMat = new THREE.MeshStandardMaterial({
-        color: color || '#FACC15',
-        metalness: 0.8,
-        roughness: 0.2,
+        color: mainColor,
+        emissive: mainColor,
+        emissiveIntensity: isGhost ? 0.15 : 0.45,
+        metalness: 0.75,
+        roughness: 0.25,
         transparent: true,
-        opacity: isGhost ? 0.22 : 0.88
+        opacity: isGhost ? 0.22 : 0.88,
+        side: THREE.DoubleSide
       });
+
       const wireMat = new THREE.LineBasicMaterial({
         color: '#FFFFFF',
         transparent: true,
         opacity: isGhost ? 0.35 : 0.95
       });
 
-      let geom;
+      const craftGroup = new THREE.Group();
+      craftGroup.name = 'craftBody';
+
       switch (cat) {
         case 'shahed':
         case 'shahed_jet': {
           const shape = new THREE.Shape();
-          shape.moveTo(0, 8);
-          shape.lineTo(12, -8);
-          shape.lineTo(0, -4);
-          shape.lineTo(-12, -8);
+          shape.moveTo(0, 18);
+          shape.lineTo(15, -12);
+          shape.lineTo(3, -9);
+          shape.lineTo(0, -14);
+          shape.lineTo(-3, -9);
+          shape.lineTo(-15, -12);
           shape.closePath();
-          geom = new THREE.ExtrudeGeometry(shape, { depth: 2, bevelEnabled: false });
+          const geom = new THREE.ExtrudeGeometry(shape, { depth: 2.2, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.4 });
+          geom.center();
+          const mesh = new THREE.Mesh(geom, bodyMat);
+          const wire = new THREE.LineSegments(new THREE.EdgesGeometry(geom), wireMat);
+          const finGeom = new THREE.BoxGeometry(0.8, 7, 5);
+          const finL = new THREE.Mesh(finGeom, bodyMat); finL.position.set(-14.5, -9, 2.0);
+          const finR = new THREE.Mesh(finGeom, bodyMat); finR.position.set(14.5, -9, 2.0);
+          craftGroup.add(mesh, wire, finL, finR);
           break;
         }
         case 'missile':
-          geom = new THREE.CylinderGeometry(1.2, 1.2, 24, 16);
+        case 'ballistic': {
+          const bodyGeom = new THREE.CylinderGeometry(1.6, 1.6, 28, 16);
+          const noseGeom = new THREE.ConeGeometry(1.6, 8, 16);
+          noseGeom.translate(0, 18, 0);
+          const wingsGeom = new THREE.BoxGeometry(22, 3.5, 0.6);
+          wingsGeom.translate(0, 2, 0);
+          const tailGeom = new THREE.BoxGeometry(10, 2.5, 0.6);
+          tailGeom.translate(0, -12, 0);
+
+          const missileHolder = new THREE.Group();
+          [bodyGeom, noseGeom, wingsGeom, tailGeom].forEach(g => {
+            missileHolder.add(new THREE.Mesh(g, bodyMat));
+            missileHolder.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), wireMat));
+          });
+          craftGroup.add(missileHolder);
           break;
-        case 'ballistic':
-          geom = new THREE.ConeGeometry(2.5, 30, 16);
+        }
+        case 'aviation': {
+          const shape = new THREE.Shape();
+          shape.moveTo(0, 22);
+          shape.lineTo(4, 6);
+          shape.lineTo(18, -6);
+          shape.lineTo(18, -10);
+          shape.lineTo(5, -8);
+          shape.lineTo(7, -18);
+          shape.lineTo(0, -15);
+          shape.lineTo(-7, -18);
+          shape.lineTo(-5, -8);
+          shape.lineTo(-18, -10);
+          shape.lineTo(-18, -6);
+          shape.lineTo(-4, 6);
+          shape.closePath();
+          const geom = new THREE.ExtrudeGeometry(shape, { depth: 2.5, bevelEnabled: false });
+          geom.center();
+          craftGroup.add(new THREE.Mesh(geom, bodyMat));
+          craftGroup.add(new THREE.LineSegments(new THREE.EdgesGeometry(geom), wireMat));
           break;
-        case 'aviation':
-          geom = new THREE.ConeGeometry(6, 20, 4);
-          break;
+        }
         case 'kab':
-          geom = new THREE.CylinderGeometry(2, 3, 16, 8);
-          break;
         case 'lancet':
-          geom = new THREE.BoxGeometry(3, 3, 14);
-          break;
         case 'recon':
-          geom = new THREE.BoxGeometry(22, 1.5, 8);
-          break;
         case 'fpv':
-          geom = new THREE.BoxGeometry(6, 1.5, 6);
-          break;
         case 'artillery':
-          geom = new THREE.SphereGeometry(3, 8, 8);
-          break;
         case 'unknown':
-        default:
-          geom = new THREE.OctahedronGeometry(4);
+        default: {
+          const geom = (cat === 'recon') ? new THREE.BoxGeometry(24, 2, 8)
+                     : (cat === 'lancet' || cat === 'fpv') ? new THREE.BoxGeometry(8, 2, 8)
+                     : (cat === 'artillery') ? new THREE.SphereGeometry(3, 8, 8)
+                     : new THREE.ConeGeometry(8, 24, 6);
+          craftGroup.add(new THREE.Mesh(geom, bodyMat));
+          craftGroup.add(new THREE.LineSegments(new THREE.EdgesGeometry(geom), wireMat));
           break;
+        }
       }
 
-      const mesh = new THREE.Mesh(geom, bodyMat);
-      const edges = new THREE.EdgesGeometry(geom);
-      const wire = new THREE.LineSegments(edges, wireMat);
-      group.add(mesh);
-      group.add(wire);
+      group.add(craftGroup);
+
+      // Vertical Altitude Drop Line to ground
+      const dropLineGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, -1)
+      ]);
+      const dropLineMat = new THREE.LineBasicMaterial({
+        color: mainColor,
+        transparent: true,
+        opacity: isGhost ? 0.15 : 0.55
+      });
+      const dropLine = new THREE.Line(dropLineGeom, dropLineMat);
+      dropLine.name = 'altitudeDropLine';
+      group.add(dropLine);
+
+      // Ground Shadow Ring
+      const groundRingGeom = new THREE.RingGeometry(4, 6.5, 24);
+      const groundRingMat = new THREE.MeshBasicMaterial({
+        color: mainColor,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: isGhost ? 0.15 : 0.45
+      });
+      const groundRing = new THREE.Mesh(groundRingGeom, groundRingMat);
+      groundRing.name = 'groundShadowRing';
+      group.add(groundRing);
+
+      group.matrixAutoUpdate = false;
       return group;
     }
 
@@ -2711,6 +2989,11 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         render: function(gl, matrix) {
           if (!threeRenderer || !threeScene) return;
 
+          // Performance gate: skip Three.js render if 2D mode, no explosions, and low pitch
+          if (!is3DModeActive && activeExplosions.length === 0 && (!map || map.getPitch() <= 5)) {
+            return;
+          }
+
           // Update active explosions
           for (let i = activeExplosions.length - 1; i >= 0; i--) {
             if (!activeExplosions[i].update()) {
@@ -2732,11 +3015,99 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       map.addLayer(custom3DLayer);
     }
 
-    function focusTarget3D(tid) {
-      if (!activeThreats[tid]) return;
-      collapseAllHudPanels();
-      focusedTargetId = tid;
+    // =========================================================================
+    // FLIGHTRADAR24-STYLE 3D CHASE CAMERA CONTROLLER & TARGET CONTEXT POPUP
+    // =========================================================================
+    const chaseCam = {
+      active: false,
+      targetId: null,
+      isTransitioning: false,
+      yawOffsetDeg: 0,
+      pitchDeg: 62,
+      zoomLevel: 14.2,
+      minZoom: 11.8,
+      maxZoom: 16.2,
+      minPitch: 25,
+      maxPitch: 75,
+      isDragging: false,
+      lastPointerX: 0,
+      lastPointerY: 0,
+      lastPinchDist: null
+    };
+
+    let activeTargetPopup = null;
+
+    function openTargetContextMenu(tid, lngLat) {
       const t = activeThreats[tid];
+      if (!t) return;
+      if (activeTargetPopup) {
+        activeTargetPopup.remove();
+        activeTargetPopup = null;
+      }
+
+      const catMeta = THREAT_CATEGORIES[t.cat] || THREAT_CATEGORIES.unknown;
+      const speed = Math.round(t.sim ? (t.sim.speedKmh || 0) : 0);
+      const heading = Math.round(((((t.sim ? t.sim.curHeading : 0) % 360) + 360) % 360));
+      const altM = Math.round(t.altitudeM || getNominalAltitudeMeters(t.cat));
+      const coords = lngLat || (t.sim ? [t.sim.curLon, t.sim.curLat] : [30.52, 50.45]);
+
+      const html = `
+        <div class="target-popup-header">
+          <span style="color:${catMeta.color};">▲ ${catMeta.name}</span>
+          <span class="badge-count danger">#${tid}</span>
+        </div>
+        <div class="target-popup-grid">
+          <span class="lbl">Швидкість:</span><span class="val">${speed} км/г</span>
+          <span class="lbl">Курс (Пеленг):</span><span class="val">${heading}°</span>
+          <span class="lbl">Висота (екстр.):</span><span class="val">~${altM} м</span>
+          <span class="lbl">У групі:</span><span class="val">${t.groupCount || 1} од.</span>
+        </div>
+        <button type="button" class="btn-3d-chase" onclick="focusTarget3D('${tid}')">
+          🎯 3D Супровід (Flightradar)
+        </button>
+      `;
+
+      activeTargetPopup = new maplibregl.Popup({
+        closeButton: true,
+        closeOnClick: true,
+        className: 'target-context-popup',
+        maxWidth: '250px',
+        offset: 14
+      })
+        .setLngLat(coords)
+        .setHTML(html)
+        .addTo(map);
+    }
+
+    function getChaseLookAheadCenter(lon, lat, headingDeg, zoom) {
+      const lookAheadKm = Math.max(0.15, 1.8 * Math.pow(2, 14.2 - zoom));
+      const rad = ((headingDeg || 0) * Math.PI) / 180.0;
+      const aheadLat = lat + (lookAheadKm / 111.0) * Math.cos(rad);
+      const aheadLon = lon + (lookAheadKm / (111.0 * Math.cos((lat * Math.PI) / 180.0))) * Math.sin(rad);
+      return [aheadLon, aheadLat];
+    }
+
+    function focusTarget3D(tid) {
+      const t = activeThreats[tid];
+      if (!t || !map) return;
+
+      if (activeTargetPopup) {
+        activeTargetPopup.remove();
+        activeTargetPopup = null;
+      }
+      collapseAllHudPanels();
+
+      is3DModeActive = true;
+      focusedTargetId = tid;
+      chaseCam.active = true;
+      chaseCam.targetId = tid;
+      chaseCam.yawOffsetDeg = 0;
+      chaseCam.pitchDeg = 62;
+      chaseCam.zoomLevel = 14.2;
+      chaseCam.isTransitioning = true;
+
+      if (map.dragPan) map.dragPan.disable();
+
       const banner = document.getElementById('orbitHudBanner');
       const bannerTid = document.getElementById('orbitTargetId');
       if (banner && bannerTid) {
@@ -2744,19 +3115,159 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         bannerTid.innerText = `${THREAT_CATEGORIES[t.cat]?.name || 'Ціль'} #${tid}`;
       }
 
+      const targetBearing = ((t.sim ? t.sim.curHeading : 0) + chaseCam.yawOffsetDeg) % 360;
+
       map.easeTo({
-        center: [t.sim.curLon, t.sim.curLat],
-        zoom: 13.5,
-        pitch: 55,
-        duration: 1200
+        center: getChaseLookAheadCenter(t.sim.curLon, t.sim.curLat, t.sim.curHeading, chaseCam.zoomLevel),
+        zoom: chaseCam.zoomLevel,
+        pitch: chaseCam.pitchDeg,
+        bearing: targetBearing,
+        duration: 1100,
+        essential: true
       });
+
+      setTimeout(() => {
+        chaseCam.isTransitioning = false;
+      }, 1150);
+    }
+
+    function resetChaseCameraBehind() {
+      if (!chaseCam.active || !focusedTargetId || !activeThreats[focusedTargetId]) return;
+      chaseCam.yawOffsetDeg = 0;
+      chaseCam.pitchDeg = 62;
+      chaseCam.zoomLevel = 14.2;
+      chaseCam.isTransitioning = true;
+      const t = activeThreats[focusedTargetId];
+      map.easeTo({
+        center: getChaseLookAheadCenter(t.sim.curLon, t.sim.curLat, t.sim.curHeading, chaseCam.zoomLevel),
+        zoom: chaseCam.zoomLevel,
+        pitch: chaseCam.pitchDeg,
+        bearing: t.sim.curHeading || 0,
+        duration: 600
+      });
+      setTimeout(() => { chaseCam.isTransitioning = false; }, 620);
     }
 
     function exit3DFocus() {
       focusedTargetId = null;
+      chaseCam.active = false;
+      chaseCam.targetId = null;
+      chaseCam.isTransitioning = false;
+
+      if (map && map.dragPan) map.dragPan.enable();
+
       const banner = document.getElementById('orbitHudBanner');
       if (banner) banner.classList.remove('active');
-      map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+
+      if (map) {
+        map.easeTo({ pitch: 0, bearing: 0, zoom: Math.min(map.getZoom(), 9.5), duration: 800 });
+      }
+    }
+
+    function updateChaseCameraFrame() {
+      if (!chaseCam.active || !focusedTargetId) return;
+      const t = activeThreats[focusedTargetId];
+      if (!t) {
+        exit3DFocus();
+        return;
+      }
+
+      const telEl = document.getElementById('orbitTargetTelemetry');
+      if (telEl) {
+        const spd = Math.round(t.sim ? (t.sim.speedKmh || 0) : 0);
+        const hdg = Math.round(((((t.sim ? t.sim.curHeading : 0) % 360) + 360) % 360));
+        const alt = Math.round(t.altitudeM || getNominalAltitudeMeters(t.cat));
+        telEl.innerText = `${spd} км/г • Курс ${hdg}° • Вис. ~${alt} м`;
+      }
+
+      if (chaseCam.isTransitioning) return;
+
+      const desiredBearing = ((t.sim ? t.sim.curHeading : 0) + chaseCam.yawOffsetDeg + 360) % 360;
+      const lookCenter = getChaseLookAheadCenter(t.sim.curLon, t.sim.curLat, t.sim.curHeading, chaseCam.zoomLevel);
+
+      map.jumpTo({
+        center: lookCenter,
+        bearing: desiredBearing,
+        pitch: chaseCam.pitchDeg,
+        zoom: chaseCam.zoomLevel
+      });
+    }
+
+    function initChaseCameraInputHandlers() {
+      if (!map) return;
+      const canvas = map.getCanvasContainer();
+      if (!canvas) return;
+
+      canvas.addEventListener('mousedown', (e) => {
+        if (!chaseCam.active) return;
+        chaseCam.isDragging = true;
+        chaseCam.lastPointerX = e.clientX;
+        chaseCam.lastPointerY = e.clientY;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!chaseCam.active || !chaseCam.isDragging) return;
+        const dx = e.clientX - chaseCam.lastPointerX;
+        const dy = e.clientY - chaseCam.lastPointerY;
+        chaseCam.lastPointerX = e.clientX;
+        chaseCam.lastPointerY = e.clientY;
+
+        chaseCam.yawOffsetDeg = (chaseCam.yawOffsetDeg + dx * 0.45) % 360;
+        chaseCam.pitchDeg = Math.max(chaseCam.minPitch, Math.min(chaseCam.maxPitch, chaseCam.pitchDeg - dy * 0.35));
+      });
+
+      window.addEventListener('mouseup', () => {
+        chaseCam.isDragging = false;
+      });
+
+      canvas.addEventListener('wheel', (e) => {
+        if (!chaseCam.active) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const delta = -Math.sign(e.deltaY) * 0.25;
+        chaseCam.zoomLevel = Math.max(chaseCam.minZoom, Math.min(chaseCam.maxZoom, chaseCam.zoomLevel + delta));
+      }, { passive: false });
+
+      canvas.addEventListener('touchstart', (e) => {
+        if (!chaseCam.active) return;
+        if (e.touches.length === 1) {
+          chaseCam.isDragging = true;
+          chaseCam.lastPointerX = e.touches[0].clientX;
+          chaseCam.lastPointerY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+          chaseCam.isDragging = false;
+          chaseCam.lastPinchDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+        }
+      }, { passive: true });
+
+      canvas.addEventListener('touchmove', (e) => {
+        if (!chaseCam.active) return;
+        if (e.touches.length === 1 && chaseCam.isDragging) {
+          const dx = e.touches[0].clientX - chaseCam.lastPointerX;
+          const dy = e.touches[0].clientY - chaseCam.lastPointerY;
+          chaseCam.lastPointerX = e.touches[0].clientX;
+          chaseCam.lastPointerY = e.touches[0].clientY;
+          chaseCam.yawOffsetDeg = (chaseCam.yawOffsetDeg + dx * 0.5) % 360;
+          chaseCam.pitchDeg = Math.max(chaseCam.minPitch, Math.min(chaseCam.maxPitch, chaseCam.pitchDeg - dy * 0.35));
+        } else if (e.touches.length === 2 && chaseCam.lastPinchDist) {
+          const dist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          const ratio = dist / chaseCam.lastPinchDist;
+          chaseCam.lastPinchDist = dist;
+          const zoomDelta = Math.log2(ratio) * 1.2;
+          chaseCam.zoomLevel = Math.max(chaseCam.minZoom, Math.min(chaseCam.maxZoom, chaseCam.zoomLevel + zoomDelta));
+        }
+      }, { passive: true });
+
+      canvas.addEventListener('touchend', () => {
+        chaseCam.isDragging = false;
+        chaseCam.lastPinchDist = null;
+      });
     }
 
     function collapseAllHudPanels() {
@@ -2783,6 +3294,10 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     function initLiveKinematicsLoop() {
       function frame(now) {
+        if (document.hidden) {
+          requestAnimationFrame(frame);
+          return;
+        }
         const dt = Math.min(0.1, (now - lastAnimTs) / 1000.0);
         lastAnimTs = now;
 
@@ -2795,7 +3310,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     function updateLiveKinematics(dt, now) {
       if (!isMapLoaded || !isLiveMode || !isDocumentVisible) return;
 
-      const shouldSyncGeoJson = (now - lastGeoJsonSyncTs) >= 100.0;
+      const shouldSyncGeoJson = (now - lastGeoJsonSyncTs) >= 75.0;
       const aircraftFeatures = [];
       const trailFeatures = [];
       const forecastFeatures = [];
@@ -2826,19 +3341,21 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         const headCoord = [sim.curLon, sim.curLat];
         const catMeta = THREAT_CATEGORIES[t.cat] || THREAT_CATEGORIES.unknown;
 
-        // Combat Aircraft Silhouettes
-        aircraftFeatures.push({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: headCoord },
-          properties: {
-            tid,
-            cat: t.cat,
-            icon: 'threat-' + t.cat,
-            heading: sim.curHeading,
-            group_count: t.groupCount || 1,
-            label: `${catMeta.name} • ${Math.round(effectiveSpeed)} км/г`
-          }
-        });
+        // Combat Aircraft Silhouettes - suppress 2D icon if this target is focused in 3D Chase mode
+        if (!is3DModeActive || focusedTargetId !== tid) {
+          aircraftFeatures.push({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: headCoord },
+            properties: {
+              tid,
+              cat: t.cat,
+              icon: 'threat-' + t.cat,
+              heading: sim.curHeading,
+              group_count: t.groupCount || 1,
+              label: `${catMeta.name} • ${Math.round(effectiveSpeed)} км/г`
+            }
+          });
+        }
 
         // Zero-Gap Trailing Line
         const trailCoords = (t.baseTrailPts || []).map(p => {
@@ -2874,23 +3391,52 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           });
         }
 
-        // 3D Three.js mesh update
-        if (threeScene) {
+        // 3D Three.js mesh update with accurate Web Mercator scaling and drop lines
+        if (threeScene && window.THREE) {
           let meshGroup = threat3DMeshes[tid];
+          const isFocused = (focusedTargetId === tid);
           const isGhost = (focusedTargetId !== null && focusedTargetId !== tid);
-          if (!meshGroup) {
-            meshGroup = buildThreatMesh(t.cat, catMeta.color, isGhost);
+          const altMeters = t.altitudeM || getNominalAltitudeMeters(t.cat);
+
+          if (!meshGroup || meshGroup.userData?.isGhost !== isGhost) {
+            if (meshGroup) {
+              threeScene.remove(meshGroup);
+            }
+            meshGroup = buildThreatMesh(t.cat, catMeta.color, isGhost, altMeters);
+            meshGroup.userData = { tid, isGhost };
             threeScene.add(meshGroup);
             threat3DMeshes[tid] = meshGroup;
           }
-          // Coordinate transform to Three.js coordinates
-          const modelAsMercator = maplibregl.MercatorCoordinate.fromLngLat(headCoord, 1500);
-          meshGroup.position.set(modelAsMercator.x, modelAsMercator.y, modelAsMercator.z);
-          meshGroup.rotation.z = -(sim.curHeading * Math.PI) / 180.0;
+
+          const merc = maplibregl.MercatorCoordinate.fromLngLat(headCoord, altMeters);
+          const meterScale = merc.meterInMercatorCoordinateUnits();
+          const visualScale = isFocused ? 4.5 : 6.0;
+          const s = meterScale * visualScale;
+
+          const localGroundZ = -altMeters / visualScale;
+          const dropLine = meshGroup.getObjectByName('altitudeDropLine');
+          if (dropLine) {
+            dropLine.scale.set(1, 1, Math.abs(localGroundZ));
+          }
+          const groundRing = meshGroup.getObjectByName('groundShadowRing');
+          if (groundRing) {
+            groundRing.position.set(0, 0, localGroundZ);
+          }
+
+          const craftBody = meshGroup.getObjectByName('craftBody');
+          if (craftBody) {
+            const headingRad = (sim.curHeading * Math.PI) / 180.0;
+            craftBody.rotation.set(0, 0, headingRad);
+          }
+
+          const matTranslate = new THREE.Matrix4().makeTranslation(merc.x, merc.y, merc.z);
+          const matScale = new THREE.Matrix4().makeScale(s, -s, s);
+          meshGroup.matrix.copy(matTranslate).multiply(matScale);
+          meshGroup.matrixWorldNeedsUpdate = true;
         }
       }
 
-      // Populate GeoJSON sources throttled to 10 Hz (every 100ms) to avoid Web Worker queue starvation
+      // Populate GeoJSON sources throttled to ~13-15 Hz (every 75ms)
       if (shouldSyncGeoJson) {
         lastGeoJsonSyncTs = now;
         if (map.getSource('threats-aircraft-source')) {
@@ -2903,6 +3449,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           map.getSource('threats-forecast-source').setData({ type: 'FeatureCollection', features: forecastFeatures });
         }
       }
+
+      // Update chase camera frame every tick
+      updateChaseCameraFrame();
     }
 
     // =========================================================================
@@ -3823,6 +4372,62 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
     }
 
+    function getEffectiveCartoToken() {
+      return (
+        document.getElementById('mapApiToken')?.value?.trim() ||
+        localStorage.getItem('radar_map_cartodb_token') ||
+        localStorage.getItem('radar_map_token') ||
+        ''
+      );
+    }
+
+    function applyCartoTilesWithToken(token) {
+      if (!map || !map.getSource('carto-dark')) return;
+      const q = token ? `?api_key=${encodeURIComponent(token)}` : '';
+      const tiles = [
+        `https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png${q}`,
+        `https://b.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png${q}`,
+        `https://c.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png${q}`
+      ];
+      const src = map.getSource('carto-dark');
+      if (typeof src.setTiles === 'function') {
+        src.setTiles(tiles);
+      }
+    }
+
+    async function loadMapProviderConfig() {
+      let savedProvider = localStorage.getItem('radar_map_provider') || 'arcgis';
+      let savedCartoToken = localStorage.getItem('radar_map_cartodb_token') || localStorage.getItem('radar_map_token') || '';
+
+      try {
+        const q = clientToken ? `?token=${encodeURIComponent(clientToken)}` : '';
+        const res = await fetch(`/api/v1/client/map/settings${q}`);
+        if (res.ok) {
+          const data = await res.json();
+          if ((data.cartodb_api_key || data.cartodb_key) && !savedCartoToken) {
+            savedCartoToken = data.cartodb_api_key || data.cartodb_key;
+            localStorage.setItem('radar_map_cartodb_token', savedCartoToken);
+          }
+          if (data.default_provider && !localStorage.getItem('radar_map_provider')) {
+            savedProvider = data.default_provider;
+          }
+        }
+      } catch (e) {
+        console.warn('[MapSettings] Failed to load server map settings:', e);
+      }
+
+      const tokenInput = document.getElementById('mapApiToken');
+      if (tokenInput && savedCartoToken) tokenInput.value = savedCartoToken;
+
+      const normProvider = (savedProvider === 'cartodb' || savedProvider === 'carto') ? 'carto' : 'arcgis';
+      const radio = document.querySelector(`input[name="mapProvider"][value="${normProvider}"]`);
+      if (radio) radio.checked = true;
+      handleProviderChange(normProvider);
+      if (savedCartoToken) {
+        applyCartoTilesWithToken(savedCartoToken);
+      }
+    }
+
     async function saveMapProviderConfig() {
       const selectedRadio = document.querySelector('input[name="mapProvider"]:checked');
       const provider = selectedRadio ? selectedRadio.value : 'arcgis';
@@ -3830,23 +4435,55 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const tokenVal = tokenInput ? tokenInput.value.trim() : '';
 
       localStorage.setItem('radar_map_provider', provider);
+      localStorage.setItem('radar_map_cartodb_token', tokenVal);
       localStorage.setItem('radar_map_token', tokenVal);
 
+      if (tokenVal) {
+        applyCartoTilesWithToken(tokenVal);
+      }
       setBasemap(provider === 'carto' ? 'cartodb' : provider);
 
       try {
-        await fetch('/api/v1/client/map/settings', {
+        const q = clientToken ? `?token=${encodeURIComponent(clientToken)}` : '';
+        await fetch(`/api/v1/client/map/settings${q}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Api-Key': clientToken || ''
+          },
           body: JSON.stringify({
             token: clientToken || '',
             provider: provider === 'carto' ? 'cartodb' : provider,
+            cartodb_api_key: tokenVal,
             cartodb_key: tokenVal
           })
         });
       } catch (err) {
         console.warn('[MapSettings] Remote save failed:', err);
       }
+    }
+
+    function toggleInputPassword(id) {
+      const input = document.getElementById(id);
+      if (input) {
+        input.type = (input.type === 'password') ? 'text' : 'password';
+      }
+    }
+
+    function saveClientAuthToken() {
+      const input = document.getElementById('clientAuthTokenInput');
+      const val = input ? input.value.trim() : '';
+      if (!val) return;
+      localStorage.setItem('radar_client_token', val);
+      clientToken = val;
+      const badge = document.getElementById('clientTokenStatusBadge');
+      if (badge) {
+        badge.innerText = 'АКТИВНИЙ';
+        badge.className = 'badge-count calm';
+      }
+      window.history.replaceState({}, '', '/map?token=' + encodeURIComponent(val));
+      fetchUserSlots();
+      initWebSocket();
     }
 
     // Map Layer Toggles
@@ -4139,13 +4776,45 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const lostFeatures = [];
 
       visible.forEach(t => {
-        // Flight trails
+        const catMeta = THREAT_CATEGORIES[t.cat] || THREAT_CATEGORIES.unknown;
+
+        // Flight trails with explicit category color
         if (t.trajectory && t.trajectory.length >= 2) {
           const coords = t.trajectory.map(p => Array.isArray(p) ? [p[1], p[0]] : [p.lon, p.lat]);
           trailFeatures.push({
             type: 'Feature',
-            properties: { cat: t.cat },
+            properties: { 
+              cat: t.cat,
+              color: catMeta.color 
+            },
             geometry: { type: 'LineString', coordinates: coords }
+          });
+
+          // Aircraft symbol in historical replay view
+          const lastPt = coords[coords.length - 1];
+          let heading = 0;
+          if (coords.length >= 2) {
+            const p1 = coords[coords.length - 2];
+            const p2 = lastPt;
+            const dLon = (p2[0] - p1[0]) * Math.PI / 180;
+            const lat1 = p1[1] * Math.PI / 180;
+            const lat2 = p2[1] * Math.PI / 180;
+            const y = Math.sin(dLon) * Math.cos(lat2);
+            const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+            heading = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+          }
+
+          aircraftFeatures.push({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: lastPt },
+            properties: {
+              tid: t.id,
+              cat: t.cat,
+              icon: 'threat-' + t.cat,
+              heading: heading,
+              group_count: 1,
+              label: `${catMeta.name} (Історія)`
+            }
           });
         }
         // Impact/lost point
@@ -4164,6 +4833,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
       if (map.getSource('threats-lost-source')) {
         map.getSource('threats-lost-source').setData({ type: 'FeatureCollection', features: lostFeatures });
+      }
+      if (map.getSource('threats-aircraft-source')) {
+        map.getSource('threats-aircraft-source').setData({ type: 'FeatureCollection', features: aircraftFeatures });
       }
     }
 

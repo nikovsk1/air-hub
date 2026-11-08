@@ -499,16 +499,22 @@ async fn handle_get_location_slots(
 #[derive(Deserialize)]
 pub struct MapSettingsPayload {
     pub token: Option<String>,
+    pub auth_token: Option<String>,
     #[allow(dead_code)]
     pub provider: Option<String>,
     pub cartodb_key: Option<String>,
+    pub cartodb_api_key: Option<String>,
 }
 
 async fn handle_get_map_settings(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<ClientQuery>,
 ) -> Response {
-    let key = query.token.as_deref().unwrap_or("").trim();
+    let key = query.token.as_deref()
+        .or_else(|| headers.get("x-api-key").and_then(|v| v.to_str().ok()))
+        .unwrap_or("")
+        .trim();
     let relation = if !key.is_empty() {
         if let Some(user) = state.storage.get_user_by_key(key) {
             user.owner
@@ -524,33 +530,42 @@ async fn handle_get_map_settings(
         "status": "ok",
         "default_provider": "arcgis",
         "relation": relation,
-        "cartodb_key": cartodb_key
+        "cartodb_key": cartodb_key,
+        "cartodb_api_key": cartodb_key
     })).into_response()
 }
 
 async fn handle_save_map_settings(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<ClientQuery>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<MapSettingsPayload>,
 ) -> Response {
-    let key = payload.token.as_deref().unwrap_or("").trim();
-    let relation = if !key.is_empty() {
-        if let Some(user) = state.storage.get_user_by_key(key) {
+    let auth_token = query.token.as_deref()
+        .or_else(|| headers.get("x-api-key").and_then(|v| v.to_str().ok()))
+        .or(payload.auth_token.as_deref())
+        .or(payload.token.as_deref())
+        .unwrap_or("")
+        .trim();
+
+    let relation = if !auth_token.is_empty() {
+        if let Some(user) = state.storage.get_user_by_key(auth_token) {
             user.owner
-        } else if is_admin(&headers, payload.token.as_deref(), Some(addr.ip()), &state.config.admin_secret_key) {
+        } else if is_admin(&headers, Some(auth_token), Some(addr.ip()), &state.config.admin_secret_key) {
             "Загальна мапа".to_string()
         } else {
             return StatusCode::UNAUTHORIZED.into_response();
         }
-    } else if is_admin(&headers, payload.token.as_deref(), Some(addr.ip()), &state.config.admin_secret_key) {
+    } else if is_admin(&headers, None, Some(addr.ip()), &state.config.admin_secret_key) {
         "Загальна мапа".to_string()
     } else {
         return StatusCode::UNAUTHORIZED.into_response();
     };
 
-    if let Some(carto_key) = payload.cartodb_key {
-        let _ = state.storage.set_service_key("cartodb", &relation, Some(carto_key));
+    let carto_key = payload.cartodb_api_key.or(payload.cartodb_key);
+    if let Some(key) = carto_key {
+        let _ = state.storage.set_service_key("cartodb", &relation, Some(key));
     }
 
     Json(json!({
@@ -1403,7 +1418,7 @@ async fn handle_radar_map_html(
     State(state): State<AppState>,
 ) -> Response {
     let map_file = state.config.static_dir.join("radar_map.html");
-    let content = fs::read_to_string(&map_file).unwrap_or_else(|_| "<h1>radar_map.html not found</h1>".to_string());
+    let content = tokio::fs::read_to_string(&map_file).await.unwrap_or_else(|_| "<h1>radar_map.html not found</h1>".to_string());
 
     (
         [
@@ -1422,7 +1437,7 @@ async fn handle_timeline_map_html(
     State(state): State<AppState>,
 ) -> Response {
     let map_file = state.config.static_dir.join("radar_map.html");
-    let content = fs::read_to_string(&map_file).unwrap_or_else(|_| "<h1>radar_map.html not found</h1>".to_string());
+    let content = tokio::fs::read_to_string(&map_file).await.unwrap_or_else(|_| "<h1>radar_map.html not found</h1>".to_string());
 
     (
         [
