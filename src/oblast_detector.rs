@@ -239,6 +239,56 @@ impl OblastDetector {
                     }
                 }
             }
+
+            // 3. Обробка міст-анклавів (Rank 3, які утворюють геометричні вирізи в областях та районах)
+            let enclave_to_oblast_raion: HashMap<&str, (&str, &str)> = HashMap::from([
+                ("1293", ("22", "124")), // м. Харків -> Харківська обл., Харківський р-н
+                ("564",  ("12", "149")), // м. Запоріжжя -> Запорізька обл., Запорізький р-н
+                ("750",  ("14", "74")),  // м. Славутич -> Київська обл., Вишгородський р-н
+                ("707",  ("14", "75")),  // Коцюбинське -> Київська обл., Бучанський р-н
+            ]);
+
+            for feat in feats {
+                let props = match feat.get("properties") {
+                    Some(p) => p,
+                    None => continue,
+                };
+                let rank = props.get("rank").and_then(|r| r.as_u64()).unwrap_or(0);
+                if rank == 3 {
+                    let reg_id = props.get("regionId")
+                        .or_else(|| props.get("id"))
+                        .map(|v| if let Some(s) = v.as_str() { s.to_string() } else { v.to_string() })
+                        .unwrap_or_default();
+
+                    if let Some(&(parent_ob_id, _parent_ra_id)) = enclave_to_oblast_raion.get(reg_id.as_str()) {
+                        let name = props.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                        let polygons = extract_polygons(feat.get("geometry"));
+                        if polygons.is_empty() { continue; }
+                        let bbox = calculate_bbox(&polygons);
+                        let center = ((bbox.1 + bbox.3) / 2.0, (bbox.0 + bbox.2) / 2.0);
+
+                        detector.region_to_oblast.insert(reg_id.clone(), parent_ob_id.to_string());
+                        let data = RegionFeatureData {
+                            id: reg_id.clone(),
+                            name: name.clone(),
+                            rank: 2, // трактуємо як спец-район для R-Tree та мапи
+                            oblast_id: parent_ob_id.to_string(),
+                            bbox,
+                            center,
+                            polygons,
+                        };
+                        detector.raions_by_id.insert(reg_id.clone(), data.clone());
+                        detector.raion_regions.push(data);
+
+                        if !name.is_empty() {
+                            let rn_lower = name.to_lowercase().trim().to_string();
+                            detector.raion_name_to_id.insert(rn_lower.clone(), reg_id.clone());
+                            let short = rn_lower.replace("район", "").trim().to_string();
+                            detector.raion_name_to_id.insert(short, reg_id);
+                        }
+                    }
+                }
+            }
         }
 
         let mut spatial_items = Vec::with_capacity(detector.regions.len() + detector.raion_regions.len());
@@ -396,13 +446,18 @@ impl OblastDetector {
         if name.is_empty() {
             return "0".to_string();
         }
-        let clean = name.to_lowercase().replace("область", "").replace("обл.", "").trim().to_string();
+        let lower = name.to_lowercase().trim().to_string();
+        if lower == "м. київ" || lower == "місто київ" || lower == "київ" || lower == "kyiv" {
+            return "31".to_string();
+        }
+        let clean = lower.replace("область", "").replace("обл.", "").trim().to_string();
         if clean.contains("севастополь") || clean.contains("крим") {
             return "9999".to_string();
         }
         for reg in &self.regions {
+            if reg.id == "31" { continue; }
             let reg_clean = reg.name.to_lowercase().replace("область", "").replace("обл.", "").trim().to_string();
-            if clean.contains(&reg_clean) || reg_clean.contains(&clean) {
+            if clean == reg_clean || clean.contains(&reg_clean) || reg_clean.contains(&clean) {
                 return reg.id.clone();
             }
         }

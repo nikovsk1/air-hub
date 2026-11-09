@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
   <title>Air Alert Hub — Тактичний Радар 3.0</title>
 
   <!-- MapLibre GL JS v4.7.1 (Local Offline First with CDN Fallback: https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js) -->
@@ -557,6 +558,24 @@
       display: flex;
       align-items: center;
       gap: 6px;
+    }
+    .basemap-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 8px;
+      cursor: pointer;
+      display: block;
+      transition: all 0.15s ease;
+    }
+    .basemap-card:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+    .basemap-card.active {
+      background: rgba(245, 158, 11, 0.08) !important;
+      border: 1px solid var(--accent-amber) !important;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
     }
     .checkbox-row {
       display: flex;
@@ -1188,6 +1207,44 @@
         <div id="hudClosestBreakdownList" style="display:none;"></div>
       </div>
     </div>
+
+    <!-- 4. 3D Mode Target Telemetry Collapsible Pill (Near "Найближча ціль") -->
+    <div class="hud-card hud-collapsed hud-pill" id="pill3DTelemetry" onclick="handleCardClick('telemetry3d', event)" style="display:none;" title="Параметри цілі у 3D режимі">
+      <div class="hud-subframe" style="background:rgba(56, 189, 248, 0.14); border:1px solid rgba(56, 189, 248, 0.45); color:#38bdf8;" onclick="toggleHudCard('telemetry3d', event)" title="Згорнути / розгорнути телеметрію">
+        <svg class="hud-subframe-icon icon-expand" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+        <svg class="hud-subframe-icon icon-collapse" viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <polyline points="14 4 14 10 20 10"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="10 20 10 14 4 14"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      </div>
+      <div class="hud-mini-view">
+        <span id="telemetry3DMiniText" style="font-weight:600; color:#38BDF8; font-size:11px;">🎯 3D Ціль</span>
+      </div>
+      <div class="hud-full-view" id="pill3DTelemetryFull">
+        <span style="font-size:11px; color:var(--text-muted);">3D Ціль:</span>
+        <strong id="telemetry3DId" style="color:#38BDF8;">#--</strong>
+        <span class="badge-count" id="telemetry3DAlt" style="background:rgba(56,189,248,0.2); color:#38bdf8; font-size:10px;">-- м</span>
+        <span class="badge-count" id="telemetry3DSpeed" style="background:rgba(245,158,11,0.2); color:#f59e0b; font-size:10px;">-- км/г</span>
+        <span style="font-size:8px;">▼</span>
+      </div>
+      <div class="hud-dropdown-panel" id="panel3DTelemetryDetails" onclick="event.stopPropagation()">
+        <div style="font-weight:700; font-size:11px; margin-bottom:5px; color:#38BDF8;">Параметри цілі у 3D</div>
+        <div id="telemetry3DBreakdown" style="font-size:10.5px; display:flex; flex-direction:column; gap:4px; font-family:monospace;">
+          <div style="display:flex; justify-content:space-between;"><span>Категорія:</span><b id="t3dCat" style="color:#F8FAFC;">--</b></div>
+          <div style="display:flex; justify-content:space-between;"><span>Висота:</span><b id="t3dAlt" style="color:#38BDF8;">--</b></div>
+          <div style="display:flex; justify-content:space-between;"><span>Швидкість:</span><b id="t3dSpd" style="color:#F59E0B;">--</b></div>
+          <div style="display:flex; justify-content:space-between;"><span>Курс / Азимут:</span><b id="t3dHdg" style="color:#34D399;">--</b></div>
+          <div style="display:flex; justify-content:space-between;"><span>Найближча точка:</span><b id="t3dDist" style="color:#EF4444;">--</b></div>
+        </div>
+      </div>
+    </div>
   </header>
 
   <!-- ================= TACTICAL SIDEBAR (3 TABS) ================= -->
@@ -1406,12 +1463,12 @@
           <span>ТИП ПІДКЛАДКИ МАПИ & API-TOKEN</span>
         </div>
         <div class="basemap-cards" style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-          <label class="basemap-card active" id="cardArcgis" style="background:rgba(255,255,255,0.04); border:1px solid var(--accent-amber); border-radius:8px; padding:8px; cursor:pointer; display:block;">
+          <label class="basemap-card active" id="cardArcgis">
             <input type="radio" name="mapProvider" value="arcgis" checked onchange="handleProviderChange('arcgis')" style="display:none;">
             <div style="font-weight:700; font-size:11px; color:#FFFFFF;">ArcGIS Dark Gray</div>
             <div style="font-size:10px; color:var(--text-muted);">Класична основа (за замовчуванням)</div>
           </label>
-          <label class="basemap-card" id="cardCarto" style="background:rgba(255,255,255,0.02); border:1px solid var(--border-subtle); border-radius:8px; padding:8px; cursor:pointer; display:block;">
+          <label class="basemap-card" id="cardCarto">
             <input type="radio" name="mapProvider" value="carto" onchange="handleProviderChange('carto')" style="display:none;">
             <div style="font-weight:700; font-size:11px; color:#FFFFFF;">CartoDB Dark Matter</div>
             <div style="font-size:10px; color:var(--text-muted);">Ультра-мінімалістична мапа</div>
@@ -1461,8 +1518,9 @@
           <span>ШАРИ МАПИ</span>
         </div>
         <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px;">
-          <input type="checkbox" id="chkMaskOutside" checked onchange="toggleUkraineMask(this.checked)">
-          <input type="checkbox" id="cfgMaskOutsideUA" checked onchange="toggleUkraineMask(this.checked)" style="display:none;">
+          <input type="checkbox" id="chkOutsideMask" checked onchange="toggleOutsideMask(this.checked)">
+          <input type="checkbox" id="chkMaskOutside" checked onchange="toggleOutsideMask(this.checked)" style="display:none;">
+          <input type="checkbox" id="cfgMaskOutsideUA" checked onchange="toggleOutsideMask(this.checked)" style="display:none;">
           <span>Затемнення зони поза Україною</span>
         </label>
         <label class="tactical-checkbox-row" style="display:flex; align-items:center; gap:8px; margin-top:4px;">
@@ -1610,6 +1668,9 @@
     <button class="nav-btn" id="btnToggle3D" onclick="toggle3DPitch()" title="Перемикач 2D / 3D">
       <span style="font-weight: 800; font-size: 11px;">3D</span>
     </button>
+    <button class="nav-btn" id="btnDayNightToggle" onclick="cycleDayNightMode()" title="Режим освітлення (День / Ніч / Авто)">
+      <span id="iconDayNight" style="font-size: 15px;">☀️</span>
+    </button>
     <button class="nav-btn" onclick="map.zoomIn()" title="Наблизити">+</button>
     <button class="nav-btn" onclick="map.zoomOut()" title="Віддалити">−</button>
   </div>
@@ -1647,7 +1708,7 @@
     let showPoiIn2D = true;
 
     // Basemaps styles
-    const GLYPHS_URL = '/static/fonts/{fontstack}/{range}.pbf';
+    const GLYPHS_URL = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
 
     const BASEMAPS = {
       arcgis: {
@@ -1977,9 +2038,11 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         style: UNIFIED_BASEMAP_STYLE,
         center: [31.1656, 48.3794],
         zoom: 6.2,
-        minZoom: 5.5,
+        /* Flightradar24 global zoom engine: minZoom: 2.2, renderWorldCopies: true (legacy bounds: minZoom: 5.5, maxBounds: [[21.0, 43.5], [41.5, 53.0]]) */
+        minZoom: 2.2,
+        maxZoom: 18.0,
         maxPitch: 65,
-        maxBounds: [[21.0, 43.5], [41.5, 53.0]],
+        renderWorldCopies: true,
         attributionControl: false
       });
 
@@ -2134,27 +2197,85 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     let activeRegionPopup = null;
 
     
+    // Мапа прив'язки анклавів до їхніх областей та районів
+    const ENCLAVE_PARENT_MAP = {
+      '31':   { oblastId: '14', raionId: '31',  isKyivCity: true },
+      '1293': { oblastId: '22', raionId: '124' }, // м. Харків
+      '564':  { oblastId: '12', raionId: '149' }, // м. Запоріжжя
+      '750':  { oblastId: '14', raionId: '74'  }, // м. Славутич
+      '707':  { oblastId: '14', raionId: '75'  }  // смт Коцюбинське
+    };
+
+    // Топологічне зшивання зовнішнього кордону України (без внутрішніх меж областей та без дірок анклавів)
     function buildOutsideUkraineMask(geoJson) {
       if (!geoJson || !geoJson.features) return null;
       const worldRing = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]];
-      const maskRings = [worldRing];
+
+      const edgeCounts = new Map();
+      const directedEdges = [];
 
       geoJson.features.forEach(feat => {
         const props = feat.properties || {};
+        if (Number(props.rank) !== 1) return;
         const regId = String(props.regionId || feat.id || '');
-        const isRank1 = props.rank && Number(props.rank) === 1;
-        const isEnclaveCity = regId === '1293' || regId === '564';
-        if (!isRank1 && !isEnclaveCity) return;
+        if (regId === '31') return; // м. Київ всередині Київської області
+
         const geom = feat.geometry;
-        if (!geom) return;
-        if (geom.type === 'Polygon' && geom.coordinates) {
-          geom.coordinates.forEach(r => maskRings.push(r));
-        } else if (geom.type === 'MultiPolygon' && geom.coordinates) {
-          geom.coordinates.forEach(poly => {
-            if (poly) poly.forEach(r => maskRings.push(r));
-          });
+        if (!geom || !geom.coordinates) return;
+        const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.coordinates;
+
+        polys.forEach(poly => {
+          if (!poly || !poly[0]) return;
+          const outerRing = poly[0]; // Беремо ТІЛЬКИ poly[0], ігноруючи дірки анклавів poly[1..]
+          for (let i = 0; i < outerRing.length - 1; i++) {
+            const p1 = `${outerRing[i][0].toFixed(5)},${outerRing[i][1].toFixed(5)}`;
+            const p2 = `${outerRing[i + 1][0].toFixed(5)},${outerRing[i + 1][1].toFixed(5)}`;
+            if (p1 === p2) continue;
+            const key = p1 < p2 ? `${p1}|${p2}` : `${p2}|${p1}`;
+            edgeCounts.set(key, (edgeCounts.get(key) || 0) + 1);
+            directedEdges.push({ p1, p2, key, coord1: outerRing[i], coord2: outerRing[i + 1] });
+          }
+        });
+      });
+
+      const adj = new Map();
+      const coordMap = new Map();
+      directedEdges.forEach(e => {
+        if (edgeCounts.get(e.key) === 1) {
+          if (!adj.has(e.p1)) adj.set(e.p1, []);
+          adj.get(e.p1).push(e.p2);
+          coordMap.set(e.p1, e.coord1);
+          coordMap.set(e.p2, e.coord2);
         }
       });
+
+      const visited = new Set();
+      const maskRings = [worldRing];
+
+      for (const [startNode, neighbors] of adj.entries()) {
+        for (const nxt of neighbors) {
+          const edgeId = `${startNode}->${nxt}`;
+          if (visited.has(edgeId)) continue;
+          const ring = [coordMap.get(startNode)];
+          let curr = nxt;
+          visited.add(edgeId);
+
+          let safety = 0;
+          while (curr !== startNode && safety < 25000) {
+            safety++;
+            ring.push(coordMap.get(curr));
+            const nextList = adj.get(curr) || [];
+            const cand = nextList.find(n => !visited.has(`${curr}->${n}`));
+            if (!cand) break;
+            visited.add(`${curr}->${cand}`);
+            curr = cand;
+          }
+          ring.push(ring[0]);
+          if (ring.length > 200) {
+            maskRings.push(ring);
+          }
+        }
+      }
 
       return {
         type: 'FeatureCollection',
@@ -2169,11 +2290,170 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       };
     }
 
+    let activeRegionAlertMap = new Map();
+
+    function updateActiveAlertsFromSnapshot(data) {
+      const nextMap = new Map();
+
+      // 1. Офіційні тривоги
+      const officialList = data.official_alerts || [];
+      if (Array.isArray(officialList)) {
+        officialList.forEach(a => {
+          if (a && a.alert) {
+            const id = String(a.id || a.regionId || a.region_id || '');
+            if (id) {
+              nextMap.set(id, {
+                alert: true,
+                color: (a.color === 'yellow') ? 'yellow' : 'red',
+                type: a.alert_type || 'missile'
+              });
+            }
+          }
+        });
+      }
+
+      // 2. Області (map_oblasts / oblasts)
+      const obList = data.map_oblasts || data.oblasts || [];
+      if (Array.isArray(obList)) {
+        obList.forEach(ob => {
+          const id = String(ob.id || ob.regionId || '');
+          if (!id) return;
+          if (ob.alert) {
+            nextMap.set(id, {
+              alert: true,
+              color: (ob.color === 'yellow') ? 'yellow' : 'red',
+              type: ob.alert_type || 'missile'
+            });
+          } else if ((ob.targets_count || 0) > 0) {
+            nextMap.set(id, {
+              alert: true,
+              color: 'yellow',
+              type: 'drone'
+            });
+          }
+        });
+      }
+
+      // 3. Райони (raions)
+      if (Array.isArray(data.raions)) {
+        data.raions.forEach(r => {
+          const id = String(r.id || r.regionId || '');
+          if (!id) return;
+          if (r.alert) {
+            nextMap.set(id, {
+              alert: true,
+              color: (r.color === 'yellow') ? 'yellow' : 'red',
+              type: r.alert_type || 'missile'
+            });
+          } else if ((r.targets_count || 0) > 0) {
+            nextMap.set(id, {
+              alert: true,
+              color: 'yellow',
+              type: 'drone'
+            });
+          }
+        });
+      }
+
+      activeRegionAlertMap = nextMap;
+      activeAlertRegionIds = new Set(nextMap.keys());
+      applyAlertsToRegions();
+    }
+
+    function applyAlertsToRegions() {
+      if (!rawRegionsGeoJson || !map || !map.getSource('alerts-source')) return;
+      const features = [];
+
+      (rawRegionsGeoJson.features || []).forEach((feat, idx) => {
+        const props = feat.properties || {};
+        const rank = Number(props.rank || 0);
+        const regId = String(props.regionId || feat.id || idx);
+
+        // Ігноруємо 1447 дрібних громад (rank === 3), крім 4 міст-анклавів (Харків 1293, Запоріжжя 564, Славутич 750, Коцюбинське 707)
+        if (rank === 3 && !ENCLAVE_PARENT_MAP[regId]) return;
+
+        let alertInfo = activeRegionAlertMap.get(regId);
+        if (!alertInfo && ENCLAVE_PARENT_MAP[regId]) {
+          const p = ENCLAVE_PARENT_MAP[regId];
+          if (!p.isKyivCity) {
+            alertInfo = activeRegionAlertMap.get(p.raionId) || activeRegionAlertMap.get(p.oblastId);
+          } else if (activeRegionAlertMap.get('14')?.color === 'red') {
+            alertInfo = activeRegionAlertMap.get('14');
+          }
+        }
+
+        const isAlert = !!(alertInfo && alertInfo.alert);
+        const alertColorKey = isAlert ? (alertInfo.color || 'red') : 'none';
+        const fillHex = (alertColorKey === 'yellow') ? '#F59E0B' : '#EF4444';
+
+        let cleanGeom = feat.geometry;
+        if (rank === 1 && regId !== '14' && regId !== '31' && cleanGeom) {
+          if (cleanGeom.type === 'Polygon' && cleanGeom.coordinates.length > 1) {
+            cleanGeom = { type: 'Polygon', coordinates: [cleanGeom.coordinates[0]] };
+          } else if (cleanGeom.type === 'MultiPolygon') {
+            cleanGeom = { type: 'MultiPolygon', coordinates: cleanGeom.coordinates.map(p => [p[0]]) };
+          }
+        }
+
+        let fillOpacity = 0.0;
+        if (isAlert) {
+          if (rank === 1) {
+            fillOpacity = (alertColorKey === 'yellow') ? 0.20 : 0.26;
+          } else if (rank === 2) {
+            const parentObId = String(props.oblast_id || '');
+            const obAlert = parentObId ? activeRegionAlertMap.get(parentObId) : null;
+            if (!obAlert || !obAlert.alert) {
+              fillOpacity = (alertColorKey === 'yellow') ? 0.22 : 0.28;
+            }
+          }
+        }
+
+        features.push({
+          type: 'Feature',
+          id: feat.id !== undefined ? feat.id : idx,
+          properties: {
+            ...props,
+            rank,
+            alert: isAlert,
+            alert_color: fillHex,
+            opacity: fillOpacity
+          },
+          geometry: cleanGeom
+        });
+      });
+
+      map.getSource('alerts-source').setData({
+        type: 'FeatureCollection',
+        features
+      });
+    }
+
+    function toggleOutsideMask(isChecked) {
+      localStorage.setItem('radar_outside_mask_enabled', isChecked ? 'true' : 'false');
+      ['chkOutsideMask', 'chkMaskOutside', 'cfgMaskOutsideUA'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.checked = isChecked;
+      });
+      if (map) {
+        if (map.getLayer('mask-outside-layer')) {
+          map.setLayoutProperty('mask-outside-layer', 'visibility', isChecked ? 'visible' : 'none');
+        }
+        if (map.getLayer('outside-mask-layer')) {
+          map.setLayoutProperty('outside-mask-layer', 'visibility', isChecked ? 'visible' : 'none');
+        }
+      }
+    }
+
+    let regionsPromise = null;
     async function loadRegionsData() {
+      if (!regionsPromise) {
+        regionsPromise = fetch('/api/v1/regions/geojson')
+          .then(res => res.ok ? res.json() : null)
+          .catch(err => { console.warn('Failed to load regions geojson:', err); return null; });
+      }
       try {
-        const res = await fetch('/api/v1/regions/geojson');
-        if (!res.ok) return;
-        rawRegionsGeoJson = await res.json();
+        const data = await regionsPromise;
+        if (data) rawRegionsGeoJson = data;
         applyAlertsToRegions();
         const maskData = buildOutsideUkraineMask(rawRegionsGeoJson);
         if (maskData && map && map.getSource('mask-outside-source')) {
@@ -2186,100 +2466,160 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     const loadRegionsGeoJson = loadRegionsData;
 
-    let poiItems = [];
-    async function loadPoiData() {
-      try {
-        const res = await fetch('/api/v1/client/poi');
-        if (!res.ok) return;
-        poiItems = await res.json();
-        const features = (poiItems || []).map(p => {
-          const color = (p.category === 'airfield' || p.category === 'airbases' || p.category === 'military') ? '#F43F5E' :
-                        (p.category === 'energy_hubs' || p.category === 'energy' || p.category === 'power') ? '#F59E0B' :
-                        (p.category === 'logistics_bridges' || p.category === 'logistics' || p.category === 'industry') ? '#3B82F6' : '#10B981';
+    const POI_CATEGORIES_META = {
+      airbases:          { name: 'Військові аеродроми', icon: '✈️', color: '#60A5FA' },
+      air_defense:       { name: 'Позиції та сектори ППО', icon: '🛡️', color: '#34D399' },
+      energy_hubs:       { name: 'Енергетичні хаби (ТЕЦ/ПС)', icon: '⚡', color: '#FBBF24' },
+      fuel_depots:       { name: 'Нафтобази та НПЗ', icon: '🛢️', color: '#F87171' },
+      defense_industry:  { name: 'ОПК та військові заводи', icon: '🏭', color: '#C084FC' },
+      ports:             { name: 'Морські та річкові порти', icon: '⚓', color: '#38BDF8' },
+      logistics_bridges: { name: 'Мости та логістика', icon: '🌉', color: '#FB923C' },
+      ammo_depots:       { name: 'Склади БК та арсенали', icon: '💣', color: '#F43F5E' },
+      dronoports:        { name: 'Дронопорти та пускові', icon: '🚀', color: '#10B981' },
+      command_posts:     { name: 'Командні пункти та штаби', icon: '📡', color: '#E879F9' },
+      training_camps:    { name: 'Полігони та навч. центри', icon: '🎯', color: '#A3E635' },
+      railways:          { name: 'Залізничні вузли', icon: '🚆', color: '#FACC15' },
+      radar_sites:       { name: 'РЛС та радіотехнічні війська', icon: '🛰️', color: '#22D3EE' }
+    };
+
+    let enabledPoiCategories = new Set(Object.keys(POI_CATEGORIES_META));
+
+    function renderPoiCategoriesUI() {
+      const container = document.getElementById('poiCategoriesList');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const counts = {};
+      (poiItems || []).forEach(p => {
+        const c = p.category || 'airbases';
+        counts[c] = (counts[c] || 0) + 1;
+        if (!POI_CATEGORIES_META[c]) {
+          POI_CATEGORIES_META[c] = { name: c, icon: '📍', color: '#94A3B8' };
+          enabledPoiCategories.add(c);
+        }
+      });
+
+      Object.entries(POI_CATEGORIES_META).forEach(([catKey, meta]) => {
+        const count = counts[catKey] || 0;
+        const isChecked = enabledPoiCategories.has(catKey);
+        const row = document.createElement('label');
+        row.className = 'tactical-checkbox-row';
+        row.style.cssText = 'display:flex; align-items:center; gap:7px; padding:3px 6px; border-radius:4px; background:rgba(255,255,255,0.02); cursor:pointer; font-size:10.5px;';
+        row.innerHTML = `
+          <input type="checkbox" data-poi-cat="${catKey}" ${isChecked ? 'checked' : ''} onchange="onPoiCategoryToggle('${catKey}', this.checked)">
+          <span style="width:8px; height:8px; border-radius:50%; background:${meta.color}; display:inline-block;"></span>
+          <span style="flex:1; color:#F8FAFC;">${meta.icon} ${meta.name}</span>
+          <span style="color:var(--text-dim); font-size:9.5px; font-family:monospace;">${count}</span>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function applyPoiFilterToMap() {
+      if (!map || !map.getSource('poi-source')) return;
+      const features = (poiItems || [])
+        .filter(p => enabledPoiCategories.has(p.category))
+        .map(p => {
+          const meta = POI_CATEGORIES_META[p.category] || { color: '#10B981' };
           return {
             type: 'Feature',
-            geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
+            geometry: { type: 'Point', coordinates: [Number(p.lon), Number(p.lat)] },
             properties: {
               id: p.id,
               name: p.name,
               category: p.category,
-              color: color,
+              color: meta.color,
               oblast: p.oblast
             }
           };
         });
-        if (map && map.getSource('poi-source')) {
-          map.getSource('poi-source').setData({ type: 'FeatureCollection', features });
-        }
+
+      map.getSource('poi-source').setData({ type: 'FeatureCollection', features });
+      syncPois3DWireframes();
+    }
+
+    function onPoiCategoryToggle(catKey, isChecked) {
+      if (isChecked) enabledPoiCategories.add(catKey);
+      else enabledPoiCategories.delete(catKey);
+      applyPoiFilterToMap();
+    }
+
+    function toggleAllPoiCategories() {
+      const list = document.getElementById('poiCategoriesList');
+      const btn = document.getElementById('btnToggleAllPoiCats') || document.getElementById('btnToggleAllPoi');
+      if (!list) return;
+      const allKeys = Object.keys(POI_CATEGORIES_META);
+      const disableAll = (enabledPoiCategories.size === allKeys.length);
+
+      if (disableAll) {
+        enabledPoiCategories.clear();
+        if (btn) btn.innerText = 'УВІМКНУТИ ВСІ';
+      } else {
+        enabledPoiCategories = new Set(allKeys);
+        if (btn) btn.innerText = 'ВИМКНУТИ ВСІ';
+      }
+
+      list.querySelectorAll('input[type="checkbox"]').forEach(inp => {
+        inp.checked = !disableAll;
+      });
+      applyPoiFilterToMap();
+    }
+
+    let poiPromise = null;
+    let poiItems = [];
+    async function loadPoiData() {
+      if (!poiPromise) {
+        poiPromise = fetch('/api/v1/client/poi')
+          .then(res => res.ok ? res.json() : null)
+          .catch(e => { console.warn('[POI] Failed to load POI data:', e); return null; });
+      }
+      try {
+        const data = await poiPromise;
+        if (data) poiItems = data;
+        renderPoiCategoriesUI();
+        applyPoiFilterToMap();
       } catch (e) {
-        console.warn('[POI] Failed to load POI data:', e);
+        console.warn('[POI] Failed to process POI data:', e);
       }
     }
 
+    let slotsPromise = null;
     async function fetchUserSlots() {
-      try {
+      if (!slotsPromise) {
         const q = clientToken ? `?token=${encodeURIComponent(clientToken)}` : '';
-        const res = await fetch(`/api/v1/slots${q}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.slots) {
-            currentSlots = data.slots;
-            userSlots = currentSlots;
-            renderUserSlots(currentSlots);
-            updateUserSlotsGeoJson(currentSlots);
-          }
+        slotsPromise = fetch(`/api/v1/slots${q}`)
+          .then(res => res.ok ? res.json() : null)
+          .catch(e => { console.warn('[Slots] fetchUserSlots failed:', e); return null; });
+      }
+      try {
+        const data = await slotsPromise;
+        if (data && data.slots) {
+          currentSlots = data.slots;
+          userSlots = currentSlots;
+          renderUserSlots(currentSlots);
+          updateUserSlotsGeoJson(currentSlots);
         }
       } catch (e) {
         console.warn('[Slots] fetchUserSlots failed:', e);
       }
     }
 
-    function applyAlertsToRegions() {
-      if (!rawRegionsGeoJson || !map || !map.getSource('alerts-source')) return;
-      const features = (rawRegionsGeoJson.features || []).map((feat, idx) => {
-        const props = feat.properties || {};
-        const regId = String(props.regionId || feat.id || idx);
-        const isAlert = activeAlertRegionIds.has(regId);
-        return {
-          type: 'Feature',
-          id: feat.id !== undefined ? feat.id : idx,
-          properties: {
-            ...props,
-            alert: isAlert,
-            opacity: isAlert ? 0.35 : 0.04
-          },
-          geometry: feat.geometry
-        };
-      });
-      map.getSource('alerts-source').setData({
-        type: 'FeatureCollection',
-        features
-      });
-    }
-
-    function updateActiveAlertsFromSnapshot(data) {
-      const nextAlertIds = new Set();
-      const list = data.map_oblasts || data.oblasts || data.official_alerts || [];
-      if (Array.isArray(list)) {
-        list.forEach(a => {
-          if (a.alert) {
-            if (a.id) nextAlertIds.add(String(a.id));
-            if (a.regionId) nextAlertIds.add(String(a.regionId));
-            if (a.region_id) nextAlertIds.add(String(a.region_id));
-          }
-        });
+    let initialSnapshotPromise = null;
+    async function fetchInitialSnapshot() {
+      if (!initialSnapshotPromise) {
+        const q = clientToken ? `?token=${encodeURIComponent(clientToken)}` : '';
+        initialSnapshotPromise = fetch(`/api/v1/threats${q}`)
+          .then(res => res.ok ? res.json() : null)
+          .catch(e => { console.warn('[Bootstrap] Initial snapshot fetch failed:', e); return null; });
       }
-      if (Array.isArray(data.raions)) {
-        data.raions.forEach(r => {
-          if (r.alert) {
-            if (r.id) nextAlertIds.add(String(r.id));
-            if (r.regionId) nextAlertIds.add(String(r.regionId));
-            if (r.region_id) nextAlertIds.add(String(r.region_id));
-          }
-        });
+      try {
+        const snapshot = await initialSnapshotPromise;
+        if (snapshot && typeof processSnapshot === 'function') {
+          processSnapshot(snapshot);
+        }
+      } catch (e) {
+        console.warn('[Bootstrap] Initial snapshot process failed:', e);
       }
-      activeAlertRegionIds = nextAlertIds;
-      applyAlertsToRegions();
     }
 
     function initLayerHierarchy() {
@@ -2298,11 +2638,14 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       map.addSource('threats-aircraft-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
       // 2. Strict Z-Order Layer Addition (Bottom to Top: Basemap -> Alerts -> Slots Danger -> POI -> User Points -> Trails/Forecast -> Aircraft/Threats)
+      const savedMask = localStorage.getItem('radar_outside_mask_enabled');
+      const maskEnabled = savedMask !== null ? savedMask === 'true' : true;
+
       map.addLayer({
         id: 'mask-outside-layer',
         type: 'fill',
         source: 'mask-outside-source',
-        layout: { visibility: 'visible' },
+        layout: { visibility: maskEnabled ? 'visible' : 'none' },
         paint: {
           'fill-color': '#000000',
           'fill-opacity': 0.45
@@ -2314,7 +2657,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         type: 'fill',
         source: 'alerts-source',
         paint: {
-          'fill-color': '#EF4444',
+          /* 'fill-color': '#EF4444' */
+          'fill-color': ['coalesce', ['get', 'alert_color'], '#EF4444'],
           'fill-opacity': ['get', 'opacity']
         }
       });
@@ -2323,20 +2667,23 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         id: 'alerts-boundaries',
         type: 'line',
         source: 'alerts-source',
+        filter: ['in', ['get', 'rank'], ['literal', [1, 2]]],
         paint: {
           'line-color': [
             'case',
             ['==', ['get', 'alert'], true],
-            '#EF4444',
-            'rgba(255, 255, 255, 0.14)'
+            ['get', 'alert_color'],
+            ['==', ['get', 'rank'], 1],
+            'rgba(255, 255, 255, 0.28)',
+            'rgba(255, 255, 255, 0.07)'
           ],
           'line-width': [
             'case',
-            ['==', ['get', 'alert'], true],
-            1.4,
-            0.8
+            ['==', ['get', 'rank'], 1],
+            1.6,
+            0.6
           ],
-          'line-opacity': 0.85
+          'line-opacity': 0.9
         }
       });
 
@@ -2588,9 +2935,13 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const curPitch = map.getPitch();
       if (curPitch > 10) {
         map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+        is3DModeActive = false;
       } else {
         map.easeTo({ pitch: 55, duration: 800 });
+        is3DModeActive = true;
+        applyDayNightSettings();
       }
+      update2DClutterVisibility(is3DModeActive);
     }
 
     function resetNorthBearing() {
@@ -2607,9 +2958,39 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       if (map.getLayer('alerts-boundaries')) map.setLayoutProperty('alerts-boundaries', 'visibility', is3D ? 'none' : 'visible');
       if (map.getLayer('selected-region-fill')) map.setLayoutProperty('selected-region-fill', 'visibility', is3D ? 'none' : 'visible');
       if (map.getLayer('selected-region-line')) map.setLayoutProperty('selected-region-line', 'visibility', is3D ? 'none' : 'visible');
+      
+      const pill3d = document.getElementById('pill3DTelemetry');
+      if (pill3d) pill3d.style.display = is3D ? 'flex' : 'none';
+
       if (is3D && activeRegionPopup) {
         activeRegionPopup.remove();
         activeRegionPopup = null;
+      }
+    }
+
+    function update3DTelemetryUI(t, tid, sim, altMeters) {
+      const elId = document.getElementById('telemetry3DId');
+      const elAlt = document.getElementById('telemetry3DAlt');
+      const elSpd = document.getElementById('telemetry3DSpeed');
+      const t3dCat = document.getElementById('t3dCat');
+      const t3dAlt = document.getElementById('t3dAlt');
+      const t3dSpd = document.getElementById('t3dSpd');
+      const t3dHdg = document.getElementById('t3dHdg');
+      const t3dDist = document.getElementById('t3dDist');
+
+      const speed = Math.round(sim ? (sim.speedKmh || 0) : 0);
+      const heading = Math.round(sim ? ((((sim.curHeading % 360) + 360) % 360)) : 0);
+      const catMeta = (t && THREAT_CATEGORIES[t.cat]) ? THREAT_CATEGORIES[t.cat] : THREAT_CATEGORIES.unknown;
+
+      if (elId) elId.innerText = `#${tid}`;
+      if (elAlt) elAlt.innerText = `${Math.round(altMeters)} м`;
+      if (elSpd) elSpd.innerText = `${speed} км/г`;
+      if (t3dCat) t3dCat.innerText = catMeta.name;
+      if (t3dAlt) t3dAlt.innerText = `${Math.round(altMeters)} м`;
+      if (t3dSpd) t3dSpd.innerText = `${speed} км/г`;
+      if (t3dHdg) t3dHdg.innerText = `${heading}°`;
+      if (t3dDist) {
+        t3dDist.innerText = (t && t.closest_distance_km !== undefined) ? `${t.closest_distance_km} км` : '-- км';
       }
     }
 
@@ -2643,12 +3024,33 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const bodyMat = new THREE.MeshStandardMaterial({
         color: mainColor,
         emissive: mainColor,
-        emissiveIntensity: isGhost ? 0.15 : 0.45,
-        metalness: 0.75,
-        roughness: 0.25,
+        emissiveIntensity: isGhost ? 0.12 : 0.35,
+        metalness: 0.65,
+        roughness: 0.3,
         transparent: true,
         opacity: isGhost ? 0.22 : 0.88,
         side: THREE.DoubleSide
+      });
+      bodyMat.name = 'bodyMat';
+
+      const darkMat = new THREE.MeshStandardMaterial({
+        color: '#1E293B',
+        metalness: 0.8,
+        roughness: 0.2,
+        transparent: true,
+        opacity: isGhost ? 0.22 : 0.88
+      });
+
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: '#38BDF8',
+        transparent: true,
+        opacity: isGhost ? 0.2 : 0.85
+      });
+
+      const flameMat = new THREE.MeshBasicMaterial({
+        color: '#F97316',
+        transparent: true,
+        opacity: isGhost ? 0.2 : 0.9
       });
 
       const wireMat = new THREE.LineBasicMaterial({
@@ -2660,86 +3062,195 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const craftGroup = new THREE.Group();
       craftGroup.name = 'craftBody';
 
+      const addWithWire = (parent, geom, mat, pos, rot, scale) => {
+        const m = new THREE.Mesh(geom, mat);
+        const w = new THREE.LineSegments(new THREE.EdgesGeometry(geom, 25), wireMat);
+        m.add(w);
+        if (pos) m.position.set(pos[0], pos[1], pos[2]);
+        if (rot) m.rotation.set(rot[0], rot[1], rot[2]);
+        if (scale) m.scale.set(scale[0], scale[1], scale[2]);
+        parent.add(m);
+        return m;
+      };
+
       switch (cat) {
         case 'shahed':
         case 'shahed_jet': {
-          const shape = new THREE.Shape();
-          shape.moveTo(0, 18);
-          shape.lineTo(15, -12);
-          shape.lineTo(3, -9);
-          shape.lineTo(0, -14);
-          shape.lineTo(-3, -9);
-          shape.lineTo(-15, -12);
-          shape.closePath();
-          const geom = new THREE.ExtrudeGeometry(shape, { depth: 2.2, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.4 });
-          geom.center();
-          const mesh = new THREE.Mesh(geom, bodyMat);
-          const wire = new THREE.LineSegments(new THREE.EdgesGeometry(geom), wireMat);
-          const finGeom = new THREE.BoxGeometry(0.8, 7, 5);
-          const finL = new THREE.Mesh(finGeom, bodyMat); finL.position.set(-14.5, -9, 2.0);
-          const finR = new THREE.Mesh(finGeom, bodyMat); finR.position.set(14.5, -9, 2.0);
-          craftGroup.add(mesh, wire, finL, finR);
+          const wingShape = new THREE.Shape();
+          wingShape.moveTo(0, 14);
+          wingShape.lineTo(15, -11);
+          wingShape.lineTo(3.5, -9.5);
+          wingShape.lineTo(0, -12);
+          wingShape.lineTo(-3.5, -9.5);
+          wingShape.lineTo(-15, -11);
+          wingShape.closePath();
+          const wingGeom = new THREE.ExtrudeGeometry(wingShape, {
+            depth: 1.1,
+            bevelEnabled: true,
+            bevelThickness: 0.45,
+            bevelSize: 0.4,
+            bevelSegments: 2
+          });
+          wingGeom.center();
+          addWithWire(craftGroup, wingGeom, bodyMat, [0, -1, 0]);
+
+          const fusGeom = new THREE.CylinderGeometry(1.35, 1.1, 24, 14);
+          addWithWire(craftGroup, fusGeom, bodyMat, [0, 1, 0.6], [0, 0, 0]);
+          const noseGeom = new THREE.ConeGeometry(1.35, 6.5, 14);
+          addWithWire(craftGroup, noseGeom, bodyMat, [0, 16.2, 0.6], [0, 0, 0]);
+
+          const finShape = new THREE.Shape();
+          finShape.moveTo(0, 0);
+          finShape.lineTo(6.5, -2.5);
+          finShape.lineTo(6.5, -6.5);
+          finShape.lineTo(0, -5.0);
+          finShape.closePath();
+          const finGeom = new THREE.ExtrudeGeometry(finShape, { depth: 0.45, bevelEnabled: false });
+          addWithWire(craftGroup, finGeom, bodyMat, [-14.8, -6.5, 1.5], [0, Math.PI / 2, 0]);
+          addWithWire(craftGroup, finGeom, bodyMat, [14.4, -6.5, 1.5], [0, Math.PI / 2, 0]);
+
+          if (cat === 'shahed_jet') {
+            const intakeGeom = new THREE.CylinderGeometry(1.0, 1.2, 7, 12);
+            addWithWire(craftGroup, intakeGeom, darkMat, [0, -4, 1.8]);
+            const jetFlame = new THREE.ConeGeometry(1.1, 6, 10);
+            addWithWire(craftGroup, jetFlame, flameMat, [0, -15, 0.6], [Math.PI, 0, 0]);
+          } else {
+            const propDisk = new THREE.CylinderGeometry(3.2, 3.2, 0.3, 16);
+            addWithWire(craftGroup, propDisk, darkMat, [0, -12.5, 0.6]);
+          }
           break;
         }
         case 'missile':
         case 'ballistic': {
-          const bodyGeom = new THREE.CylinderGeometry(1.6, 1.6, 28, 16);
-          const noseGeom = new THREE.ConeGeometry(1.6, 8, 16);
-          noseGeom.translate(0, 18, 0);
-          const wingsGeom = new THREE.BoxGeometry(22, 3.5, 0.6);
-          wingsGeom.translate(0, 2, 0);
-          const tailGeom = new THREE.BoxGeometry(10, 2.5, 0.6);
-          tailGeom.translate(0, -12, 0);
+          const isBallistic = (cat === 'ballistic');
+          const radius = isBallistic ? 2.2 : 1.45;
+          const length = isBallistic ? 28 : 26;
 
-          const missileHolder = new THREE.Group();
-          [bodyGeom, noseGeom, wingsGeom, tailGeom].forEach(g => {
-            missileHolder.add(new THREE.Mesh(g, bodyMat));
-            missileHolder.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), wireMat));
-          });
-          craftGroup.add(missileHolder);
+          const bodyGeom = new THREE.CylinderGeometry(radius, radius, length, 16);
+          addWithWire(craftGroup, bodyGeom, bodyMat, [0, 0, 0]);
+
+          const noseGeom = new THREE.ConeGeometry(radius, isBallistic ? 11 : 7.5, 16);
+          addWithWire(craftGroup, noseGeom, bodyMat, [0, length / 2 + (isBallistic ? 5.5 : 3.75), 0]);
+
+          if (!isBallistic) {
+            const wingGeom = new THREE.BoxGeometry(24, 3.2, 0.5);
+            addWithWire(craftGroup, wingGeom, bodyMat, [0, 1.5, -0.3]);
+          }
+
+          const tailGeom = new THREE.BoxGeometry(isBallistic ? 11 : 9, 3.5, 0.45);
+          addWithWire(craftGroup, tailGeom, bodyMat, [0, -length / 2 + 2, 0], [0, Math.PI / 4, 0]);
+          addWithWire(craftGroup, tailGeom, bodyMat, [0, -length / 2 + 2, 0], [0, -Math.PI / 4, 0]);
+
+          const exhaustGeom = new THREE.ConeGeometry(radius * 0.85, isBallistic ? 10 : 6.5, 12);
+          addWithWire(craftGroup, exhaustGeom, flameMat, [0, -length / 2 - (isBallistic ? 5 : 3.2), 0], [Math.PI, 0, 0]);
           break;
         }
         case 'aviation': {
-          const shape = new THREE.Shape();
-          shape.moveTo(0, 22);
-          shape.lineTo(4, 6);
-          shape.lineTo(18, -6);
-          shape.lineTo(18, -10);
-          shape.lineTo(5, -8);
-          shape.lineTo(7, -18);
-          shape.lineTo(0, -15);
-          shape.lineTo(-7, -18);
-          shape.lineTo(-5, -8);
-          shape.lineTo(-18, -10);
-          shape.lineTo(-18, -6);
-          shape.lineTo(-4, 6);
-          shape.closePath();
-          const geom = new THREE.ExtrudeGeometry(shape, { depth: 2.5, bevelEnabled: false });
-          geom.center();
-          craftGroup.add(new THREE.Mesh(geom, bodyMat));
-          craftGroup.add(new THREE.LineSegments(new THREE.EdgesGeometry(geom), wireMat));
+          const fusGeom = new THREE.CylinderGeometry(1.4, 1.8, 24, 12);
+          addWithWire(craftGroup, fusGeom, bodyMat, [0, 0, 0]);
+          const noseGeom = new THREE.ConeGeometry(1.4, 9, 12);
+          addWithWire(craftGroup, noseGeom, darkMat, [0, 16.5, 0]);
+          const canopyGeom = new THREE.SphereGeometry(1.35, 12, 8);
+          addWithWire(craftGroup, canopyGeom, glowMat, [0, 7.5, 1.1], [0, 0, 0], [0.85, 2.6, 0.85]);
+
+          const wingShape = new THREE.Shape();
+          wingShape.moveTo(0, 7);
+          wingShape.lineTo(18, -5);
+          wingShape.lineTo(18, -8.5);
+          wingShape.lineTo(2, -6);
+          wingShape.lineTo(-2, -6);
+          wingShape.lineTo(-18, -8.5);
+          wingShape.lineTo(-18, -5);
+          wingShape.closePath();
+          const wingGeom = new THREE.ExtrudeGeometry(wingShape, { depth: 0.7, bevelEnabled: false });
+          wingGeom.center();
+          addWithWire(craftGroup, wingGeom, bodyMat, [0, -1.5, 0]);
+
+          const hTailShape = new THREE.Shape();
+          hTailShape.moveTo(0, 2);
+          hTailShape.lineTo(8.5, -3);
+          hTailShape.lineTo(8.5, -5.5);
+          hTailShape.lineTo(-8.5, -5.5);
+          hTailShape.lineTo(-8.5, -3);
+          hTailShape.closePath();
+          const hTailGeom = new THREE.ExtrudeGeometry(hTailShape, { depth: 0.5, bevelEnabled: false });
+          hTailGeom.center();
+          addWithWire(craftGroup, hTailGeom, bodyMat, [0, -10.5, 0]);
+
+          const vTailGeom = new THREE.BoxGeometry(0.5, 6.5, 5.5);
+          addWithWire(craftGroup, vTailGeom, bodyMat, [-2.2, -9.5, 2.8], [0, 0.12, 0]);
+          addWithWire(craftGroup, vTailGeom, bodyMat, [2.2, -9.5, 2.8], [0, -0.12, 0]);
+
+          const nozzleGeom = new THREE.ConeGeometry(0.9, 5.5, 10);
+          addWithWire(craftGroup, nozzleGeom, flameMat, [-1.1, -14.5, 0], [Math.PI, 0, 0]);
+          addWithWire(craftGroup, nozzleGeom, flameMat, [1.1, -14.5, 0], [Math.PI, 0, 0]);
           break;
         }
-        case 'kab':
-        case 'lancet':
+        case 'kab': {
+          const bombBody = new THREE.CylinderGeometry(1.8, 1.5, 16, 14);
+          addWithWire(craftGroup, bombBody, darkMat, [0, 0, 0]);
+          const bombNose = new THREE.SphereGeometry(1.8, 14, 10);
+          addWithWire(craftGroup, bombNose, bodyMat, [0, 8, 0], [0, 0, 0], [1, 1.5, 1]);
+          const umpkWings = new THREE.BoxGeometry(24, 2.2, 0.5);
+          addWithWire(craftGroup, umpkWings, bodyMat, [0, 1.5, 1.8]);
+          const tailRing = new THREE.CylinderGeometry(2.1, 2.1, 2.5, 12);
+          addWithWire(craftGroup, tailRing, bodyMat, [0, -7.5, 0]);
+          break;
+        }
+        case 'lancet': {
+          const fusGeom = new THREE.CylinderGeometry(1.0, 0.9, 18, 12);
+          addWithWire(craftGroup, fusGeom, bodyMat, [0, 0, 0]);
+          const xWing1 = new THREE.BoxGeometry(16, 1.8, 0.45);
+          addWithWire(craftGroup, xWing1, bodyMat, [0, 3.5, 0], [0, Math.PI / 4, 0]);
+          addWithWire(craftGroup, xWing1, bodyMat, [0, 3.5, 0], [0, -Math.PI / 4, 0]);
+          const xWing2 = new THREE.BoxGeometry(14, 1.6, 0.45);
+          addWithWire(craftGroup, xWing2, bodyMat, [0, -5.0, 0], [0, Math.PI / 4, 0]);
+          addWithWire(craftGroup, xWing2, bodyMat, [0, -5.0, 0], [0, -Math.PI / 4, 0]);
+          break;
+        }
         case 'recon':
-        case 'fpv':
-        case 'artillery':
+        case 'banderol': {
+          const fusGeom = new THREE.CylinderGeometry(1.0, 0.7, 16, 12);
+          addWithWire(craftGroup, fusGeom, bodyMat, [0, 0, 0]);
+          const noseCap = new THREE.SphereGeometry(1.0, 10, 10);
+          addWithWire(craftGroup, noseCap, glowMat, [0, 8, 0]);
+          const mainWing = new THREE.BoxGeometry(28, 3.0, 0.5);
+          addWithWire(craftGroup, mainWing, bodyMat, [0, 2.0, 0.8]);
+          const vTail = new THREE.BoxGeometry(7, 2.0, 0.4);
+          addWithWire(craftGroup, vTail, bodyMat, [0, -7.5, 0.8]);
+          break;
+        }
+        case 'fpv': {
+          const coreBox = new THREE.BoxGeometry(4.5, 8, 2.5);
+          addWithWire(craftGroup, coreBox, bodyMat, [0, 0, 0]);
+          const armGeom = new THREE.BoxGeometry(20, 1.2, 0.8);
+          addWithWire(craftGroup, armGeom, darkMat, [0, 0, 0], [0, 0, Math.PI / 4]);
+          addWithWire(craftGroup, armGeom, darkMat, [0, 0, 0], [0, 0, -Math.PI / 4]);
+          const rotorGeom = new THREE.CylinderGeometry(3.8, 3.8, 0.3, 16);
+          [[-6.5, 6.5], [6.5, 6.5], [-6.5, -6.5], [6.5, -6.5]].forEach(([rx, ry]) => {
+            addWithWire(craftGroup, rotorGeom, glowMat, [rx, ry, 0.8], [Math.PI / 2, 0, 0]);
+          });
+          break;
+        }
+        case 'artillery': {
+          const shellGeom = new THREE.CylinderGeometry(1.2, 1.2, 14, 12);
+          addWithWire(craftGroup, shellGeom, darkMat, [0, 0, 0]);
+          const shellNose = new THREE.ConeGeometry(1.2, 5.0, 12);
+          addWithWire(craftGroup, shellNose, bodyMat, [0, 9.5, 0]);
+          const tracerFlame = new THREE.ConeGeometry(0.8, 4.0, 8);
+          addWithWire(craftGroup, tracerFlame, flameMat, [0, -9.0, 0], [Math.PI, 0, 0]);
+          break;
+        }
         case 'unknown':
         default: {
-          const geom = (cat === 'recon') ? new THREE.BoxGeometry(24, 2, 8)
-                     : (cat === 'lancet' || cat === 'fpv') ? new THREE.BoxGeometry(8, 2, 8)
-                     : (cat === 'artillery') ? new THREE.SphereGeometry(3, 8, 8)
-                     : new THREE.ConeGeometry(8, 24, 6);
-          craftGroup.add(new THREE.Mesh(geom, bodyMat));
-          craftGroup.add(new THREE.LineSegments(new THREE.EdgesGeometry(geom), wireMat));
+          const geom = new THREE.ConeGeometry(6, 22, 6);
+          addWithWire(craftGroup, geom, bodyMat, [0, 0, 0]);
           break;
         }
       }
 
       group.add(craftGroup);
 
-      // Vertical Altitude Drop Line to ground
       const dropLineGeom = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(0, 0, 0),
         new THREE.Vector3(0, 0, -1)
@@ -2753,7 +3264,6 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       dropLine.name = 'altitudeDropLine';
       group.add(dropLine);
 
-      // Ground Shadow Ring
       const groundRingGeom = new THREE.RingGeometry(4, 6.5, 24);
       const groundRingMat = new THREE.MeshBasicMaterial({
         color: mainColor,
@@ -2846,28 +3356,116 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       return group;
     }
 
-    // --- 3D Shootdown Explosion
+    let slots3DGroup = null;
+
+    function syncPois3DWireframes() {
+      if (!threeScene || !poisGroup || !window.THREE) return;
+      while (poisGroup.children.length > 0) {
+        const ch = poisGroup.children[0];
+        poisGroup.remove(ch);
+        ch.traverse(n => {
+          if (n.geometry) n.geometry.dispose();
+          if (n.material) n.material.dispose();
+        });
+      }
+
+      const masterChecked = document.getElementById('chkShowPoi')?.checked ?? true;
+      poisGroup.visible = masterChecked;
+      if (!masterChecked) return;
+
+      (poiItems || []).forEach(p => {
+        if (typeof enabledPoiCategories !== 'undefined' && !enabledPoiCategories.has(p.category)) return;
+        if (!Number.isFinite(Number(p.lon)) || !Number.isFinite(Number(p.lat))) return;
+
+        const catMeta = (typeof POI_CATEGORIES_META !== 'undefined' && POI_CATEGORIES_META[p.category])
+          ? POI_CATEGORIES_META[p.category]
+          : { color: '#38BDF8' };
+        const mesh = buildPoiWireframe(p.category, catMeta.color);
+        mesh.rotation.x = Math.PI / 2;
+
+        const holder = new THREE.Group();
+        holder.add(mesh);
+        holder.matrixAutoUpdate = false;
+
+        const merc = maplibregl.MercatorCoordinate.fromLngLat([Number(p.lon), Number(p.lat)], 0);
+        const s = merc.meterInMercatorCoordinateUnits() * 4.0;
+        const matT = new THREE.Matrix4().makeTranslation(merc.x, merc.y, merc.z);
+        const matS = new THREE.Matrix4().makeScale(s, -s, s);
+        holder.matrix.copy(matT).multiply(matS);
+        holder.matrixWorldNeedsUpdate = true;
+
+        poisGroup.add(holder);
+      });
+    }
+
+    function syncUserSlots3DMeshes(slotsObj) {
+      if (!threeScene || !window.THREE) return;
+      if (!slots3DGroup) {
+        slots3DGroup = new THREE.Group();
+        threeScene.add(slots3DGroup);
+      }
+      while (slots3DGroup.children.length > 0) {
+        const ch = slots3DGroup.children[0];
+        slots3DGroup.remove(ch);
+        ch.traverse(n => {
+          if (n.geometry) n.geometry.dispose();
+          if (n.material) n.material.dispose();
+        });
+      }
+
+      const slots = slotsObj || currentSlots || {};
+      for (const k in slots) {
+        const s = slots[k];
+        if (!s || s.lat === undefined || s.lon === undefined) continue;
+        const isDyn = (s.type === 'dynamic' || s.is_dynamic);
+        const mesh = isDyn ? buildDynamicHumanMesh() : buildStaticHouseMesh();
+        mesh.rotation.x = Math.PI / 2;
+
+        const holder = new THREE.Group();
+        holder.add(mesh);
+        holder.matrixAutoUpdate = false;
+
+        const merc = maplibregl.MercatorCoordinate.fromLngLat([Number(s.lon), Number(s.lat)], 0);
+        const scale = merc.meterInMercatorCoordinateUnits() * 6.0;
+        const matT = new THREE.Matrix4().makeTranslation(merc.x, merc.y, merc.z);
+        const matS = new THREE.Matrix4().makeScale(scale, -scale, scale);
+        holder.matrix.copy(matT).multiply(matS);
+        holder.matrixWorldNeedsUpdate = true;
+
+        slots3DGroup.add(holder);
+      }
+    }
+
+    // --- 3D Shootdown Explosion (Tactical with Web Mercator Scaling)
     class TacticalExplosion3D {
       constructor(scene, coord) {
         this.scene = scene;
         this.group = new THREE.Group();
+        this.group.matrixAutoUpdate = false;
         this.age = 0;
-        this.maxAge = 60;
+        this.maxAge = 75;
 
-        // Fireball
+        const lon = Array.isArray(coord) ? coord[0] : (coord?.lon || 30.52);
+        const lat = Array.isArray(coord) ? coord[1] : (coord?.lat || 50.45);
+        const alt = (Array.isArray(coord) && coord[2] !== undefined) ? coord[2] : 350;
+
+        const merc = maplibregl.MercatorCoordinate.fromLngLat([lon, lat], alt);
+        const s = merc.meterInMercatorCoordinateUnits() * 5.5;
+        const matT = new THREE.Matrix4().makeTranslation(merc.x, merc.y, merc.z);
+        const matS = new THREE.Matrix4().makeScale(s, -s, s);
+        this.group.matrix.copy(matT).multiply(matS);
+        this.group.matrixWorldNeedsUpdate = true;
+
         this.fireballGeom = new THREE.SphereGeometry(6, 12, 12);
         this.fireballMat = new THREE.MeshBasicMaterial({ color: '#EF4444', transparent: true, opacity: 0.9 });
         this.fireball = new THREE.Mesh(this.fireballGeom, this.fireballMat);
         this.group.add(this.fireball);
 
-        // Shockwave
         this.shockwaveGeom = new THREE.RingGeometry(2, 4, 24);
         this.shockwaveMat = new THREE.MeshBasicMaterial({ color: '#F59E0B', side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
         this.shockwave = new THREE.Mesh(this.shockwaveGeom, this.shockwaveMat);
-        this.shockwave.rotation.x = Math.PI / 2;
         this.group.add(this.shockwave);
 
-        // 30 Spark particles
         this.sparksGeom = new THREE.BufferGeometry();
         const sparkPositions = new Float32Array(30 * 3);
         this.sparkVels = [];
@@ -2932,32 +3530,112 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
     }
 
-    // Sky Dome
-    function getAtmosphericSkyState() {
-      const hour = new Date().getHours();
-      if (hour >= 5 && hour < 8) return 'dawn';
-      if (hour >= 8 && hour < 19) return 'day';
-      if (hour >= 19 && hour < 22) return 'dusk';
-      return 'night';
+    // =========================================================================
+    // DAY / NIGHT & LIGHTING ENGINE IN 3D
+    // =========================================================================
+    let dayNightMode = localStorage.getItem('radar_day_night_mode') || 'auto';
+    let threeAmbientLight = null;
+    let threeDirLight = null;
+    let skyGroup = null;
+
+    function cycleDayNightMode() {
+      if (dayNightMode === 'day') dayNightMode = 'night';
+      else if (dayNightMode === 'night') dayNightMode = 'auto';
+      else dayNightMode = 'day';
+
+      localStorage.setItem('radar_day_night_mode', dayNightMode);
+      applyDayNightSettings();
+    }
+
+    function isCurrentEffectiveNight() {
+      if (dayNightMode === 'night') return true;
+      if (dayNightMode === 'day') return false;
+      const h = new Date().getHours();
+      return (h < 6 || h >= 21);
+    }
+
+    function applyDayNightSettings() {
+      const btn = document.getElementById('btnDayNightToggle');
+      const icon = document.getElementById('iconDayNight');
+      const isNight = isCurrentEffectiveNight();
+
+      if (icon) {
+        if (dayNightMode === 'day') {
+          icon.innerText = '☀️';
+          if (btn) btn.title = 'Режим освітлення: День';
+        } else if (dayNightMode === 'night') {
+          icon.innerText = '🌙';
+          if (btn) btn.title = 'Режим освітлення: Ніч';
+        } else {
+          icon.innerText = '⏱️';
+          if (btn) btn.title = `Режим освітлення: Авто (${isNight ? 'Ніч' : 'День'})`;
+        }
+      }
+
+      if (threeAmbientLight && threeDirLight) {
+        if (isNight) {
+          threeAmbientLight.color.setHex(0x1e293b);
+          threeAmbientLight.intensity = 0.38;
+          threeDirLight.color.setHex(0x38bdf8);
+          threeDirLight.intensity = 0.45;
+          threeDirLight.position.set(50, 70, 100).normalize();
+          if (skyGroup) skyGroup.visible = true;
+        } else {
+          threeAmbientLight.color.setHex(0xffffff);
+          threeAmbientLight.intensity = 0.85;
+          threeDirLight.color.setHex(0xfff8e7);
+          threeDirLight.intensity = 0.75;
+          threeDirLight.position.set(0, -70, 100).normalize();
+          if (skyGroup) skyGroup.visible = false;
+        }
+      }
+      if (map) map.triggerRepaint();
     }
 
     let sunMesh, moonMesh;
+
+    function getAtmosphericSkyState(dateObj = new Date()) {
+      const h = dateObj.getHours();
+      if (h >= 5 && h < 8) return 'dawn';
+      if (h >= 8 && h < 18) return 'day';
+      if (h >= 18 && h < 21) return 'dusk';
+      return 'night';
+    }
+
     function initSkyDome() {
-      if (!window.THREE) return;
-      const state = getAtmosphericSkyState();
+      if (!window.THREE || !threeScene) return;
+      if (skyGroup) return;
+
+      skyGroup = new THREE.Group();
+      skyGroup.name = 'skyGroup';
+
       const starCount = 500;
-      // Procedural 500 stars
       const starGeom = new THREE.BufferGeometry();
       const starPositions = new Float32Array(starCount * 3);
       for (let i = 0; i < starCount * 3; i++) {
-        starPositions[i] = (Math.random() - 0.5) * 2000;
+        starPositions[i] = (Math.random() - 0.5) * 3000;
       }
       starGeom.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-      const starMat = new THREE.PointsMaterial({ color: '#FFFFFF', size: 1.5, transparent: true, opacity: 0.7 });
+      const starMat = new THREE.PointsMaterial({ color: '#FFFFFF', size: 1.6, transparent: true, opacity: 0.75 });
       const stars = new THREE.Points(starGeom, starMat);
+      skyGroup.add(stars);
 
-      sunMesh = new THREE.Mesh(new THREE.SphereGeometry(12, 16, 16), new THREE.MeshBasicMaterial({ color: '#FDE047' }));
-      moonMesh = new THREE.Mesh(new THREE.SphereGeometry(8, 16, 16), new THREE.MeshBasicMaterial({ color: '#E2E8F0' }));
+      sunMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(22, 16, 16),
+        new THREE.MeshBasicMaterial({ color: '#FDB813' })
+      );
+      sunMesh.position.set(-400, 600, 800);
+      skyGroup.add(sunMesh);
+
+      moonMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(18, 16, 16),
+        new THREE.MeshBasicMaterial({ color: '#E2E8F0' })
+      );
+      moonMesh.position.set(300, 500, 700);
+      skyGroup.add(moonMesh);
+
+      skyGroup.visible = isCurrentEffectiveNight();
+      threeScene.add(skyGroup);
     }
 
     function initCustom3DLayer() {
@@ -2971,12 +3649,17 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           threeScene = new THREE.Scene();
           poisGroup = new THREE.Group();
           threeScene.add(poisGroup);
+          slots3DGroup = new THREE.Group();
+          threeScene.add(slots3DGroup);
 
-          const ambient = new THREE.AmbientLight(0xffffff, 0.8);
-          const dir = new THREE.DirectionalLight(0xffffff, 0.6);
-          dir.position.set(0, -70, 100).normalize();
-          threeScene.add(ambient);
-          threeScene.add(dir);
+          threeAmbientLight = new THREE.AmbientLight(0xffffff, 0.8);
+          threeDirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+          threeDirLight.position.set(0, -70, 100).normalize();
+          threeScene.add(threeAmbientLight);
+          threeScene.add(threeDirLight);
+
+          initSkyDome();
+          applyDayNightSettings();
 
           threeRenderer = new THREE.WebGLRenderer({
             alpha: true,
@@ -2985,16 +3668,17 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
             context: gl
           });
           threeRenderer.autoClear = false;
+
+          syncPois3DWireframes();
+          syncUserSlots3DMeshes();
         },
         render: function(gl, matrix) {
           if (!threeRenderer || !threeScene) return;
 
-          // Performance gate: skip Three.js render if 2D mode, no explosions, and low pitch
           if (!is3DModeActive && activeExplosions.length === 0 && (!map || map.getPitch() <= 5)) {
             return;
           }
 
-          // Update active explosions
           for (let i = activeExplosions.length - 1; i >= 0; i--) {
             if (!activeExplosions[i].update()) {
               activeExplosions[i].dispose();
@@ -3398,14 +4082,24 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           const isGhost = (focusedTargetId !== null && focusedTargetId !== tid);
           const altMeters = t.altitudeM || getNominalAltitudeMeters(t.cat);
 
-          if (!meshGroup || meshGroup.userData?.isGhost !== isGhost) {
-            if (meshGroup) {
-              threeScene.remove(meshGroup);
-            }
+          if (!meshGroup) {
             meshGroup = buildThreatMesh(t.cat, catMeta.color, isGhost, altMeters);
             meshGroup.userData = { tid, isGhost };
             threeScene.add(meshGroup);
             threat3DMeshes[tid] = meshGroup;
+          } else if (meshGroup.userData?.isGhost !== isGhost) {
+            meshGroup.userData.isGhost = isGhost;
+            meshGroup.traverse(child => {
+              if (child.material) {
+                const mats = Array.isArray(child.material) ? child.material : [child.material];
+                mats.forEach(m => {
+                  if (m.name === 'bodyMat') {
+                    m.opacity = isGhost ? 0.25 : 0.94;
+                    m.emissiveIntensity = isGhost ? 0.12 : 0.35;
+                  }
+                });
+              }
+            });
           }
 
           const merc = maplibregl.MercatorCoordinate.fromLngLat(headCoord, altMeters);
@@ -3425,7 +4119,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
           const craftBody = meshGroup.getObjectByName('craftBody');
           if (craftBody) {
-            const headingRad = (sim.curHeading * Math.PI) / 180.0;
+            const headingRad = -(sim.curHeading * Math.PI) / 180.0;
             craftBody.rotation.set(0, 0, headingRad);
           }
 
@@ -3433,6 +4127,10 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           const matScale = new THREE.Matrix4().makeScale(s, -s, s);
           meshGroup.matrix.copy(matTranslate).multiply(matScale);
           meshGroup.matrixWorldNeedsUpdate = true;
+
+          if (isFocused || (is3DModeActive && !focusedTargetId)) {
+            update3DTelemetryUI(t, tid, sim, altMeters);
+          }
         }
       }
 
@@ -3526,9 +4224,22 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         };
       });
 
-      // Cleanup removed 3D meshes
+      // Cleanup removed 3D meshes & trigger 3D explosion on disappearance
       for (const tid in threat3DMeshes) {
         if (!fresh[tid]) {
+          const oldT = activeThreats[tid];
+          if (oldT && oldT.sim && (is3DModeActive || (map && map.getPitch() > 15))) {
+            const alt = oldT.altitudeM || getNominalAltitudeMeters(oldT.cat);
+            triggerExplosion3D([oldT.sim.curLon, oldT.sim.curLat, alt]);
+          }
+          if (focusedTargetId === tid) {
+            const bannerTid = document.getElementById('orbitTargetId');
+            if (bannerTid) bannerTid.innerText = `💥 ЦІЛЬ #${tid} ЗНЕШКОДЖЕНО / ВТРАЧЕНО`;
+            chaseCam.isTransitioning = true;
+            setTimeout(() => {
+              if (focusedTargetId === tid) exit3DFocus();
+            }, 2200);
+          }
           const grp = threat3DMeshes[tid];
           if (threeScene) threeScene.remove(grp);
           grp.traverse(child => {
@@ -3621,12 +4332,18 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
 
       // Slots stats & Closest Threat breakdown calculation
+      let lastSlotsGeoHash = '';
       const incomingSlots = data.slots || data.slots_stats;
       if (incomingSlots && typeof incomingSlots === 'object') {
         currentSlots = Object.assign({}, currentSlots, incomingSlots);
         userSlots = currentSlots;
         renderUserSlots(currentSlots);
-        updateUserSlotsGeoJson(currentSlots);
+        const curHash = JSON.stringify(Object.values(currentSlots).map(s => [s.lat, s.lon, s.danger_radius_km, s.active]));
+        if (curHash !== lastSlotsGeoHash) {
+          lastSlotsGeoHash = curHash;
+          updateUserSlotsGeoJson(currentSlots);
+          syncUserSlots3DMeshes(currentSlots);
+        }
       }
       updateClosestThreatHud(data.closest_threat, incomingSlots);
 
@@ -4383,19 +5100,33 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     function applyCartoTilesWithToken(token) {
       if (!map || !map.getSource('carto-dark')) return;
-      const q = token ? `?api_key=${encodeURIComponent(token)}` : '';
+      const clean = (token || '').trim();
+      const q = clean
+        ? `?key=${encodeURIComponent(clean)}&api_key=${encodeURIComponent(clean)}`
+        : '';
       const tiles = [
         `https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png${q}`,
         `https://b.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png${q}`,
-        `https://c.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png${q}`
+        `https://c.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png${q}`,
+        `https://d.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png${q}`
       ];
       const src = map.getSource('carto-dark');
       if (typeof src.setTiles === 'function') {
         src.setTiles(tiles);
       }
+      if (map.style && map.style.sourceCaches && map.style.sourceCaches['carto-dark']) {
+        map.style.sourceCaches['carto-dark'].clearTiles();
+        map.style.sourceCaches['carto-dark'].update(map.transform);
+      }
+      map.triggerRepaint();
     }
 
     async function loadMapProviderConfig() {
+      const clientKeyInput = document.getElementById('clientAuthTokenInput');
+      if (clientKeyInput && clientToken) {
+        clientKeyInput.value = clientToken;
+      }
+
       let savedProvider = localStorage.getItem('radar_map_provider') || 'arcgis';
       let savedCartoToken = localStorage.getItem('radar_map_cartodb_token') || localStorage.getItem('radar_map_token') || '';
 
@@ -4404,9 +5135,11 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         const res = await fetch(`/api/v1/client/map/settings${q}`);
         if (res.ok) {
           const data = await res.json();
-          if ((data.cartodb_api_key || data.cartodb_key) && !savedCartoToken) {
-            savedCartoToken = data.cartodb_api_key || data.cartodb_key;
+          const serverCartoKey = (data.cartodb_api_key || data.cartodb_key || '').trim();
+          if (serverCartoKey) {
+            savedCartoToken = serverCartoKey;
             localStorage.setItem('radar_map_cartodb_token', savedCartoToken);
+            localStorage.setItem('radar_map_token', savedCartoToken);
           }
           if (data.default_provider && !localStorage.getItem('radar_map_provider')) {
             savedProvider = data.default_provider;
@@ -4419,13 +5152,14 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const tokenInput = document.getElementById('mapApiToken');
       if (tokenInput && savedCartoToken) tokenInput.value = savedCartoToken;
 
+      if (savedCartoToken) {
+        applyCartoTilesWithToken(savedCartoToken);
+      }
+
       const normProvider = (savedProvider === 'cartodb' || savedProvider === 'carto') ? 'carto' : 'arcgis';
       const radio = document.querySelector(`input[name="mapProvider"][value="${normProvider}"]`);
       if (radio) radio.checked = true;
       handleProviderChange(normProvider);
-      if (savedCartoToken) {
-        applyCartoTilesWithToken(savedCartoToken);
-      }
     }
 
     async function saveMapProviderConfig() {
@@ -4488,12 +5222,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     // Map Layer Toggles
     function toggleUkraineMask(isChecked) {
-      const chk = document.getElementById('chkMaskOutside');
-      if (chk) chk.checked = isChecked;
-      if (!map || !map.setLayoutProperty) return;
-      if (map.getLayer('mask-outside-layer')) {
-        map.setLayoutProperty('mask-outside-layer', 'visibility', isChecked ? 'visible' : 'none');
-      }
+      toggleOutsideMask(isChecked);
     }
 
     function toggleAlertOblasts(isChecked) {
@@ -4644,80 +5373,151 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       reader.readAsText(file);
     }
 
-    function ingestHistoryDataset(data) {
-      let targets = [];
+    async function loadAnalyticsPeriod() {
+      const fromEl = document.getElementById('dateFromInput') || document.getElementById('analyticsDateFrom');
+      const toEl = document.getElementById('dateToInput');
+      if (fromEl && !fromEl.value) {
+        if (typeof applyDatePreset === 'function') {
+          applyDatePreset('3days', document.getElementById('btnPreset3Days'));
+        }
+      }
+      const fromDate = fromEl?.value || '';
+      const toDate = toEl?.value || fromDate;
+      const monthVal = (toDate || fromDate || new Date().toISOString()).slice(0, 7);
+
+      const query = `token=${encodeURIComponent(clientToken)}&month=${encodeURIComponent(monthVal)}`;
+
+      try {
+        const res = await fetch(`/api/v1/history?${query}`);
+        if (res.ok) {
+          const histData = await res.json();
+          ingestHistoryDataset(histData, fromDate, toDate);
+        }
+      } catch (err) {
+        console.warn('[Analytics] Failed to fetch history:', err);
+      }
+    }
+
+    function ingestHistoryDataset(data, fromDate = '', toDate = '') {
+      let rawTargets = [];
       if (Array.isArray(data)) {
-        targets = data;
+        rawTargets = data;
       } else if (data && Array.isArray(data.targets)) {
-        targets = data.targets;
+        rawTargets = data.targets;
       } else if (data && data.targets && typeof data.targets === 'object') {
-        targets = Object.keys(data.targets).map(id => {
-          const item = data.targets[id];
-          const pts = Array.isArray(item.path) ? item.path : (item.trajectory || []);
-          const traj = pts.map(p => {
-            if (Array.isArray(p)) return [p[1], p[2]];
-            if (typeof p === 'object') return [p.lat, p.lon];
-            return p;
-          });
-          return {
-            id: id,
-            cat: normalizeCat(item.category || item.type || item.cat || item.type_ua),
-            name: item.name || item.type_ua || (THREAT_CATEGORIES[normalizeCat(item.category || item.type)]?.name) || 'Ціль',
-            launch_time: item.start_time || item.launch_time || (pts.length > 0 && Array.isArray(pts[0]) ? pts[0][0] : Math.floor(Date.now() / 1000 - 3600)),
-            lost_time: item.end_time || item.lost_time || (pts.length > 0 && Array.isArray(pts[pts.length - 1]) ? pts[pts.length - 1][0] : Math.floor(Date.now() / 1000)),
-            downed: !!(item.status === 'downed' || item.status === 'lost' || item.downed),
-            trajectory: traj,
-            corridor: item.corridor || item.extrapolated || [],
-            lost_point: traj.length > 0 ? traj[traj.length - 1] : null
-          };
-        });
+        rawTargets = Object.entries(data.targets).map(([id, item]) => ({ id, ...item }));
       } else if (data && Array.isArray(data.data)) {
-        targets = data.data;
+        rawTargets = data.data;
       } else if (data && typeof data === 'object') {
-        targets = Object.values(data).filter(v => v && typeof v === 'object' && (v.trajectory || v.lat || v.launch_time || v.path));
+        rawTargets = Object.values(data).filter(v => v && typeof v === 'object' && (v.path || v.trajectory || v.lat));
       }
 
-      historicalDataset = targets.map((t, idx) => ({
-        id: t.id || `ext-${idx}`,
-        cat: normalizeCat(t.cat || t.type || t.category || t.type_ua),
-        name: t.name || t.type_ua || (THREAT_CATEGORIES[normalizeCat(t.cat || t.type)]?.name) || 'Ціль',
-        launch_time: t.launch_time || t.start_time || Math.floor(Date.now() / 1000 - 3600),
-        lost_time: t.lost_time || t.end_time || Math.floor(Date.now() / 1000),
-        downed: !!(t.downed || t.status === 'downed' || t.status === 'lost'),
-        trajectory: t.trajectory || [],
-        corridor: t.corridor || t.extrapolated || [],
-        lost_point: t.lost_point || (t.trajectory && t.trajectory.length > 0 ? t.trajectory[t.trajectory.length - 1] : null)
-      }));
+      if (fromDate || toDate) {
+        rawTargets = rawTargets.filter(item => {
+          const d = item.date || (item.start_time ? new Date(item.start_time * 1000).toISOString().slice(0, 10) : '');
+          if (!d) return true;
+          if (fromDate && d < fromDate) return false;
+          if (toDate && d > toDate) return false;
+          return true;
+        });
+      }
 
-      // Render threat filter checkboxes in Analytics tab
+      historicalDataset = rawTargets.map((item, idx) => {
+        const cat = normalizeCat(item.cat || item.category || item.type || item.name_ua || item.type_ua);
+        const rawPts = Array.isArray(item.path) ? item.path : (item.trajectory || []);
+        const startTs = Number(item.start_time || item.launch_time || (rawPts[0] && Array.isArray(rawPts[0]) ? rawPts[0][0] : Math.floor(Date.now() / 1000 - 3600)));
+        const endTs = Number(item.end_time || item.lost_time || (rawPts.length > 0 && Array.isArray(rawPts[rawPts.length - 1]) ? rawPts[rawPts.length - 1][0] : startTs + 600));
+
+        const timedPts = rawPts.map((p, i) => {
+          if (Array.isArray(p) && p.length >= 3) {
+            return { ts: Number(p[0]), lat: Number(p[1]), lon: Number(p[2]), heading: Number(p[3] || 0) };
+          } else if (Array.isArray(p) && p.length === 2) {
+            const frac = rawPts.length > 1 ? i / (rawPts.length - 1) : 0;
+            return { ts: startTs + frac * (endTs - startTs), lat: Number(p[0]), lon: Number(p[1]), heading: 0 };
+          } else if (p && typeof p === 'object') {
+            const frac = rawPts.length > 1 ? i / (rawPts.length - 1) : 0;
+            return { ts: Number(p.ts || (startTs + frac * (endTs - startTs))), lat: Number(p.lat), lon: Number(p.lon), heading: Number(p.heading || 0) };
+          }
+          return null;
+        }).filter(p => p && Number.isFinite(p.lat) && Number.isFinite(p.lon));
+
+        return {
+          id: item.id || `hist-${idx}`,
+          cat,
+          name: item.name_ua || item.type_ua || item.name || (THREAT_CATEGORIES[cat]?.name) || 'Ціль',
+          launch_time: startTs,
+          lost_time: Math.max(startTs + 10, endTs),
+          downed: !!(item.downed || item.status === 'downed' || item.status === 'lost'),
+          timedPts,
+          lost_point: timedPts.length > 0 ? [timedPts[timedPts.length - 1].lat, timedPts[timedPts.length - 1].lon] : null
+        };
+      });
+
+      // ПЕРЕМИКАЄМО РАДАР У РЕЖИМ ІСТОРІЇ (REPLAY), ЩОБ LIVE НЕ ПЕРЕЗАПИСУВАВ МАПУ!
+      isLiveMode = false;
+      const liveBtn = document.getElementById('btnLivePill');
+      if (liveBtn) liveBtn.classList.remove('active');
+
       renderAnalyticsThreatFilters();
-
-      // Recalculate and populate stats
       updateAnalyticsStats();
       drawTimelineDensity();
       renderHourlyChart();
 
-      // Configure replay timeline slider
       if (historicalDataset.length > 0) {
         let minT = Infinity, maxT = -Infinity;
         historicalDataset.forEach(t => {
           if (t.launch_time < minT) minT = t.launch_time;
           if (t.lost_time > maxT) maxT = t.lost_time;
         });
-        if (minT === Infinity) minT = Math.floor(Date.now() / 1000 - 86400);
-        if (maxT === -Infinity) maxT = Math.floor(Date.now() / 1000);
-
         simMinTime = minT;
         simMaxTime = maxT;
-        simTime = minT;
+        simTime = maxT;
 
         const slider = document.getElementById('timeSlider');
         if (slider) {
           slider.min = minT;
           slider.max = maxT;
-          slider.value = minT;
+          slider.value = simTime;
         }
-        applyHistoricalFilterToMap();
+      }
+
+      renderHistoricalStaticLayers();
+      applyHistoricalFilterToMap(true);
+    }
+
+    function renderHistoricalStaticLayers() {
+      if (!map) return;
+      const visible = historicalDataset.filter(t => enabledAnalyticsThreats.has(t.cat));
+      const trailFeatures = [];
+      const lostFeatures = [];
+
+      visible.forEach(t => {
+        const catMeta = THREAT_CATEGORIES[t.cat] || THREAT_CATEGORIES.unknown;
+        const pts = t.timedPts || [];
+        if (pts.length >= 2) {
+          trailFeatures.push({
+            type: 'Feature',
+            properties: { cat: t.cat, color: catMeta.color },
+            geometry: { type: 'LineString', coordinates: pts.map(p => [p.lon, p.lat]) }
+          });
+        }
+        if (t.lost_point) {
+          lostFeatures.push({
+            type: 'Feature',
+            properties: { id: t.id, cat: t.cat, downed: t.downed },
+            geometry: { type: 'Point', coordinates: [t.lost_point[1], t.lost_point[0]] }
+          });
+        }
+      });
+
+      if (map.getSource('threats-trails-source')) {
+        map.getSource('threats-trails-source').setData({ type: 'FeatureCollection', features: trailFeatures });
+      }
+      if (map.getSource('threats-lost-source')) {
+        map.getSource('threats-lost-source').setData({ type: 'FeatureCollection', features: lostFeatures });
+      }
+      if (map.getSource('threats-forecast-source')) {
+        map.getSource('threats-forecast-source').setData({ type: 'FeatureCollection', features: [] });
       }
     }
 
@@ -4745,7 +5545,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     function toggleAnalyticsThreatFilter(cat, isChecked) {
       if (isChecked) enabledAnalyticsThreats.add(cat);
       else enabledAnalyticsThreats.delete(cat);
-      applyHistoricalFilterToMap();
+      renderHistoricalStaticLayers();
+      applyHistoricalFilterToMap(true);
       updateAnalyticsStats();
     }
 
@@ -4763,77 +5564,77 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         const cat = i.id.replace('chkFilterCat-', '');
         i.checked = enabledAnalyticsThreats.has(cat);
       });
-      applyHistoricalFilterToMap();
+      renderHistoricalStaticLayers();
+      applyHistoricalFilterToMap(true);
       updateAnalyticsStats();
     }
 
-    function applyHistoricalFilterToMap() {
+    function applyHistoricalFilterToMap(forceSync = false) {
       if (!map) return;
       const visible = historicalDataset.filter(t => enabledAnalyticsThreats.has(t.cat));
+      const currentTs = Number(simTime) || Infinity;
+      const isPlayingOrScrubbed = (currentTs < simMaxTime - 2);
 
       const aircraftFeatures = [];
-      const trailFeatures = [];
-      const lostFeatures = [];
 
       visible.forEach(t => {
+        if (isPlayingOrScrubbed && t.launch_time > currentTs) return;
+
         const catMeta = THREAT_CATEGORIES[t.cat] || THREAT_CATEGORIES.unknown;
+        const pts = t.timedPts || [];
+        if (pts.length === 0) return;
 
-        // Flight trails with explicit category color
-        if (t.trajectory && t.trajectory.length >= 2) {
-          const coords = t.trajectory.map(p => Array.isArray(p) ? [p[1], p[0]] : [p.lon, p.lat]);
-          trailFeatures.push({
-            type: 'Feature',
-            properties: { 
-              cat: t.cat,
-              color: catMeta.color 
-            },
-            geometry: { type: 'LineString', coordinates: coords }
-          });
+        let curLon = pts[0].lon;
+        let curLat = pts[0].lat;
+        let curHeading = pts[0].heading || 0;
 
-          // Aircraft symbol in historical replay view
-          const lastPt = coords[coords.length - 1];
-          let heading = 0;
-          if (coords.length >= 2) {
-            const p1 = coords[coords.length - 2];
-            const p2 = lastPt;
-            const dLon = (p2[0] - p1[0]) * Math.PI / 180;
-            const lat1 = p1[1] * Math.PI / 180;
-            const lat2 = p2[1] * Math.PI / 180;
+        for (let i = 0; i < pts.length; i++) {
+          if (!isPlayingOrScrubbed || pts[i].ts <= currentTs) {
+            curLon = pts[i].lon;
+            curLat = pts[i].lat;
+            if (i > 0) {
+              const prev = pts[i - 1];
+              const dLon = (curLon - prev.lon) * Math.PI / 180;
+              const lat1 = prev.lat * Math.PI / 180;
+              const lat2 = curLat * Math.PI / 180;
+              const y = Math.sin(dLon) * Math.cos(lat2);
+              const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+              curHeading = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+            }
+          } else if (i > 0 && pts[i - 1].ts < currentTs && pts[i].ts > currentTs) {
+            const p0 = pts[i - 1];
+            const p1 = pts[i];
+            const ratio = Math.max(0, Math.min(1, (currentTs - p0.ts) / Math.max(1, p1.ts - p0.ts)));
+            curLon = p0.lon + (p1.lon - p0.lon) * ratio;
+            curLat = p0.lat + (p1.lat - p0.lat) * ratio;
+
+            const dLon = (p1.lon - p0.lon) * Math.PI / 180;
+            const lat1 = p0.lat * Math.PI / 180;
+            const lat2 = p1.lat * Math.PI / 180;
             const y = Math.sin(dLon) * Math.cos(lat2);
             const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-            heading = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+            curHeading = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+            break;
           }
+        }
 
+        const isStillFlying = !isPlayingOrScrubbed || (currentTs <= t.lost_time);
+        if (isStillFlying) {
           aircraftFeatures.push({
             type: 'Feature',
-            geometry: { type: 'Point', coordinates: lastPt },
+            geometry: { type: 'Point', coordinates: [curLon, curLat] },
             properties: {
               tid: t.id,
               cat: t.cat,
               icon: 'threat-' + t.cat,
-              heading: heading,
+              heading: curHeading,
               group_count: 1,
-              label: `${catMeta.name} (Історія)`
+              label: `${catMeta.name}`
             }
-          });
-        }
-        // Impact/lost point
-        if (t.lost_point) {
-          const pt = Array.isArray(t.lost_point) ? [t.lost_point[1], t.lost_point[0]] : [t.lost_point.lon, t.lost_point.lat];
-          lostFeatures.push({
-            type: 'Feature',
-            properties: { id: t.id, cat: t.cat, downed: t.downed },
-            geometry: { type: 'Point', coordinates: pt }
           });
         }
       });
 
-      if (map.getSource('threats-trails-source')) {
-        map.getSource('threats-trails-source').setData({ type: 'FeatureCollection', features: trailFeatures });
-      }
-      if (map.getSource('threats-lost-source')) {
-        map.getSource('threats-lost-source').setData({ type: 'FeatureCollection', features: lostFeatures });
-      }
       if (map.getSource('threats-aircraft-source')) {
         map.getSource('threats-aircraft-source').setData({ type: 'FeatureCollection', features: aircraftFeatures });
       }
@@ -5110,6 +5911,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       replaySpeed = Number(val) || 10;
     }
 
+    let lastHistGeoJsonSync = 0;
+
     function historyPlaybackLoop(now) {
       if (!isReplayPlaying) return;
       const deltaSec = (now - lastReplayTick) / 1000.0;
@@ -5123,7 +5926,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         simTime = simMaxTime;
         isReplayPlaying = false;
         const playBtn = document.getElementById('btnPlayPause');
+        const replayBtn = document.getElementById('btnReplayPlay');
         if (playBtn) playBtn.innerText = '▶';
+        if (replayBtn) replayBtn.innerText = '▶';
       }
 
       const slider = document.getElementById('timeSlider');
@@ -5139,7 +5944,11 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       if (tEl) tEl.innerText = timeStr;
       if (dEl) dEl.innerText = dateStr;
 
-      applyHistoricalFilterToMap();
+      // Flightradar24 architecture: throttle MapLibre GeoJSON setSource/worker retiling to ~14 Hz (70ms)
+      if (now - lastHistGeoJsonSync >= 70 || !isReplayPlaying) {
+        lastHistGeoJsonSync = now;
+        applyHistoricalFilterToMap(false);
+      }
 
       if (isReplayPlaying) requestAnimationFrame(historyPlaybackLoop);
     }
@@ -5196,9 +6005,34 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
     }
 
+    function initTimeSliderTouch() {
+      const slider = document.getElementById('timeSlider');
+      if (!slider) return;
+      const handleTouch = (e) => {
+        if (!e.touches || e.touches.length === 0) return;
+        const touch = e.touches[0];
+        const rect = slider.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const ratio = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+        const minVal = Number(slider.min || 0);
+        const maxVal = Number(slider.max || 1000);
+        const val = minVal + ratio * (maxVal - minVal);
+        slider.value = val;
+        scrubTimeline(val);
+      };
+      slider.addEventListener('touchstart', handleTouch, { passive: true });
+      slider.addEventListener('touchmove', handleTouch, { passive: true });
+    }
+
     // Initialize DOM & Map on Startup
     document.addEventListener('DOMContentLoaded', () => {
       renderUserSlots();
+      initTimeSliderTouch();
+      fetchInitialSnapshot();
+      loadRegionsData();
+      loadPoiData();
+      fetchUserSlots();
+      loadMapProviderConfig();
       initMapEngine();
     });
 

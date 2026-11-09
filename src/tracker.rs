@@ -590,7 +590,7 @@ impl Default for ThreatState {
 }
 
 impl ThreatState {
-    /// Суворий перерахунок тривог: колір визначається виключно сиренами
+    /// Суворий перерахунок тривог: колір визначається сиренами та цілями (Red / Yellow)
     pub fn recompute_oblast_alerts(&mut self, detector: &OblastDetector) {
         let mut ob_targets: HashMap<String, usize> = HashMap::new();
         let mut ra_targets: HashMap<String, usize> = HashMap::new();
@@ -607,13 +607,21 @@ impl ThreatState {
             let ob_id = &ob.id;
             let official = self.official_alerts.get(ob_id);
 
-            let (has_alert, color, alert_type) = if let Some(off) = official {
+            let (official_has_alert, official_color, official_alert_type) = if let Some(off) = official {
                 (off.alert, off.color.clone(), off.alert_type.clone())
             } else {
                 (false, "none".to_string(), "none".to_string())
             };
 
             let count = ob_targets.get(ob_id).copied().unwrap_or(0);
+
+            let (has_alert, color, alert_type) = if official_color == "red" {
+                (true, "red".to_string(), official_alert_type)
+            } else if official_color == "yellow" || count > 0 {
+                (true, "yellow".to_string(), if official_alert_type == "none" { "drone".to_string() } else { official_alert_type })
+            } else {
+                (official_has_alert, official_color, official_alert_type)
+            };
 
             self.oblast_alerts.insert(
                 ob_id.clone(),
@@ -641,7 +649,7 @@ impl ThreatState {
             }
         }
 
-        // Райони (Rank 2)
+        // Райони (Rank 2 + Анклави)
         for ra in &detector.raion_regions {
             let ra_id = &ra.id;
             let official = self.official_alerts.get(ra_id);
@@ -654,15 +662,29 @@ impl ThreatState {
             };
 
             // Правило: Red перекриває Yellow. Якщо область "red", райони піднімаються до "red"
+            // Якщо область "yellow", а район без тривоги — район піднімається до "yellow"
             if let Some(p_ob) = parent_ob {
                 if p_ob.color == "red" {
                     has_alert = true;
                     color = "red".to_string();
                     alert_type = p_ob.alert_type.clone();
+                } else if p_ob.color == "yellow" && color != "red" {
+                    has_alert = true;
+                    color = "yellow".to_string();
+                    if alert_type == "none" {
+                        alert_type = p_ob.alert_type.clone();
+                    }
                 }
             }
 
             let count = ra_targets.get(ra_id).copied().unwrap_or(0);
+            if color != "red" && count > 0 {
+                has_alert = true;
+                color = "yellow".to_string();
+                if alert_type == "none" {
+                    alert_type = "drone".to_string();
+                }
+            }
 
             self.raion_alerts.insert(
                 ra_id.clone(),
@@ -676,6 +698,42 @@ impl ThreatState {
                     targets_count: count,
                 },
             );
+        }
+
+        // Додаткова синхронізація міст-анклавів
+        let enclave_sync = [
+            ("1293", "124", "22"), // Харків -> Харківський р-н / Харківська обл
+            ("564",  "149", "12"), // Запоріжжя -> Запорізький р-н / Запорізька обл
+            ("750",  "74",  "14"), // Славутич -> Вишгородський р-н / Київська обл
+            ("707",  "75",  "14"), // Коцюбинське -> Бучанський р-н / Київська обл
+        ];
+        for (enc_id, ra_id, ob_id) in enclave_sync {
+            let parent_ra_alert = self.raion_alerts.get(ra_id).cloned();
+            let parent_ob_alert = self.oblast_alerts.get(ob_id).cloned();
+            if let Some(enc) = self.raion_alerts.get_mut(enc_id) {
+                if enc.color != "red" {
+                    if let Some(ra) = parent_ra_alert {
+                        if ra.alert {
+                            enc.alert = true;
+                            enc.color = ra.color;
+                            if enc.alert_type == "none" {
+                                enc.alert_type = ra.alert_type;
+                            }
+                        }
+                    }
+                    if enc.color != "red" {
+                        if let Some(ob) = parent_ob_alert {
+                            if ob.alert {
+                                enc.alert = true;
+                                enc.color = ob.color;
+                                if enc.alert_type == "none" {
+                                    enc.alert_type = ob.alert_type;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

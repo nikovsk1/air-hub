@@ -673,6 +673,9 @@ impl HistoryManager {
 
     /// Отримання історії за вибраний місяць з фільтрацією за днем (YYYY-MM-DD)
     pub fn get_month_history_filtered(&self, month: &str, date_filter: Option<&str>) -> Option<Value> {
+        // Примусовий сброс свіжих цілей з оперативної пам'яті перед читанням вибірки
+        self.flush_dirty();
+
         let cached = {
             let guard = self.read_cache.read();
             guard.get(month).cloned()
