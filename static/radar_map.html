@@ -1280,10 +1280,9 @@
       <section class="panel-section">
         <div class="section-title-row">
           <span>АКТИВНІ ЦІЛІ</span>
-          <span style="cursor:pointer; font-size:10px;" id="activeThreatsChevron" onclick="toggleSectionCollapse('liveCategorySummaryList', this)">▲</span>
+          <span style="cursor:pointer; font-size:10px;" id="activeThreatsChevron" onclick="toggleSectionCollapse('activeCategoryList', this)">▲</span>
         </div>
         <div class="threat-category-list" id="activeCategoryList"></div>
-        <div id="liveCategorySummaryList" style="display:flex; flex-direction:column; gap:4px;"></div>
       </section>
 
       <!-- Today Concentric Radial Gauge -->
@@ -1748,8 +1747,8 @@
     let showLabelsIn2D = true;
     let showPoiIn2D = true;
 
-    // Basemaps styles
-    const GLYPHS_URL = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
+    // Basemaps styles (Local-first offline PBF font glyphs hosted on Rust backend)
+    const GLYPHS_URL = '/static/fonts/{fontstack}/{range}.pbf';
 
     const BASEMAPS = {
       arcgis: {
@@ -2090,12 +2089,20 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       map.on('load', () => {
         isMapLoaded = true;
 
-        // Register Canvas HiDPI Sprites
-        for (const key in THREAT_CATEGORIES) {
-          const sprite = createThreatSprite(key, THREAT_CATEGORIES[key].color);
-          map.addImage(`threat-${key}`, sprite, { pixelRatio: 2 });
+        // Register Canvas HiDPI Sprites (Defensively check map.hasImage to prevent duplicate sprite crashes)
+        try {
+          for (const key in THREAT_CATEGORIES) {
+            if (!map.hasImage(`threat-${key}`)) {
+              const sprite = createThreatSprite(key, THREAT_CATEGORIES[key].color);
+              map.addImage(`threat-${key}`, sprite, { pixelRatio: 2 });
+            }
+          }
+          if (!map.hasImage('impact-cross-red')) {
+            map.addImage('impact-cross-red', createImpactCrossSprite(), { pixelRatio: 2 });
+          }
+        } catch (spriteErr) {
+          console.warn('[MapLibre] Sprite registration warning:', spriteErr);
         }
-        map.addImage('impact-cross-red', createImpactCrossSprite(), { pixelRatio: 2 });
 
         initLayerHierarchy();
         initSkyDome();
@@ -2606,7 +2613,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         const fillHex = (alertColorKey === 'yellow') ? '#F59E0B' : '#EF4444';
 
         let cleanGeom = feat.geometry;
-        if ((rank === 1 || rank === 2) && regId !== '14' && regId !== '31' && cleanGeom) {
+        if ((rank === 1 || rank === 2) && regId !== '14' && cleanGeom) {
           if (cleanGeom.type === 'Polygon' && cleanGeom.coordinates.length > 1) {
             cleanGeom = { type: 'Polygon', coordinates: [cleanGeom.coordinates[0]] };
           } else if (cleanGeom.type === 'MultiPolygon') {
@@ -3067,7 +3074,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           'icon-rotate': ['get', 'heading'],
           'icon-rotation-alignment': 'map',
           'icon-allow-overlap': true,
-          'icon-ignore-placement': true
+          'icon-ignore-placement': true,
+          'icon-optional': false
         }
       });
 
@@ -3081,7 +3089,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           'text-font': ['Open Sans Regular'],
           'text-size': 10,
           'text-offset': [1.2, -1.2],
-          'text-allow-overlap': true
+          'text-allow-overlap': true,
+          'text-optional': true
         },
         paint: {
           'text-color': '#FFFFFF',
@@ -3100,7 +3109,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           'text-size': 11,
           'text-offset': [0, 1.4],
           'text-anchor': 'top',
-          'text-allow-overlap': false
+          'text-allow-overlap': false,
+          'text-optional': true
         },
         paint: {
           'text-color': '#F8FAFC',
@@ -4667,13 +4677,19 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         migEl.className = isMigActive ? 'badge-count danger' : 'badge-count calm';
       }
 
-      // Update Category List Counts
-      for (const cat in THREAT_CATEGORIES) {
-        const badge = document.getElementById(`badge-cat-${cat}`);
-        if (badge) {
-          const count = catCounts[cat] || 0;
-          badge.innerText = count > 0 ? `${count} цілей` : 'цілі відсутні';
-          badge.className = count > 0 ? 'badge-count danger' : 'badge-count calm';
+      // Update Category List Counts & ensure DOM rows are mounted
+      window._cachedLatestCatCounts = catCounts;
+      const catListEl = document.getElementById('activeCategoryList');
+      if (!catListEl || catListEl.children.length === 0) {
+        renderActiveThreatCategories(catCounts);
+      } else {
+        for (const cat in THREAT_CATEGORIES) {
+          const badge = document.getElementById(`badge-cat-${cat}`);
+          if (badge) {
+            const count = catCounts[cat] || 0;
+            badge.innerText = count > 0 ? `${count} цілей` : 'цілі відсутні';
+            badge.className = count > 0 ? 'badge-count danger' : 'badge-count calm';
+          }
         }
       }
       const totalLiveEl = document.getElementById('lblTotalActiveLive');
@@ -4682,7 +4698,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       // Update Today Radial Gauge dynamically from WebSocket data.today_stats
       if (data.today_stats) {
         const countsMap = data.today_stats.categories || data.today_stats.by_category || {};
-        const total = data.today_stats.total || 0;
+        const total = (typeof data.today_stats.total === 'number' && data.today_stats.total > 0)
+          ? data.today_stats.total
+          : Object.values(countsMap).reduce((a, b) => a + Number(b || 0), 0);
         renderRadialTodayGauge(countsMap, total);
       }
 
@@ -4926,8 +4944,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       if (!isOpen) panel.classList.add('open');
     }
 
-    // Authentic SVG threat categories rendering
-    function renderActiveThreatCategories() {
+    // Authentic SVG threat categories rendering with live count hydration & category filtering
+    function renderActiveThreatCategories(countsMap) {
       const list = document.getElementById('activeCategoryList');
       if (!list) return;
       list.innerHTML = '';
@@ -4935,16 +4953,20 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       for (const cat in THREAT_CATEGORIES) {
         const meta = THREAT_CATEGORIES[cat];
         const svgIcon = THREAT_SVG_ICONS[cat] || THREAT_SVG_ICONS.unknown;
+        const count = (countsMap && countsMap[cat]) || (window._cachedLatestCatCounts && window._cachedLatestCatCounts[cat]) || 0;
+        const isChecked = enabledThreatCategories ? enabledThreatCategories.has(cat) : true;
+        const countText = count > 0 ? `${count} цілей` : 'цілі відсутні';
+        const badgeClass = count > 0 ? 'badge-count danger' : 'badge-count calm';
         const row = document.createElement('div');
         row.className = 'threat-category-row';
         row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:3px 6px; border-radius:6px; cursor:pointer; transition:background 0.15s;';
         row.innerHTML = `
           <label class="cat-label-wrap" style="display:flex; align-items:center; gap:7px; cursor:pointer; flex:1;" onmouseenter="highlightGaugeCategory('${cat}')" onmouseleave="highlightGaugeCategory(null)">
-            <input type="checkbox" class="cat-checkbox" id="chk-cat-${cat}" checked onchange="toggleCategoryFilter('${cat}', this.checked)">
+            <input type="checkbox" class="cat-checkbox" id="chk-cat-${cat}" ${isChecked ? 'checked' : ''} onchange="toggleCategoryFilter('${cat}', this.checked)">
             <div class="threat-svg-icon">${svgIcon}</div>
             <span style="font-size:11px; font-weight:600; color:#FFFFFF;">${meta.name}</span>
           </label>
-          <span class="badge-count calm" id="badge-cat-${cat}" onclick="toggleGaugeCategorySelection('${cat}')">цілі відсутні</span>
+          <span class="${badgeClass}" id="badge-cat-${cat}" onclick="toggleGaugeCategorySelection('${cat}')">${countText}</span>
         `;
         list.appendChild(row);
       }
@@ -5344,8 +5366,15 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     }
 
     function renderRadialTodayGauge(countsMap, total) {
+      const calculatedTotal = Object.values(countsMap || {}).reduce((a, b) => a + Number(b || 0), 0);
+      const effectiveTotal = (typeof total === 'number' && total > 0) ? total : calculatedTotal;
+
       const totalEl = document.getElementById('radialTotalNumber');
-      if (totalEl) totalEl.innerText = total || 0;
+      if (totalEl) {
+        totalEl.innerText = effectiveTotal;
+        totalEl.textContent = String(effectiveTotal);
+        totalEl.innerHTML = String(effectiveTotal);
+      }
 
       const spokesGroup = document.getElementById('radialGaugeSpokesGroup');
       if (!spokesGroup) return;
@@ -5354,7 +5383,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const cx = 110, cy = 110, r1 = 48, r2 = 74;
       const totalSpokes = 64;
 
-      if (!total || total === 0) {
+      if (!effectiveTotal || effectiveTotal === 0) {
         for (let i = 0; i < totalSpokes; i++) {
           const angle = (i * 360 / totalSpokes) * Math.PI / 180;
           const x1 = cx + r1 * Math.cos(angle);
@@ -5381,7 +5410,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       let currentSpoke = 0;
 
       entries.forEach(([cat, count]) => {
-        const catSpokes = Math.round((count / total) * totalSpokes);
+        const catSpokes = Math.round((count / effectiveTotal) * totalSpokes);
         const color = THREAT_CATEGORIES[cat]?.color || '#FACC15';
 
         for (let i = 0; i < catSpokes && currentSpoke < totalSpokes; i++, currentSpoke++) {
@@ -5421,7 +5450,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       if (pillsContainer) {
         pillsContainer.innerHTML = '';
         entries.forEach(([cat, count]) => {
-          const pct = Math.round((count / total) * 100);
+          const pct = Math.round((count / effectiveTotal) * 100);
           const color = THREAT_CATEGORIES[cat]?.color || '#FACC15';
           const pill = document.createElement('div');
           pill.className = 'radial-pill-item';
@@ -6433,6 +6462,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     // Initialize DOM & Map on Startup
     document.addEventListener('DOMContentLoaded', () => {
+      renderActiveThreatCategories();
+      renderTodayRadialGauge();
       renderUserSlots();
       initTimeSliderTouch();
       fetchInitialSnapshot();

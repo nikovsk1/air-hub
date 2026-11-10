@@ -644,7 +644,7 @@ impl ThreatState {
             );
         }
 
-        // Синхронізація анклаву Києва: якщо Київська область (14) "red", Київ (31) успадковує "red"
+        // Синхронізація анклаву Києва: якщо Київська область (14) в тривозі ("red" або "yellow"), Київ (31) успадковує статус
         if let Some(kyiv_ob) = self.oblast_alerts.get("14") {
             if kyiv_ob.color == "red" {
                 if let Some(kyiv_city) = self.oblast_alerts.get_mut("31") {
@@ -652,6 +652,16 @@ impl ThreatState {
                     kyiv_city.color = "red".to_string();
                     if kyiv_city.alert_type == "none" {
                         kyiv_city.alert_type = "missile".to_string();
+                    }
+                }
+            } else if kyiv_ob.color == "yellow" {
+                if let Some(kyiv_city) = self.oblast_alerts.get_mut("31") {
+                    if kyiv_city.color != "red" {
+                        kyiv_city.alert = true;
+                        kyiv_city.color = "yellow".to_string();
+                        if kyiv_city.alert_type == "none" {
+                            kyiv_city.alert_type = "drone".to_string();
+                        }
                     }
                 }
             }
