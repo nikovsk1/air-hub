@@ -280,66 +280,90 @@ impl StorageManager {
             let guard = self.poi_items.read();
             serde_json::to_string_pretty(&*guard).map_err(|e| e.to_string())?
         };
+
+        if let Some(parent) = self.poi_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
         let pid = std::process::id();
         let ts = now_ts();
         let tmp_path = self.poi_path.with_extension(format!("tmp.{}_{}", pid, ts));
-        match File::create(&tmp_path) {
-            Ok(mut f) => {
-                f.write_all(json_str.as_bytes()).map_err(|e| e.to_string())?;
-                f.flush().map_err(|e| e.to_string())?;
-                let _ = fs::rename(&tmp_path, &self.poi_path);
-                Ok(())
-            }
-            Err(_) => {
-                let mut direct_f = File::create(&self.poi_path).map_err(|e| e.to_string())?;
-                direct_f.write_all(json_str.as_bytes()).map_err(|e| e.to_string())?;
-                direct_f.flush().map_err(|e| e.to_string())?;
-                Ok(())
+        if let Ok(mut f) = File::create(&tmp_path) {
+            let write_ok = f.write_all(json_str.as_bytes()).and_then(|_| f.flush());
+            drop(f);
+            if write_ok.is_ok() {
+                if fs::rename(&tmp_path, &self.poi_path).is_ok() {
+                    return Ok(());
+                }
+                if fs::copy(&tmp_path, &self.poi_path).is_ok() {
+                    let _ = fs::remove_file(&tmp_path);
+                    return Ok(());
+                }
+                let _ = fs::remove_file(&tmp_path);
+            } else {
+                let _ = fs::remove_file(&tmp_path);
             }
         }
+
+        let mut direct_f = File::create(&self.poi_path).map_err(|e| e.to_string())?;
+        direct_f.write_all(json_str.as_bytes()).map_err(|e| e.to_string())?;
+        direct_f.flush().map_err(|e| e.to_string())?;
+        Ok(())
     }
 
-    /// Атомарний запис конфігурації (.tmp.{pid}_{ts} -> rename) з fallback на прямий запис
+    /// Атомарний запис конфігурації (.tmp.{pid}_{ts} -> rename) з багаторівневим fallback (copy / direct write)
     pub fn save_atomic(&self) -> Result<(), String> {
         let json_str = {
             let guard = self.data.read();
             serde_json::to_string_pretty(&*guard).map_err(|e| e.to_string())?
         };
 
+        if let Some(parent) = self.file_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
         let pid = std::process::id();
         let ts = now_ts();
         let tmp_path = self.file_path.with_extension(format!("tmp.{}_{}", pid, ts));
 
-        match File::create(&tmp_path) {
-            Ok(mut f) => {
-                f.write_all(json_str.as_bytes()).map_err(|e| format!("Write failed: {}", e))?;
-                f.flush().map_err(|e| format!("Flush failed: {}", e))?;
-                drop(f);
+        // Спроба 1: Створення .tmp файлу та атомарний rename
+        if let Ok(mut f) = File::create(&tmp_path) {
+            let write_ok = f.write_all(json_str.as_bytes()).and_then(|_| f.flush());
+            drop(f);
 
-                fs::rename(&tmp_path, &self.file_path).map_err(|e| {
+            if write_ok.is_ok() {
+                // Спроба атомарного rename
+                if fs::rename(&tmp_path, &self.file_path).is_ok() {
+                    return Ok(());
+                }
+
+                // Fallback 1: Якщо rename не вдався (наприклад, Docker bind-mount окремого файлу hub_config.json,
+                // або різні точки монтування / overlayfs EXDEV/EBUSY/ENOENT), копіюємо вміст поверх цільового файлу
+                if fs::copy(&tmp_path, &self.file_path).is_ok() {
                     let _ = fs::remove_file(&tmp_path);
-                    format!("Atomic rename failed: {}", e)
-                })?;
+                    tracing::info!("save_atomic: updated {:?} via copy fallback", self.file_path);
+                    return Ok(());
+                }
 
+                let _ = fs::remove_file(&tmp_path);
+            } else {
+                let _ = fs::remove_file(&tmp_path);
+            }
+        }
+
+        // Fallback 2: Прямий запис у цільовий файл (якщо tmp створення або rename заблоковані Docker/правами)
+        match File::create(&self.file_path) {
+            Ok(mut direct_f) => {
+                direct_f.write_all(json_str.as_bytes()).map_err(|e| format!("Direct write failed: {}", e))?;
+                direct_f.flush().map_err(|e| format!("Direct flush failed: {}", e))?;
+                tracing::warn!("Warning: save_atomic used direct write fallback for {:?}", self.file_path);
                 Ok(())
             }
-            Err(tmp_err) => {
-                // Fallback: якщо створення тимчасового файлу заблоковано правами каталогу,
-                // спробувати відкрити цільовий файл напряму на запис (якщо він вже існує і доступний)
-                match File::create(&self.file_path) {
-                    Ok(mut direct_f) => {
-                        direct_f.write_all(json_str.as_bytes()).map_err(|e| format!("Direct write failed: {}", e))?;
-                        direct_f.flush().map_err(|e| format!("Direct flush failed: {}", e))?;
-                        tracing::warn!("Warning: save_atomic used direct write fallback due to tmp error: {}", tmp_err);
-                        Ok(())
-                    }
-                    Err(direct_err) => {
-                        Err(format!(
-                            "Create tmp file failed: {}; Direct write failed: {}. Перевірте права доступу до каталогу даних (наприклад: chmod -R 777 /app/data)",
-                            tmp_err, direct_err
-                        ))
-                    }
-                }
+            Err(direct_err) => {
+                Err(format!(
+                    "Не вдалося зберегти конфігурацію у {:?}: {}. Перевірте права доступу до каталогу даних (наприклад: chmod -R 777 /app/data)",
+                    self.file_path, direct_err
+                ))
             }
         }
     }
@@ -537,6 +561,7 @@ impl StorageManager {
         Ok(true)
     }
 
+    #[allow(dead_code)]
     pub fn get_cartodb_key(&self, relation: &str) -> Option<String> {
         let guard = self.data.read();
         let rel = relation.trim();

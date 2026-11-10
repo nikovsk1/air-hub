@@ -370,14 +370,24 @@ impl HistoryManager {
                     let _ = f.write_all(json_str.as_bytes());
                     let _ = f.flush();
                     drop(f);
-                    if let Err(e) = fs::rename(&tmp_path, &file_path) {
+                    let rename_res = fs::rename(&tmp_path, &file_path);
+                    let success = if rename_res.is_ok() {
+                        true
+                    } else if fs::copy(&tmp_path, &file_path).is_ok() {
                         let _ = fs::remove_file(&tmp_path);
-                        warn!("Failed to save flight history {}: {}", month, e);
+                        true
                     } else {
+                        let _ = fs::remove_file(&tmp_path);
+                        false
+                    };
+
+                    if success {
                         info!("Flushed flight history for {} ({} targets, {} daily summaries)", month, total_t, disk_summaries.len());
                         // Інвалідуємо старий запис у read_cache та оновлюємо мета-кеш дат
                         self.read_cache.write().remove(&month);
                         self.month_meta_cache.write().insert(month.clone(), (total_t, dates_vec, now_rfc3339));
+                    } else {
+                        warn!("Failed to save flight history {}: rename and copy fallback failed", month);
                     }
                 }
             }
@@ -1022,7 +1032,10 @@ impl HistoryManager {
 
             let serialized = serde_json::to_string(&data).map_err(|e| e.to_string())?;
             fs::write(&tmp_path, serialized.as_bytes()).map_err(|e| e.to_string())?;
-            let _ = fs::rename(&tmp_path, &file_path);
+            if fs::rename(&tmp_path, &file_path).is_err() {
+                let _ = fs::copy(&tmp_path, &file_path);
+                let _ = fs::remove_file(&tmp_path);
+            }
 
             self.read_cache.write().insert(month.to_string(), data.clone());
             self.gdrive_synced_months.write().insert(month.to_string());
