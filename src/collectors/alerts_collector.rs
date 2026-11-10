@@ -9,6 +9,7 @@ use tokio::time::sleep;
 use tracing::{debug, info, warn};
 
 use crate::canonical_registry::{classify_neptun_alert, classify_official_alert, ExchangeLogManager};
+use crate::config::{NEPTUN_ALERTS_POLL_INTERVAL_SEC, UKRAINEALARM_STATUS_POLL_INTERVAL_SEC};
 use crate::oblast_detector::OblastDetector;
 use crate::storage::StorageManager;
 use crate::tracker::{now_sec, OfficialAlert, ThreatState};
@@ -56,7 +57,14 @@ pub async fn run_alerts_collector(
         let mut used_primary = false;
 
         if let Some(token) = ua_token {
-            if now >= ua_cooldown_until && consecutive_ua_failures < 5 {
+            let should_try_ua = if consecutive_ua_failures < 5 {
+                now >= ua_cooldown_until
+            } else {
+                // Відновлювальне зондування (Recovery Probing): кожні 60с повторна спроба
+                now >= ua_cooldown_until
+            };
+
+            if should_try_ua {
                 // =========================================================================
                 // ОСНОВНИЙ РУШІЙ: Офіційний API v3 (api.ukrainealarm.com)
                 // =========================================================================
@@ -200,13 +208,13 @@ pub async fn run_alerts_collector(
                     debug!("Neptun alerts request failed: {}", e);
                 }
             }
-            // Резервний цикл опитування: той самий безпечний інтервал
-            sleep(Duration::from_secs(poll_interval_secs)).await;
+            // Резервний цикл опитування: суворе дотримання ліміту Cloudflare CDN (>= 5с)
+            sleep(Duration::from_secs(NEPTUN_ALERTS_POLL_INTERVAL_SEC)).await;
             continue;
         }
 
-        // Затримка Smart Polling для офіційного API (12-15 сек за регламентом)
-        sleep(Duration::from_secs(poll_interval_secs)).await;
+        // Штатний режим Smart Polling UkraineAlarm API v3 (/status кожні 4с)
+        sleep(Duration::from_secs(UKRAINEALARM_STATUS_POLL_INTERVAL_SEC)).await;
     }
 }
 
@@ -338,6 +346,8 @@ async fn process_ukrainealarm_v3_alerts(
     state.alert_reasons = reasons;
     state.recompute_oblast_alerts(detector);
     state.last_alerts_update_ts = now_sec();
+    state.alarms_provider = "UkraineAlarm (API v3)".to_string();
+    state.last_alarms_provider_status = "primary".to_string();
     state.update_seq += 1;
 }
 
@@ -454,5 +464,7 @@ async fn process_neptun_alerts(
 
     state.recompute_oblast_alerts(detector);
     state.last_alerts_update_ts = now_sec();
+    state.alarms_provider = "Neptun (Резервний)".to_string();
+    state.last_alarms_provider_status = "failover".to_string();
     state.update_seq += 1;
 }

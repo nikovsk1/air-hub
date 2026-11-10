@@ -2375,30 +2375,18 @@ ${resp.api_key}
 
     function launchRadarWithSelectedUser() {
       const sel = document.getElementById('radarModalUserSelect');
-      const key = sel ? sel.value : '';
+      const key = sel ? (sel.value || '').trim() : '';
       const verEl = document.querySelector('input[name=radarVersionSelect]:checked');
       const ver = verEl ? verEl.value : 'v3';
       const targetPath = (ver === 'timeline' || ver === 'replay') ? '/replay' : '/map';
 
-      let effectiveKey = key;
-      if (!effectiveKey) {
-        if (typeof currentAdminKey !== 'undefined' && currentAdminKey) {
-          effectiveKey = currentAdminKey;
-        } else if (sel && sel.options.length > 1 && sel.options[1].value) {
-          effectiveKey = sel.options[1].value;
-        }
+      // OPSEC: Ніколи не передаємо currentAdminKey (ADMIN_SECRET_KEY) у клієнтський URL ?token=!
+      if (key) {
+        window.open(`${targetPath}?token=${encodeURIComponent(key)}`, '_blank');
+      } else {
+        // Загальний перегляд (гостьовий режим) без витоку ключів
+        window.open(targetPath, '_blank');
       }
-
-      if (!effectiveKey) {
-        const manualKey = prompt('Введіть ключ користувача:', '');
-        if (manualKey && manualKey.trim()) {
-          effectiveKey = manualKey.trim();
-        } else {
-          alert('⚠️ Для перегляду мапи необхідно обрати користувача зі списку або ввести дійсний API-ключ.');
-          return;
-        }
-      }
-      window.open(`${targetPath}?token=${encodeURIComponent(effectiveKey)}`, '_blank');
       closeRadarUserModal();
     }
 

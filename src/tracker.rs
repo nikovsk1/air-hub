@@ -566,6 +566,10 @@ pub struct ThreatState {
     pub last_alerts_update_ts: f64,
     pub update_seq: u64,
     pub upstream_provider: String,
+    pub alarms_provider: String,
+    pub targets_provider: String,
+    pub last_alarms_provider_status: String,
+    pub last_targets_provider_status: String,
     pub alert_reasons: Vec<String>,
 }
 
@@ -579,11 +583,15 @@ impl Default for ThreatState {
             mig_active: false,
             last_update_ts: now_sec(),
             last_targets_update_ts: now_sec(),
-            last_primary_targets_ts: now_sec(),
+            last_primary_targets_ts: 0.0,
             last_ws_targets_ts: 0.0,
             last_alerts_update_ts: now_sec(),
             update_seq: 1,
             upstream_provider: "Centrifugo (ws.ukrainealarm.com)".to_string(),
+            alarms_provider: "UkraineAlarm (API v3)".to_string(),
+            targets_provider: "WS UkraineAlarm".to_string(),
+            last_alarms_provider_status: "primary".to_string(),
+            last_targets_provider_status: "primary".to_string(),
             alert_reasons: Vec::new(),
         }
     }
@@ -735,5 +743,86 @@ impl ThreatState {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_heading_diff_wraparound() {
+        assert!((heading_diff(10.0, 20.0) - 10.0).abs() < 0.001);
+        assert!((heading_diff(20.0, 10.0) - 10.0).abs() < 0.001);
+        // Через границю 0/360°
+        assert!((heading_diff(355.0, 5.0) - 10.0).abs() < 0.001);
+        assert!((heading_diff(5.0, 355.0) - 10.0).abs() < 0.001);
+        // Протилежні напрямки
+        assert!((heading_diff(0.0, 180.0) - 180.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_corridor_extrapolation_forward_continuity() {
+        let track = TargetTrack::new(
+            "test_1".to_string(),
+            "shahed".to_string(),
+            1,
+            50.0,
+            30.0,
+            90.0, // Схід
+            600.0, // 600 км/год = 10 км/хв
+            "Київська".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+        );
+
+        let corridor = track.get_extrapolated_corridor();
+        assert_eq!(corridor.len(), 3, "Corridor must have 3 steps (5, 10, 15 min)");
+        
+        // Перша точка екстраполяції (5 хв) має бути на схід (lon > 30.0)
+        assert!(corridor[0].lon > 30.0, "Heading east must increase longitude");
+        assert!((corridor[0].lat - 50.0).abs() < 0.05, "Heading east must maintain approximately same latitude");
+        // Друга точка (10 хв) далі за першу
+        assert!(corridor[1].lon > corridor[0].lon);
+        // Третя точка (15 хв) далі за другу
+        assert!(corridor[2].lon > corridor[1].lon);
+    }
+
+    #[test]
+    fn test_track_update_and_monotonicity() {
+        let mut track = TargetTrack::new(
+            "trk_test_1".to_string(),
+            "shahed".to_string(),
+            1,
+            50.0,
+            30.0,
+            0.0,
+            200.0,
+            "Київська".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+        );
+
+        assert_eq!(track.id, "trk_test_1");
+        assert_eq!(track.trajectory.len(), 1);
+        assert_eq!(track.lat, 50.0);
+        assert_eq!(track.lon, 30.0);
+
+        // Рух цілі вперед на північ
+        track.update(
+            50.05,
+            30.0,
+            0.0,
+            220.0,
+            "Київська".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+            None,
+            None,
+        );
+
+        assert_eq!(track.lat, 50.05);
+        assert_eq!(track.lon, 30.0);
+        assert_eq!(track.speed_kmh, 220.0);
     }
 }

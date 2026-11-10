@@ -97,3 +97,95 @@ pub fn project_radar_point(
 
     (px_x.round() as i32, px_y.round() as i32, dist, bearing)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_haversine_known_distances() {
+        // Київ: 50.4501° N, 30.5234° E
+        let kyiv_lat = 50.4501;
+        let kyiv_lon = 30.5234;
+        
+        // Відстань точки до самої себе має бути 0
+        let zero_dist = calculate_haversine_distance(kyiv_lat, kyiv_lon, kyiv_lat, kyiv_lon);
+        assert!(zero_dist < 0.001, "Zero distance assertion failed");
+
+        // Харків: 49.9935° N, 36.2304° E (~410-425 км)
+        let kharkiv_lat = 49.9935;
+        let kharkiv_lon = 36.2304;
+        let dist_kharkiv = calculate_haversine_distance(kyiv_lat, kyiv_lon, kharkiv_lat, kharkiv_lon);
+        assert!(dist_kharkiv > 400.0 && dist_kharkiv < 430.0, "Kyiv-Kharkiv distance was {}", dist_kharkiv);
+
+        // Одеса: 46.4825° N, 30.7233° E (~440-455 км)
+        let odesa_lat = 46.4825;
+        let odesa_lon = 30.7233;
+        let dist_odesa = calculate_haversine_distance(kyiv_lat, kyiv_lon, odesa_lat, odesa_lon);
+        assert!(dist_odesa > 430.0 && dist_odesa < 460.0, "Kyiv-Odesa distance was {}", dist_odesa);
+    }
+
+    #[test]
+    fn test_bearing_cardinal_directions() {
+        let lat0 = 50.0;
+        let lon0 = 30.0;
+
+        // Прямо на північ
+        let b_north = calculate_bearing(lat0, lon0, lat0 + 1.0, lon0);
+        assert!((b_north - 0.0).abs() < 1.0 || (b_north - 360.0).abs() < 1.0, "North bearing was {}", b_north);
+
+        // Прямо на схід
+        let b_east = calculate_bearing(lat0, lon0, lat0, lon0 + 1.0);
+        assert!((b_east - 90.0).abs() < 1.5, "East bearing was {}", b_east);
+
+        // Прямо на південь
+        let b_south = calculate_bearing(lat0, lon0, lat0 - 1.0, lon0);
+        assert!((b_south - 180.0).abs() < 1.0, "South bearing was {}", b_south);
+
+        // Прямо на захід
+        let b_west = calculate_bearing(lat0, lon0, lat0, lon0 - 1.0);
+        assert!((b_west - 270.0).abs() < 1.5, "West bearing was {}", b_west);
+    }
+
+    #[test]
+    fn test_approach_angle_direct_and_receding() {
+        let slot_lat = 50.0;
+        let slot_lon = 30.0;
+
+        // Ціль на півдні (49.0, 30.0), летить на північ (курс 0°) прямо на спостережний пункт
+        let app_direct = approach_angle(49.0, 30.0, 0.0, slot_lat, slot_lon);
+        assert!(app_direct < 2.0, "Direct approach angle should be ~0°, got {}", app_direct);
+
+        // Ціль на півдні (49.0, 30.0), летить на південь (курс 180°) віддаляючись від пункту
+        let app_receding = approach_angle(49.0, 30.0, 180.0, slot_lat, slot_lon);
+        assert!(app_receding > 178.0, "Receding approach angle should be ~180°, got {}", app_receding);
+
+        // Ціль летить перпендикулярно (курс 90°)
+        let app_tangent = approach_angle(49.0, 30.0, 90.0, slot_lat, slot_lon);
+        assert!((app_tangent - 90.0).abs() < 2.0, "Tangent approach angle should be ~90°, got {}", app_tangent);
+    }
+
+    #[test]
+    fn test_format_eta_ua_contract() {
+        assert_eq!(format_eta_ua(None), "--");
+        assert_eq!(format_eta_ua(Some(0.0)), "--");
+        assert_eq!(format_eta_ua(Some(1.5)), "01:30 хв");
+        assert_eq!(format_eta_ua(Some(10.25)), "10:15 хв");
+        assert_eq!(format_eta_ua(Some(65.0)), "1 год 05 хв");
+        assert_eq!(format_eta_ua(Some(122.5)), "2 год 02 хв");
+    }
+
+    #[test]
+    fn test_radar_screen_projection() {
+        let cx = 184.0;
+        let cy = 224.0;
+        let max_r = 150.0;
+        let danger_km = 35.0;
+
+        // Ціль в центрі
+        let (px, py, d, _) = project_radar_point(cx, cy, max_r, danger_km, 50.0, 30.0, 50.0, 30.0);
+        assert_eq!(px, 184);
+        assert_eq!(py, 224);
+        assert!(d < 0.001);
+    }
+}

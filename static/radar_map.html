@@ -1128,6 +1128,16 @@
 
       <div class="hud-dropdown-panel" id="panelThreatsDetails" onclick="event.stopPropagation()">
         <div style="font-weight: 700; font-size: 11px; margin-bottom: 4px;">Активні загрози на карті</div>
+        <div style="margin-bottom:6px; padding:4px 6px; background:rgba(255,255,255,0.03); border-radius:4px; font-size:10px; display:flex; flex-direction:column; gap:2px; border:1px solid rgba(255,255,255,0.06);">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:var(--text-muted);">🚨 Джерело тривог:</span>
+            <b id="hudAlarmsSource" style="color:#10B981;">UkraineAlarm (API v3)</b>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:var(--text-muted);">🎯 Джерело цілей:</span>
+            <b id="hudTargetsSource" style="color:#38BDF8;">WS UkraineAlarm</b>
+          </div>
+        </div>
         <div id="hudThreatsDropdownList" style="font-size: 10.5px; color: var(--text-muted); max-height: 180px; overflow-y: auto;">
           Загроз на карті немає
         </div>
@@ -1242,6 +1252,12 @@
           <div style="display:flex; justify-content:space-between;"><span>Швидкість:</span><b id="t3dSpd" style="color:#F59E0B;">--</b></div>
           <div style="display:flex; justify-content:space-between;"><span>Курс / Азимут:</span><b id="t3dHdg" style="color:#34D399;">--</b></div>
           <div style="display:flex; justify-content:space-between;"><span>Найближча точка:</span><b id="t3dDist" style="color:#EF4444;">--</b></div>
+        </div>
+        <div style="margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:10px; color:var(--text-muted);">Освітлення 3D:</span>
+          <button type="button" class="btn-micro" onclick="cycleDayNightMode()" style="padding:2px 8px; font-size:10px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:4px; color:#F8FAFC; cursor:pointer;" id="btnDayNightInPill" title="Перемкнути День / Ніч / Авто">
+            🌓 Авто
+          </button>
         </div>
       </div>
     </div>
@@ -1440,7 +1456,7 @@
       <section class="panel-section" id="userProfileSection" style="padding:10px 12px; margin-bottom:8px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">ЮЗЕР</span>
-          <span id="userOwnerValue" style="font-size:12.5px; font-weight:800; color:#ffffff; background:rgba(234,88,12,0.2); border:1px solid rgba(234,88,12,0.5); padding:2.5px 10px; border-radius:6px; font-family:inherit; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="Власник API-ключа">Користувач Hub</span>
+          <span id="userOwnerValue" style="font-size:12.5px; font-weight:800; color:#ffffff; background:rgba(234,88,12,0.2); border:1px solid rgba(234,88,12,0.5); padding:2.5px 10px; border-radius:6px; font-family:inherit; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="Власник сесії">Загальний доступ / Гість</span>
         </div>
       </section>
 
@@ -1448,12 +1464,13 @@
       <section class="panel-section">
         <div class="section-title-row">
           <span>КЛЮЧ ДОСТУПУ КЛІЄНТА (HUB TOKEN)</span>
-          <span id="clientTokenStatusBadge" class="badge-count calm">АКТИВНИЙ</span>
+          <span id="clientTokenStatusBadge" class="badge-count">ГІСТЬ</span>
         </div>
         <div style="display:flex; gap:6px; align-items:center;">
           <input type="password" id="clientAuthTokenInput" class="tactical-input" placeholder="ak_..." style="flex:1;">
           <button type="button" class="hud-btn" onclick="toggleInputPassword('clientAuthTokenInput')" title="Показати/сховати">👁</button>
           <button type="button" class="btn-action-primary" style="padding:0 10px;" onclick="saveClientAuthToken()">Застосувати</button>
+          <button type="button" class="hud-btn" style="padding:0 8px; color:var(--accent-red);" onclick="clearClientAuthToken()" title="Скинути / Вийти">✕</button>
         </div>
       </section>
 
@@ -1462,16 +1479,21 @@
         <div class="section-title-row">
           <span>ТИП ПІДКЛАДКИ МАПИ & API-TOKEN</span>
         </div>
-        <div class="basemap-cards" style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+        <div class="basemap-cards" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
           <label class="basemap-card active" id="cardArcgis">
             <input type="radio" name="mapProvider" value="arcgis" checked onchange="handleProviderChange('arcgis')" style="display:none;">
-            <div style="font-weight:700; font-size:11px; color:#FFFFFF;">ArcGIS Dark Gray</div>
-            <div style="font-size:10px; color:var(--text-muted);">Класична основа (за замовчуванням)</div>
+            <div style="font-weight:700; font-size:11px; color:#FFFFFF;">ArcGIS Dark</div>
+            <div style="font-size:9.5px; color:var(--text-muted);">Класична темна</div>
           </label>
           <label class="basemap-card" id="cardCarto">
             <input type="radio" name="mapProvider" value="carto" onchange="handleProviderChange('carto')" style="display:none;">
-            <div style="font-weight:700; font-size:11px; color:#FFFFFF;">CartoDB Dark Matter</div>
-            <div style="font-size:10px; color:var(--text-muted);">Ультра-мінімалістична мапа</div>
+            <div style="font-weight:700; font-size:11px; color:#FFFFFF;">CartoDB</div>
+            <div style="font-size:9.5px; color:var(--text-muted);">Dark Matter</div>
+          </label>
+          <label class="basemap-card" id="cardSatellite">
+            <input type="radio" name="mapProvider" value="satellite" onchange="handleProviderChange('satellite')" style="display:none;">
+            <div style="font-weight:700; font-size:11px; color:#FFFFFF;">🛰️ Супутник</div>
+            <div style="font-size:9.5px; color:var(--text-muted);">Реалістична</div>
           </label>
         </div>
 
@@ -1481,11 +1503,11 @@
         <!-- CartoDB API token input box -->
         <div class="api-token-container" id="apiTokenBox" style="display: none; margin-top:6px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
-            <label for="mapApiToken" style="font-size:10.5px; color:var(--text-muted);">API-токен CartoDB:</label>
+            <label for="mapApiToken" style="font-size:10.5px; color:var(--text-muted);">Власний API-токен CartoDB:</label>
             <button type="button" class="btn-toggle-eye" onclick="toggleTokenVisibility()" style="background:none; border:none; color:var(--text-muted); cursor:pointer;">👁</button>
           </div>
-          <input type="password" id="mapApiToken" class="tactical-input" placeholder="Введіть API токен CartoDB..." style="width:100%;">
-          <div style="font-size:9.5px; color:var(--text-dim); margin-top:2px;">Токен зберігається в браузері та опціонально синхронізується з сервером</div>
+          <input type="password" id="mapApiToken" class="tactical-input" placeholder="Введіть ваш API токен CartoDB..." style="width:100%;">
+          <div style="font-size:9.5px; color:var(--text-dim); margin-top:2px;">(Опціонально) Тільки для платного акаунту CartoDB. Для ArcGIS та Супутника ключ не потрібен.</div>
         </div>
 
         <button type="button" class="btn-action-primary btn-save-settings" id="btnSaveMapSettings" onclick="saveMapProviderConfig()" style="margin-top:6px; width:100%; justify-content:center;">
@@ -1683,8 +1705,27 @@
     }
     // Configuration & State
     const urlParams = new URLSearchParams(window.location.search);
-    const clientToken = urlParams.get('token') || localStorage.getItem('radar_client_token') || '';
-    if (clientToken) localStorage.setItem('radar_client_token', clientToken);
+    const urlToken = urlParams.get('token') || urlParams.get('api_key');
+    if (urlToken) {
+      localStorage.setItem('radar_client_token', urlToken.trim());
+      urlParams.delete('token');
+      urlParams.delete('api_key');
+      const cleanSearch = urlParams.toString();
+      const cleanUrl = window.location.pathname + (cleanSearch ? '?' + cleanSearch : '') + window.location.hash;
+      if (typeof window !== 'undefined' && window.history && typeof window.history.replaceState === 'function') {
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    }
+    let clientToken = localStorage.getItem('radar_client_token') || '';
+
+    // Global performance & OOM prevention hashes
+    let lastSlotsGeoHash = '';
+    let lastSlotsUiHash = '';
+    let lastAlertsStateHash = '';
+
+    // Reusable Three.js transformation matrices (Zero-Allocation on 60 FPS)
+    const _tmpMat4 = typeof THREE !== 'undefined' ? new THREE.Matrix4() : null;
+    const _tmpScaleMat4 = typeof THREE !== 'undefined' ? new THREE.Matrix4() : null;
 
     let map = null;
     let isMapLoaded = false;
@@ -2115,7 +2156,61 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           finishPickingLocation(e.lngLat.lat, e.lngLat.lng);
           return;
         }
-        const bbox = [[e.point.x - 3, e.point.y - 3], [e.point.x + 3, e.point.y + 3]];
+        if (e._targetClicked || (e.originalEvent && e.originalEvent.cancelBubble)) return;
+
+        const is3D = map.getPitch() > 15;
+
+        // 1. POI Hit Testing in 3D & 2D (supports tall 3D holographic wireframe meshes)
+        let clickedPoi = null;
+        if (Array.isArray(poiItems) && poiItems.length > 0) {
+          for (let i = 0; i < poiItems.length; i++) {
+            const p = poiItems[i];
+            if (typeof enabledPoiCategories !== 'undefined' && !enabledPoiCategories.has(p.category)) continue;
+            const pLon = Number(p.lon);
+            const pLat = Number(p.lat);
+            if (!Number.isFinite(pLon) || !Number.isFinite(pLat)) continue;
+            const pt = map.project([pLon, pLat]);
+            const dx = Math.abs(pt.x - e.point.x);
+            const dy = e.point.y - pt.y; // in 3D perspective wireframe extends upward above base
+            const hit = is3D ? (dx <= 28 && dy >= -70 && dy <= 24) : (dx * dx + (pt.y - e.point.y) * (pt.y - e.point.y) <= 360);
+            if (hit) {
+              clickedPoi = p;
+              break;
+            }
+          }
+        }
+        if (clickedPoi) {
+          e._targetClicked = true;
+          showPoiPopup(clickedPoi, [Number(clickedPoi.lon), Number(clickedPoi.lat)]);
+          return;
+        }
+
+        // 2. Tactical Target Hit Testing in 3D
+        if (is3D && activeThreats) {
+          let clickedTid = null;
+          let clickedCoord = null;
+          for (const tid in activeThreats) {
+            const t = activeThreats[tid];
+            const sim = t.sim || t;
+            if (!sim || !Number.isFinite(sim.curLon) || !Number.isFinite(sim.curLat)) continue;
+            const pt = map.project([sim.curLon, sim.curLat]);
+            const dx = Math.abs(pt.x - e.point.x);
+            const dy = Math.abs(pt.y - e.point.y);
+            if (dx <= 30 && dy <= 30) {
+              clickedTid = tid;
+              clickedCoord = [sim.curLon, sim.curLat];
+              break;
+            }
+          }
+          if (clickedTid) {
+            e._targetClicked = true;
+            openTargetContextMenu(clickedTid, clickedCoord);
+            return;
+          }
+        }
+
+        // 3. Map region deselect if click landed on empty space
+        const bbox = [[e.point.x - 4, e.point.y - 4], [e.point.x + 4, e.point.y + 4]];
         const features = map.queryRenderedFeatures(bbox, { layers: ['alerts-fill'] });
         if (!features || !features.length) {
           if (map.getSource('selected-region-source')) {
@@ -2129,21 +2224,49 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       });
 
       map.on('click', 'alerts-fill', (e) => {
-        if (isPickingLocationOnMap || is3DModeActive || e._targetClicked || (e.originalEvent && e.originalEvent.cancelBubble)) return;
+        if (isPickingLocationOnMap || e._targetClicked || (e.originalEvent && e.originalEvent.cancelBubble)) return;
         const hitTargets = map.queryRenderedFeatures(e.point, { layers: ['threats-aircraft-layer', 'poi-layer'] });
         if (hitTargets && hitTargets.length > 0) return;
         if (!e.features || !e.features.length) return;
-        const feat = e.features[0];
+        let feat = e.features[0];
+        if (e.features.length > 1) {
+          feat = e.features.reduce((best, f) => {
+            return Number(f.properties?.rank || 0) > Number(best.properties?.rank || 0) ? f : best;
+          }, feat);
+        }
         const props = feat.properties || {};
         const name = props.name || 'Область / Громада';
         const rank = Number(props.rank || 1);
         const typeLabel = rank === 1 ? 'Область' : (rank === 2 ? 'Район' : 'Громада');
         const regId = String(props.regionId || feat.id || '');
-        const isAlert = !!props.alert || activeAlertRegionIds.has(regId);
 
-        const statusBadge = isAlert
-          ? '<div class="region-popup-status alert">🚨 Повітряна тривога</div>'
-          : '<div class="region-popup-status safe">🛡️ Відбій тривоги</div>';
+        let alertInfo = null;
+        const directAlert = activeRegionAlertMap.get(regId);
+        if (directAlert && directAlert.alert) {
+          alertInfo = directAlert;
+        } else if (ENCLAVE_PARENT_MAP[regId]) {
+          const p = ENCLAVE_PARENT_MAP[regId];
+          const raAlert = p.raionId ? activeRegionAlertMap.get(p.raionId) : null;
+          const obAlert = p.oblastId ? activeRegionAlertMap.get(p.oblastId) : null;
+          if (raAlert && raAlert.alert) alertInfo = raAlert;
+          else if (obAlert && obAlert.alert) alertInfo = obAlert;
+        } else if (rank === 2) {
+          const parentObId = (typeof RAION_TO_OBLAST_MAP !== 'undefined' && RAION_TO_OBLAST_MAP[regId]) || String(props.oblast_id || '');
+          const obAlert = parentObId ? activeRegionAlertMap.get(parentObId) : null;
+          if (obAlert && obAlert.alert) alertInfo = obAlert;
+        }
+
+        const isAlert = alertInfo ? !!alertInfo.alert : !!props.alert;
+        const alertColor = isAlert ? ((alertInfo && alertInfo.color) || (props.alert_color === '#F59E0B' ? 'yellow' : 'red')) : 'none';
+
+        let statusBadge;
+        if (alertColor === 'yellow') {
+          statusBadge = '<div class="region-popup-status warning" style="background:rgba(245,158,11,0.2); color:#FBBF24; border:1px solid rgba(245,158,11,0.5); box-shadow:0 0 8px rgba(245,158,11,0.3);">⚠️ Підвищена небезпека (Жовтий рівень)</div>';
+        } else if (isAlert) {
+          statusBadge = '<div class="region-popup-status alert">🚨 Повітряна тривога</div>';
+        } else {
+          statusBadge = '<div class="region-popup-status safe">🛡️ Відбій тривоги</div>';
+        }
 
         const html = `
           <div class="region-popup-badge">
@@ -2185,10 +2308,61 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       });
 
       map.on('mouseenter', 'alerts-fill', () => {
-        if (!is3DModeActive) map.getCanvas().style.cursor = 'pointer';
+        if (!isPickingLocationOnMap) map.getCanvas().style.cursor = 'pointer';
       });
       map.on('mouseleave', 'alerts-fill', () => {
-        if (!is3DModeActive) map.getCanvas().style.cursor = '';
+        if (!isPickingLocationOnMap) map.getCanvas().style.cursor = '';
+      });
+
+      map.on('mouseenter', 'poi-layer', () => {
+        if (!isPickingLocationOnMap) map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'poi-layer', () => {
+        if (!isPickingLocationOnMap) map.getCanvas().style.cursor = '';
+      });
+      function showPoiPopup(props, coord) {
+        const catMeta = (typeof POI_CATEGORIES_META !== 'undefined' && POI_CATEGORIES_META[props.category])
+          ? POI_CATEGORIES_META[props.category]
+          : { name: props.category || 'Об\'єкт', icon: '📍', color: '#38BDF8' };
+        const lon = Number(coord[0]);
+        const lat = Number(coord[1]);
+
+        const html = `
+          <div class="region-popup-badge" style="min-width: 170px;">
+            <div class="region-popup-header" style="color:${catMeta.color};">
+              <span>${catMeta.icon}</span><span>${catMeta.name}</span>
+            </div>
+            <div class="region-popup-name" style="margin-top:2px;">${props.name || 'Стратегічний об\'єкт'}</div>
+            ${props.oblast ? `<div style="font-size:10px; color:var(--text-muted); margin-top:2px;">📍 ${props.oblast}</div>` : ''}
+            <div style="font-size:9px; color:#64748B; font-family:monospace; margin-top:4px;">
+              ${lat.toFixed(4)}°N, ${lon.toFixed(4)}°E
+            </div>
+          </div>
+        `;
+
+        if (activeRegionPopup) {
+          activeRegionPopup.remove();
+        }
+
+        activeRegionPopup = new maplibregl.Popup({
+          closeButton: false,
+          closeOnClick: true,
+          className: 'tactical-region-popup',
+          offset: 10
+        })
+        .setLngLat([lon, lat])
+        .setHTML(html)
+        .addTo(map);
+      }
+
+      map.on('click', 'poi-layer', (e) => {
+        if (isPickingLocationOnMap || e._targetClicked || (e.originalEvent && e.originalEvent.cancelBubble)) return;
+        if (!e.features || !e.features.length) return;
+        if (e.originalEvent) e.originalEvent.cancelBubble = true;
+        e._targetClicked = true;
+
+        const feat = e.features[0];
+        showPoiPopup(feat.properties || {}, feat.geometry.coordinates);
       });
     }
 
@@ -2197,11 +2371,31 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     let activeRegionPopup = null;
 
     
+    // Канонічна мапа прив'язки 122 районів до областей
+    const RAION_TO_OBLAST_MAP = {
+      '32': '4', '33': '4', '34': '4', '35': '4', '36': '4', '37': '4', '38': '8', '39': '8',
+      '40': '8', '41': '8', '42': '9', '43': '9', '44': '9', '45': '9', '46': '9', '47': '9',
+      '48': '9', '49': '28', '50': '28', '51': '28', '52': '28', '53': '28', '54': '28', '55': '28',
+      '56': '28', '57': '10', '58': '10', '59': '10', '60': '10', '61': '11', '62': '11', '63': '11',
+      '64': '11', '65': '11', '66': '11', '67': '13', '68': '13', '69': '13', '70': '13', '71': '13',
+      '72': '13', '73': '14', '74': '14', '75': '14', '76': '14', '77': '14', '78': '14', '79': '14',
+      '80': '15', '81': '15', '82': '15', '83': '15', '84': '16', '85': '16', '86': '16', '87': '16',
+      '88': '27', '89': '27', '90': '27', '91': '27', '92': '27', '93': '27', '94': '27', '95': '17',
+      '96': '17', '97': '17', '98': '17', '99': '18', '100': '18', '101': '18', '102': '18', '103': '18',
+      '104': '18', '105': '18', '106': '19', '107': '19', '108': '19', '109': '19', '110': '5', '111': '5',
+      '112': '5', '113': '5', '114': '20', '115': '20', '116': '20', '117': '20', '118': '20', '119': '21',
+      '120': '21', '121': '21', '122': '22', '123': '22', '124': '22', '125': '22', '126': '22', '127': '22',
+      '128': '22', '129': '23', '130': '23', '131': '23', '132': '23', '133': '23', '134': '3', '135': '3',
+      '136': '3', '137': '26', '138': '26', '139': '26', '140': '25', '141': '25', '142': '25', '143': '25',
+      '144': '25', '145': '12', '146': '12', '147': '12', '148': '12', '149': '12', '150': '24', '151': '24',
+      '152': '24', '153': '24'
+    };
+
     // Мапа прив'язки анклавів до їхніх областей та районів
     const ENCLAVE_PARENT_MAP = {
       '31':   { oblastId: '14', raionId: '31',  isKyivCity: true },
       '1293': { oblastId: '22', raionId: '124' }, // м. Харків
-      '564':  { oblastId: '12', raionId: '149' }, // м. Запоріжжя
+      '564':  { oblastId: '12', raionId: '149' }, // м. Запоріжжя / Дніпро
       '750':  { oblastId: '14', raionId: '74'  }, // м. Славутич
       '707':  { oblastId: '14', raionId: '75'  }  // смт Коцюбинське
     };
@@ -2360,8 +2554,22 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       applyAlertsToRegions();
     }
 
-    function applyAlertsToRegions() {
+    function applyAlertsToRegions(forceUpdate = false) {
       if (!rawRegionsGeoJson || !map || !map.getSource('alerts-source')) return;
+
+      // Compute state hash to prevent heavy 3.5 MB Web Worker serialization on every second
+      const stateEntries = [];
+      activeRegionAlertMap.forEach((val, key) => {
+        stateEntries.push(`${key}:${val.color || 'r'}`);
+      });
+      stateEntries.sort();
+      const currentAlertsHash = stateEntries.join('|');
+
+      if (!forceUpdate && currentAlertsHash === lastAlertsStateHash) {
+        return;
+      }
+      lastAlertsStateHash = currentAlertsHash;
+
       const features = [];
 
       (rawRegionsGeoJson.features || []).forEach((feat, idx) => {
@@ -2372,13 +2580,24 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         // Ігноруємо 1447 дрібних громад (rank === 3), крім 4 міст-анклавів (Харків 1293, Запоріжжя 564, Славутич 750, Коцюбинське 707)
         if (rank === 3 && !ENCLAVE_PARENT_MAP[regId]) return;
 
-        let alertInfo = activeRegionAlertMap.get(regId);
-        if (!alertInfo && ENCLAVE_PARENT_MAP[regId]) {
+        let alertInfo = null;
+        const directAlert = activeRegionAlertMap.get(regId);
+        if (directAlert && directAlert.alert) {
+          alertInfo = directAlert;
+        } else if (ENCLAVE_PARENT_MAP[regId]) {
           const p = ENCLAVE_PARENT_MAP[regId];
-          if (!p.isKyivCity) {
-            alertInfo = activeRegionAlertMap.get(p.raionId) || activeRegionAlertMap.get(p.oblastId);
-          } else if (activeRegionAlertMap.get('14')?.color === 'red') {
-            alertInfo = activeRegionAlertMap.get('14');
+          const raAlert = p.raionId ? activeRegionAlertMap.get(p.raionId) : null;
+          const obAlert = p.oblastId ? activeRegionAlertMap.get(p.oblastId) : null;
+          if (raAlert && raAlert.alert) {
+            alertInfo = raAlert;
+          } else if (obAlert && obAlert.alert) {
+            alertInfo = obAlert;
+          }
+        } else if (rank === 2) {
+          const parentObId = (typeof RAION_TO_OBLAST_MAP !== 'undefined' && RAION_TO_OBLAST_MAP[regId]) || String(props.oblast_id || '');
+          const obAlert = parentObId ? activeRegionAlertMap.get(parentObId) : null;
+          if (obAlert && obAlert.alert) {
+            alertInfo = obAlert;
           }
         }
 
@@ -2387,7 +2606,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         const fillHex = (alertColorKey === 'yellow') ? '#F59E0B' : '#EF4444';
 
         let cleanGeom = feat.geometry;
-        if (rank === 1 && regId !== '14' && regId !== '31' && cleanGeom) {
+        if ((rank === 1 || rank === 2) && regId !== '14' && regId !== '31' && cleanGeom) {
           if (cleanGeom.type === 'Polygon' && cleanGeom.coordinates.length > 1) {
             cleanGeom = { type: 'Polygon', coordinates: [cleanGeom.coordinates[0]] };
           } else if (cleanGeom.type === 'MultiPolygon') {
@@ -2400,11 +2619,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           if (rank === 1) {
             fillOpacity = (alertColorKey === 'yellow') ? 0.20 : 0.26;
           } else if (rank === 2) {
-            const parentObId = String(props.oblast_id || '');
-            const obAlert = parentObId ? activeRegionAlertMap.get(parentObId) : null;
-            if (!obAlert || !obAlert.alert) {
-              fillOpacity = (alertColorKey === 'yellow') ? 0.22 : 0.28;
-            }
+            fillOpacity = (alertColorKey === 'yellow') ? 0.22 : 0.28;
+          } else if (rank === 3 || ENCLAVE_PARENT_MAP[regId]) {
+            fillOpacity = (alertColorKey === 'yellow') ? 0.24 : 0.30;
           }
         }
 
@@ -2454,7 +2671,11 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       try {
         const data = await regionsPromise;
         if (data) rawRegionsGeoJson = data;
-        applyAlertsToRegions();
+        if (window._cachedLatestSnapshot) {
+          updateActiveAlertsFromSnapshot(window._cachedLatestSnapshot);
+        } else {
+          applyAlertsToRegions(true);
+        }
         const maskData = buildOutsideUkraineMask(rawRegionsGeoJson);
         if (maskData && map && map.getSource('mask-outside-source')) {
           map.getSource('mask-outside-source').setData(maskData);
@@ -2569,13 +2790,14 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     let poiItems = [];
     async function loadPoiData() {
       if (!poiPromise) {
-        poiPromise = fetch('/api/v1/client/poi')
+        const q = clientToken ? `?token=${encodeURIComponent(clientToken)}` : '';
+        poiPromise = fetch(`/api/v1/client/poi${q}`)
           .then(res => res.ok ? res.json() : null)
           .catch(e => { console.warn('[POI] Failed to load POI data:', e); return null; });
       }
       try {
         const data = await poiPromise;
-        if (data) poiItems = data;
+        poiItems = Array.isArray(data) ? data : [];
         renderPoiCategoriesUI();
         applyPoiFilterToMap();
       } catch (e) {
@@ -2667,7 +2889,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         id: 'alerts-boundaries',
         type: 'line',
         source: 'alerts-source',
-        filter: ['in', ['get', 'rank'], ['literal', [1, 2]]],
+        filter: ['in', ['get', 'rank'], ['literal', [1, 2, 3]]],
         paint: {
           'line-color': [
             'case',
@@ -2675,12 +2897,16 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
             ['get', 'alert_color'],
             ['==', ['get', 'rank'], 1],
             'rgba(255, 255, 255, 0.28)',
+            ['==', ['get', 'rank'], 3],
+            'rgba(255, 255, 255, 0.35)',
             'rgba(255, 255, 255, 0.07)'
           ],
           'line-width': [
             'case',
             ['==', ['get', 'rank'], 1],
             1.6,
+            ['==', ['get', 'rank'], 3],
+            1.2,
             0.6
           ],
           'line-opacity': 0.9
@@ -2894,6 +3120,11 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         if (el) el.classList.remove('active');
       });
 
+      if (typeof syncProviderCardsUI === 'function') {
+        const pNorm = (provider === 'cartodb' || provider === 'carto') ? 'carto' : ((provider === 'satellite' || provider === 'esri') ? 'satellite' : 'arcgis');
+        syncProviderCardsUI(pNorm);
+      }
+
       const effectiveKey = (typeof getEffectiveCartoToken === 'function')
         ? getEffectiveCartoToken()
         : (localStorage.getItem('radar_map_cartodb_token') || localStorage.getItem('radar_map_token') || '');
@@ -2954,18 +3185,14 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       map.setLayoutProperty('threats-labels-layer', 'visibility', (is3D || !showLabelsIn2D) ? 'none' : 'visible');
       map.setLayoutProperty('threats-group-badges', 'visibility', is3D ? 'none' : 'visible');
       map.setLayoutProperty('poi-labels', 'visibility', (is3D || !showPoiIn2D) ? 'none' : 'visible');
-      if (map.getLayer('alerts-fill')) map.setLayoutProperty('alerts-fill', 'visibility', is3D ? 'none' : 'visible');
-      if (map.getLayer('alerts-boundaries')) map.setLayoutProperty('alerts-boundaries', 'visibility', is3D ? 'none' : 'visible');
-      if (map.getLayer('selected-region-fill')) map.setLayoutProperty('selected-region-fill', 'visibility', is3D ? 'none' : 'visible');
-      if (map.getLayer('selected-region-line')) map.setLayoutProperty('selected-region-line', 'visibility', is3D ? 'none' : 'visible');
+      // Keep alerts and region selection visible in 3D for situational ground awareness
+      if (map.getLayer('alerts-fill')) map.setLayoutProperty('alerts-fill', 'visibility', 'visible');
+      if (map.getLayer('alerts-boundaries')) map.setLayoutProperty('alerts-boundaries', 'visibility', 'visible');
+      if (map.getLayer('selected-region-fill')) map.setLayoutProperty('selected-region-fill', 'visibility', 'visible');
+      if (map.getLayer('selected-region-line')) map.setLayoutProperty('selected-region-line', 'visibility', 'visible');
       
       const pill3d = document.getElementById('pill3DTelemetry');
       if (pill3d) pill3d.style.display = is3D ? 'flex' : 'none';
-
-      if (is3D && activeRegionPopup) {
-        activeRegionPopup.remove();
-        activeRegionPopup = null;
-      }
     }
 
     function update3DTelemetryUI(t, tid, sim, altMeters) {
@@ -3279,6 +3506,12 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       return group;
     }
 
+    function makeWireSegments(baseGeom, mat) {
+      const edges = new THREE.EdgesGeometry(baseGeom);
+      if (baseGeom && baseGeom.dispose) baseGeom.dispose();
+      return new THREE.LineSegments(edges, mat);
+    }
+
     function buildStaticHouseMesh() {
       const group = new THREE.Group();
       group.name = 'user_static_house';
@@ -3286,8 +3519,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const box = new THREE.BoxGeometry(16, 14, 16);
       const roof = new THREE.ConeGeometry(14, 10, 4);
       roof.position.y = 12;
-      group.add(new THREE.LineSegments(new THREE.EdgesGeometry(box), mat));
-      group.add(new THREE.LineSegments(new THREE.EdgesGeometry(roof), mat));
+      group.add(makeWireSegments(box, mat));
+      group.add(makeWireSegments(roof, mat));
       return group;
     }
 
@@ -3298,12 +3531,18 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const body = new THREE.CylinderGeometry(2, 2, 16, 8);
       const head = new THREE.SphereGeometry(3, 8, 8);
       head.position.y = 11;
-      group.add(new THREE.LineSegments(new THREE.EdgesGeometry(body), mat));
-      group.add(new THREE.LineSegments(new THREE.EdgesGeometry(head), mat));
+      group.add(makeWireSegments(body, mat));
+      group.add(makeWireSegments(head, mat));
       return group;
     }
 
     function buildPoiWireframe(cat, color) {
+      function makeWireSegments(baseGeom, m) {
+        const wireGeom = new THREE.WireframeGeometry(baseGeom);
+        const segs = new THREE.LineSegments(wireGeom, m);
+        baseGeom.dispose();
+        return segs;
+      }
       const group = new THREE.Group();
       const mat = new THREE.LineBasicMaterial({ color: color || '#38BDF8', linewidth: 1.5 });
       let geom;
@@ -3350,9 +3589,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           geom = new THREE.BoxGeometry(25, 25, 25);
           break;
       }
-      const edges = new THREE.EdgesGeometry(geom);
-      const wire = new THREE.LineSegments(edges, mat);
-      group.add(wire);
+      group.add(makeWireSegments(geom, mat));
       return group;
     }
 
@@ -3388,7 +3625,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         holder.matrixAutoUpdate = false;
 
         const merc = maplibregl.MercatorCoordinate.fromLngLat([Number(p.lon), Number(p.lat)], 0);
-        const s = merc.meterInMercatorCoordinateUnits() * 4.0;
+        const currentZoom = map ? map.getZoom() : 7.0;
+        const zoomBoost = Math.max(1.0, Math.pow(1.65, Math.max(0, 12.0 - currentZoom)));
+        const s = merc.meterInMercatorCoordinateUnits() * (12.0 * zoomBoost);
         const matT = new THREE.Matrix4().makeTranslation(merc.x, merc.y, merc.z);
         const matS = new THREE.Matrix4().makeScale(s, -s, s);
         holder.matrix.copy(matT).multiply(matS);
@@ -3550,7 +3789,10 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     function isCurrentEffectiveNight() {
       if (dayNightMode === 'night') return true;
       if (dayNightMode === 'day') return false;
-      const h = new Date().getHours();
+      const isReplay = (typeof isReplayPlaying !== 'undefined' && isReplayPlaying) || (typeof isHistoryPlaying !== 'undefined' && isHistoryPlaying);
+      const h = (isReplay && typeof simTime !== 'undefined' && simTime)
+        ? new Date(simTime * 1000).getHours()
+        : new Date().getHours();
       return (h < 6 || h >= 21);
     }
 
@@ -3569,6 +3811,29 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         } else {
           icon.innerText = '⏱️';
           if (btn) btn.title = `Режим освітлення: Авто (${isNight ? 'Ніч' : 'День'})`;
+        }
+      }
+
+      const pillBtn = document.getElementById('btnDayNightInPill');
+      if (pillBtn) {
+        if (dayNightMode === 'day') {
+          pillBtn.innerText = '☀️ День';
+        } else if (dayNightMode === 'night') {
+          pillBtn.innerText = '🌙 Ніч';
+        } else {
+          pillBtn.innerText = `🌓 Авто (${isNight ? 'Ніч' : 'День'})`;
+        }
+      }
+
+      if (map) {
+        const satLayerId = map.getLayer('esri-sat-layer') ? 'esri-sat-layer' : (map.getLayer('esri-satellite-layer') ? 'esri-satellite-layer' : null);
+        if (satLayerId) {
+          map.setPaintProperty(satLayerId, 'raster-brightness-max', isNight ? 0.38 : 1.0);
+          map.setPaintProperty(satLayerId, 'raster-saturation', isNight ? -0.35 : 0.0);
+          map.setPaintProperty(satLayerId, 'raster-contrast', isNight ? 0.15 : 0.0);
+        }
+        if (map.getLayer('esri-dark-gray-layer')) {
+          map.setPaintProperty('esri-dark-gray-layer', 'raster-brightness-max', isNight ? 0.65 : 1.0);
         }
       }
 
@@ -3977,12 +4242,21 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     });
 
     function initLiveKinematicsLoop() {
+      const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768;
+      const minFrameInterval = isMobileDevice ? 32.0 : 16.0;
+      let lastFrameTs = 0;
+
       function frame(now) {
         if (document.hidden) {
           requestAnimationFrame(frame);
           return;
         }
-        const dt = Math.min(0.1, (now - lastAnimTs) / 1000.0);
+        if (now - lastFrameTs < minFrameInterval) {
+          requestAnimationFrame(frame);
+          return;
+        }
+        const dt = Math.min(0.1, (now - (lastFrameTs || now)) / 1000.0);
+        lastFrameTs = now;
         lastAnimTs = now;
 
         updateLiveKinematics(dt, now);
@@ -4013,66 +4287,74 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           effectiveSpeed = effectiveSpeed * ((11.0 - timeSinceTelemetry) / 3.0);
         }
 
-        // Dead reckoning dead reckoning & zero crab angle avoidance
+        // Dead Reckoning 1.0x with overshoot coasting & zero crab angle
         if (effectiveSpeed > 5) {
-          const dKm = (effectiveSpeed / 3600.0) * dt * 0.5;
+          let coastSpeed = effectiveSpeed;
+          if (sim.overshootKm > 0) {
+            coastSpeed = effectiveSpeed * 0.15;
+            sim.overshootKm = Math.max(0, sim.overshootKm - (effectiveSpeed / 3600.0) * dt);
+          }
+          const dKm = (coastSpeed / 3600.0) * dt;
           const rad = (sim.curHeading * Math.PI) / 180.0;
           sim.curLat += (dKm / 111.0) * Math.cos(rad);
           sim.curLon += (dKm / (111.0 * Math.cos((sim.curLat * Math.PI) / 180.0))) * Math.sin(rad);
         }
 
-        // ZERO GAP ANCHOR: Start directly at aircraft nose!
+        const isCatVisible = enabledThreatCategories.has(t.cat);
         const headCoord = [sim.curLon, sim.curLat];
         const catMeta = THREAT_CATEGORIES[t.cat] || THREAT_CATEGORIES.unknown;
 
-        // Combat Aircraft Silhouettes - suppress 2D icon if this target is focused in 3D Chase mode
-        if (!is3DModeActive || focusedTargetId !== tid) {
-          aircraftFeatures.push({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: headCoord },
-            properties: {
-              tid,
-              cat: t.cat,
-              icon: 'threat-' + t.cat,
-              heading: sim.curHeading,
-              group_count: t.groupCount || 1,
-              label: `${catMeta.name} • ${Math.round(effectiveSpeed)} км/г`
-            }
-          });
-        }
-
-        // Zero-Gap Trailing Line
-        const trailCoords = (t.baseTrailPts || []).map(p => {
-          if (!p) return null;
-          if (Array.isArray(p)) return [p[1], p[0]];
-          if (typeof p === 'object' && p.lon !== undefined && p.lat !== undefined) return [p.lon, p.lat];
-          return null;
-        }).filter(Boolean);
-        trailCoords.push(headCoord); // ZERO GAP ANCHOR
-        if (trailCoords.length > 1) {
-          trailFeatures.push({
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: trailCoords },
-            properties: { color: catMeta.color }
-          });
-        }
-
-        // Zero-Gap Forecast Corridor
-        if (t.corridor && t.corridor.length > 0) {
-          const corridorCoords = [headCoord]; // Start directly at aircraft nose!
-          for (let i = 0; i < t.corridor.length; i++) {
-            const pt = t.corridor[i];
-            const cLon = (pt && typeof pt === 'object' && pt.lon !== undefined) ? pt.lon : (Array.isArray(pt) ? pt[1] : undefined);
-            const cLat = (pt && typeof pt === 'object' && pt.lat !== undefined) ? pt.lat : (Array.isArray(pt) ? pt[0] : undefined);
-            if (cLon !== undefined && cLat !== undefined) {
-              corridorCoords.push([cLon, cLat]);
-            }
+        // Throttled GeoJSON Feature Generation: only push features when syncing and category is active
+        if (shouldSyncGeoJson && isCatVisible) {
+          // Combat Aircraft Silhouettes - suppress 2D icon if this target is focused in 3D Chase mode
+          if (!is3DModeActive || focusedTargetId !== tid) {
+            aircraftFeatures.push({
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: headCoord },
+              properties: {
+                tid,
+                cat: t.cat,
+                icon: 'threat-' + t.cat,
+                heading: sim.curHeading,
+                group_count: t.groupCount || 1,
+                label: `${catMeta.name} • ${Math.round(effectiveSpeed)} км/г`
+              }
+            });
           }
-          forecastFeatures.push({
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: corridorCoords },
-            properties: { color: catMeta.color }
-          });
+
+          // Zero-Gap Trailing Line
+          const trailCoords = (t.baseTrailPts || []).map(p => {
+            if (!p) return null;
+            if (Array.isArray(p)) return [p[1], p[0]];
+            if (typeof p === 'object' && p.lon !== undefined && p.lat !== undefined) return [p.lon, p.lat];
+            return null;
+          }).filter(Boolean);
+          trailCoords.push(headCoord); // ZERO GAP ANCHOR
+          if (trailCoords.length > 1) {
+            trailFeatures.push({
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: trailCoords },
+              properties: { color: catMeta.color, cat: t.cat }
+            });
+          }
+
+          // Zero-Gap Forecast Corridor
+          if (t.corridor && t.corridor.length > 0) {
+            const corridorCoords = [headCoord]; // Start directly at aircraft nose!
+            for (let i = 0; i < t.corridor.length; i++) {
+              const pt = t.corridor[i];
+              const cLon = (pt && typeof pt === 'object' && pt.lon !== undefined) ? pt.lon : (Array.isArray(pt) ? pt[1] : undefined);
+              const cLat = (pt && typeof pt === 'object' && pt.lat !== undefined) ? pt.lat : (Array.isArray(pt) ? pt[0] : undefined);
+              if (cLon !== undefined && cLat !== undefined) {
+                corridorCoords.push([cLon, cLat]);
+              }
+            }
+            forecastFeatures.push({
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: corridorCoords },
+              properties: { color: catMeta.color, cat: t.cat }
+            });
+          }
         }
 
         // 3D Three.js mesh update with accurate Web Mercator scaling and drop lines
@@ -4102,12 +4384,16 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
             });
           }
 
+          meshGroup.visible = isCatVisible;
+
           const merc = maplibregl.MercatorCoordinate.fromLngLat(headCoord, altMeters);
           const meterScale = merc.meterInMercatorCoordinateUnits();
-          const visualScale = isFocused ? 4.5 : 6.0;
-          const s = meterScale * visualScale;
+          const currentZoom = map ? map.getZoom() : 7.0;
+          const zoomBoost = isFocused ? 1.0 : Math.max(1.0, Math.pow(1.65, Math.max(0, 12.5 - currentZoom)));
+          const effectiveVisualScale = (isFocused ? 4.5 : 6.0) * zoomBoost;
+          const s = meterScale * effectiveVisualScale;
 
-          const localGroundZ = -altMeters / visualScale;
+          const localGroundZ = -altMeters / effectiveVisualScale;
           const dropLine = meshGroup.getObjectByName('altitudeDropLine');
           if (dropLine) {
             dropLine.scale.set(1, 1, Math.abs(localGroundZ));
@@ -4123,9 +4409,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
             craftBody.rotation.set(0, 0, headingRad);
           }
 
-          const matTranslate = new THREE.Matrix4().makeTranslation(merc.x, merc.y, merc.z);
-          const matScale = new THREE.Matrix4().makeScale(s, -s, s);
-          meshGroup.matrix.copy(matTranslate).multiply(matScale);
+          _tmpMat4.makeTranslation(merc.x, merc.y, merc.z);
+          _tmpScaleMat4.makeScale(s, -s, s);
+          meshGroup.matrix.copy(_tmpMat4).multiply(_tmpScaleMat4);
           meshGroup.matrixWorldNeedsUpdate = true;
 
           if (isFocused || (is3DModeActive && !focusedTargetId)) {
@@ -4199,7 +4485,21 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     }
 
     function processSnapshot(data) {
+      window._cachedLatestSnapshot = data;
       updateActiveAlertsFromSnapshot(data);
+
+      if (data.sources) {
+        const alarmsEl = document.getElementById('hudAlarmsSource');
+        if (alarmsEl && data.sources.alarms) {
+          alarmsEl.innerText = data.sources.alarms;
+          alarmsEl.style.color = (data.sources.alarms_status === 'error' || data.sources.alarms_status === 'fallback') ? '#F59E0B' : '#10B981';
+        }
+        const targetsEl = document.getElementById('hudTargetsSource');
+        if (targetsEl && data.sources.targets) {
+          targetsEl.innerText = data.sources.targets;
+          targetsEl.style.color = (data.sources.targets_status === 'error' || data.sources.targets_status === 'fallback') ? '#F59E0B' : '#38BDF8';
+        }
+      }
       const incoming = data.threats || data.active_threats || [];
       const fresh = {};
       const catCounts = {};
@@ -4209,6 +4509,58 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         const cat = normalizeCat(t.category || t.type || t.type_ua);
         catCounts[cat] = (catCounts[cat] || 0) + 1;
 
+        const sLat = Number(t.lat);
+        const sLon = Number(t.lon);
+        const sHeading = Number(t.heading ?? t.heading_deg ?? activeThreats[tid]?.sim?.curHeading ?? 0);
+        const sSpeed = Number(t.speed_kmh || t.speed || 200);
+
+        let curLat = sLat;
+        let curLon = sLon;
+        let curHeading = sHeading;
+        let overshootKm = 0;
+
+        const oldSim = activeThreats[tid]?.sim;
+        if (oldSim && !isNaN(oldSim.curLat) && !isNaN(oldSim.curLon)) {
+          const kmPerLat = 111.0;
+          const kmPerLon = 111.0 * Math.cos((oldSim.curLat * Math.PI) / 180.0);
+          const dxKm = (sLon - oldSim.curLon) * kmPerLon;
+          const dyKm = (sLat - oldSim.curLat) * kmPerLat;
+          const distKm = Math.sqrt(dxKm * dxKm + dyKm * dyKm);
+
+          if (distKm > 25.0) {
+            // Teleport or radical reroute: snap immediately
+            curLat = sLat;
+            curLon = sLon;
+            curHeading = sHeading;
+            overshootKm = 0;
+          } else {
+            // Project delta vector onto aircraft heading vector
+            const rad = (oldSim.curHeading * Math.PI) / 180.0;
+            const ux = Math.sin(rad);
+            const uy = Math.cos(rad);
+            const dParallel = dxKm * ux + dyKm * uy;
+            const dPerp = dxKm * (-uy) + dyKm * ux;
+
+            if (dParallel < -0.04) {
+              // Delayed server packet is BEHIND client extrapolation: NEVER FLY BACKWARDS!
+              curLat = oldSim.curLat;
+              curLon = oldSim.curLon;
+              overshootKm = Math.abs(dParallel);
+              // Gently absorb lateral cross-track drift
+              curLat += (dPerp * (-uy) / kmPerLat) * 0.25;
+              curLon += (dPerp * ux / kmPerLon) * 0.25;
+            } else {
+              // Server is ahead or inline: smooth exponential catch-up (Dead Reckoning)
+              curLat = oldSim.curLat + (sLat - oldSim.curLat) * 0.25;
+              curLon = oldSim.curLon + (sLon - oldSim.curLon) * 0.25;
+              overshootKm = 0;
+            }
+            // Smooth angular turn towards server heading
+            let diffH = (sHeading - oldSim.curHeading + 540) % 360 - 180;
+            curHeading = (oldSim.curHeading + diffH * 0.3 + 360) % 360;
+          }
+        }
+
         fresh[tid] = {
           cat,
           groupCount: t.group_count || 1,
@@ -4216,10 +4568,11 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           corridor: t.corridor || t.extrapolated || [],
           lastTelemetryTs: performance.now(),
           sim: {
-            curLat: Number(t.lat),
-            curLon: Number(t.lon),
-            curHeading: Number(t.heading ?? t.heading_deg ?? activeThreats[tid]?.sim?.curHeading ?? 0),
-            speedKmh: Number(t.speed_kmh || t.speed || 200)
+            curLat,
+            curLon,
+            curHeading,
+            speedKmh: sSpeed,
+            overshootKm
           }
         };
       });
@@ -4267,7 +4620,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       // Update User Profile Owner Display
       const userOwnerEl = document.getElementById('userOwnerValue');
       if (userOwnerEl) {
-        const ownerName = data.owner || (data.user && data.user.owner) || localStorage.getItem('hub_user_owner') || 'Користувач Hub';
+        const ownerName = clientToken 
+          ? (data.owner || (data.user && data.user.owner) || localStorage.getItem('hub_user_owner') || 'Користувач Hub')
+          : 'Загальний доступ / Гість';
         userOwnerEl.innerText = ownerName;
       }
 
@@ -4331,16 +4686,23 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         renderRadialTodayGauge(countsMap, total);
       }
 
-      // Slots stats & Closest Threat breakdown calculation
-      let lastSlotsGeoHash = '';
+      // Slots stats & Closest Threat breakdown calculation (Zero-DOM churn with global state hashing)
       const incomingSlots = data.slots || data.slots_stats;
       if (incomingSlots && typeof incomingSlots === 'object') {
         currentSlots = Object.assign({}, currentSlots, incomingSlots);
         userSlots = currentSlots;
-        renderUserSlots(currentSlots);
-        const curHash = JSON.stringify(Object.values(currentSlots).map(s => [s.lat, s.lon, s.danger_radius_km, s.active]));
-        if (curHash !== lastSlotsGeoHash) {
-          lastSlotsGeoHash = curHash;
+
+        // Gate DOM rendering with UI state hash
+        const curUiHash = JSON.stringify(Object.values(currentSlots).map(s => [s.name, s.active, s.danger_radius_km, s.threat_count]));
+        if (curUiHash !== lastSlotsUiHash) {
+          lastSlotsUiHash = curUiHash;
+          renderUserSlots(currentSlots);
+        }
+
+        // Gate GeoJSON and 3D meshes with Geo coordinates hash
+        const curGeoHash = JSON.stringify(Object.values(currentSlots).map(s => [s.lat, s.lon, s.danger_radius_km, s.active]));
+        if (curGeoHash !== lastSlotsGeoHash) {
+          lastSlotsGeoHash = curGeoHash;
           updateUserSlotsGeoJson(currentSlots);
           syncUserSlots3DMeshes(currentSlots);
         }
@@ -4950,10 +5312,13 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         enabledThreatCategories.delete(cat);
       }
       if (map && map.setFilter) {
-        const filterExpr = ['in', ['get', 'cat'], ['literal', Array.from(enabledThreatCategories)]];
-        map.setFilter('threats-aircraft-layer', filterExpr);
-        map.setFilter('threats-labels-layer', filterExpr);
-        map.setFilter('threats-group-badges', ['all', ['>', ['get', 'group_count'], 1], filterExpr]);
+        const catArray = Array.from(enabledThreatCategories);
+        const filterExpr = ['in', ['get', 'cat'], ['literal', catArray]];
+        if (map.getLayer('threats-aircraft-layer')) map.setFilter('threats-aircraft-layer', filterExpr);
+        if (map.getLayer('threats-labels-layer')) map.setFilter('threats-labels-layer', filterExpr);
+        if (map.getLayer('threats-group-badges')) map.setFilter('threats-group-badges', ['all', ['>', ['get', 'group_count'], 1], filterExpr]);
+        if (map.getLayer('threats-trails-layer')) map.setFilter('threats-trails-layer', filterExpr);
+        if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', filterExpr);
       }
       for (const tid in activeThreats) {
         const t = activeThreats[tid];
@@ -4961,6 +5326,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           threat3DMeshes[tid].visible = enabledThreatCategories.has(t.cat);
         }
       }
+      lastGeoJsonSyncTs = 0;
+      updateLiveKinematics(0, performance.now());
     }
 
     // Radial Concentric Today Gauge (64 concentric spokes around circle 110,110)
@@ -5070,16 +5437,26 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     }
 
     // Basemap Provider & Decoupled Token Management
-    function handleProviderChange(provider) {
+    function syncProviderCardsUI(provider) {
+      document.querySelectorAll('.basemap-card').forEach(c => c.classList.remove('active'));
       const tokenBox = document.getElementById('apiTokenBox');
-      if (tokenBox) {
-        tokenBox.style.display = (provider === 'carto') ? 'block' : 'none';
+      if (tokenBox) tokenBox.style.display = (provider === 'carto') ? 'block' : 'none';
+      if (provider === 'carto') {
+        const c = document.getElementById('cardCarto');
+        if (c) c.classList.add('active');
+      } else if (provider === 'satellite') {
+        const c = document.getElementById('cardSatellite');
+        if (c) c.classList.add('active');
+      } else {
+        const c = document.getElementById('cardArcgis');
+        if (c) c.classList.add('active');
       }
-      const cardArcgis = document.getElementById('cardArcgis');
-      const cardCarto = document.getElementById('cardCarto');
-      if (cardArcgis) cardArcgis.classList.toggle('active', provider === 'arcgis');
-      if (cardCarto) cardCarto.classList.toggle('active', provider === 'carto');
-      setBasemap(provider === 'carto' ? 'cartodb' : provider);
+    }
+
+    function handleProviderChange(provider) {
+      const pNorm = (provider === 'cartodb' || provider === 'carto') ? 'carto' : ((provider === 'satellite' || provider === 'esri') ? 'satellite' : 'arcgis');
+      syncProviderCardsUI(pNorm);
+      setBasemap(pNorm === 'carto' ? 'cartodb' : pNorm);
     }
 
     function toggleTokenVisibility() {
@@ -5123,12 +5500,26 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     async function loadMapProviderConfig() {
       const clientKeyInput = document.getElementById('clientAuthTokenInput');
-      if (clientKeyInput && clientToken) {
-        clientKeyInput.value = clientToken;
+      const badge = document.getElementById('clientTokenStatusBadge');
+      const userOwnerEl = document.getElementById('userOwnerValue');
+
+      if (clientToken) {
+        if (clientKeyInput) clientKeyInput.value = clientToken;
+        if (badge) {
+          badge.innerText = 'АКТИВНИЙ';
+          badge.className = 'badge-count calm';
+        }
+      } else {
+        if (clientKeyInput) clientKeyInput.value = '';
+        if (badge) {
+          badge.innerText = 'ГІСТЬ';
+          badge.className = 'badge-count';
+        }
+        if (userOwnerEl) userOwnerEl.innerText = 'Загальний доступ / Гість';
       }
 
       let savedProvider = localStorage.getItem('radar_map_provider') || 'arcgis';
-      let savedCartoToken = localStorage.getItem('radar_map_cartodb_token') || localStorage.getItem('radar_map_token') || '';
+      let savedCartoToken = clientToken ? (localStorage.getItem('radar_map_cartodb_token') || localStorage.getItem('radar_map_token') || '') : '';
 
       try {
         const q = clientToken ? `?token=${encodeURIComponent(clientToken)}` : '';
@@ -5136,7 +5527,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         if (res.ok) {
           const data = await res.json();
           const serverCartoKey = (data.cartodb_api_key || data.cartodb_key || '').trim();
-          if (serverCartoKey) {
+          if (serverCartoKey && clientToken) {
             savedCartoToken = serverCartoKey;
             localStorage.setItem('radar_map_cartodb_token', savedCartoToken);
             localStorage.setItem('radar_map_token', savedCartoToken);
@@ -5150,17 +5541,24 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
 
       const tokenInput = document.getElementById('mapApiToken');
-      if (tokenInput && savedCartoToken) tokenInput.value = savedCartoToken;
+      if (tokenInput) {
+        tokenInput.value = clientToken ? savedCartoToken : '';
+      }
 
       if (savedCartoToken) {
         applyCartoTilesWithToken(savedCartoToken);
       }
 
-      const normProvider = (savedProvider === 'cartodb' || savedProvider === 'carto') ? 'carto' : 'arcgis';
+      const normProvider = (savedProvider === 'cartodb' || savedProvider === 'carto') 
+        ? 'carto' 
+        : (savedProvider === 'satellite' ? 'satellite' : 'arcgis');
+
       const radio = document.querySelector(`input[name="mapProvider"][value="${normProvider}"]`);
       if (radio) radio.checked = true;
       handleProviderChange(normProvider);
     }
+
+
 
     async function saveMapProviderConfig() {
       const selectedRadio = document.querySelector('input[name="mapProvider"]:checked');
@@ -5169,12 +5567,15 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const tokenVal = tokenInput ? tokenInput.value.trim() : '';
 
       localStorage.setItem('radar_map_provider', provider);
-      localStorage.setItem('radar_map_cartodb_token', tokenVal);
-      localStorage.setItem('radar_map_token', tokenVal);
-
-      if (tokenVal) {
+      if (clientToken && tokenVal) {
+        localStorage.setItem('radar_map_cartodb_token', tokenVal);
+        localStorage.setItem('radar_map_token', tokenVal);
         applyCartoTilesWithToken(tokenVal);
+      } else if (!tokenVal) {
+        localStorage.removeItem('radar_map_cartodb_token');
+        localStorage.removeItem('radar_map_token');
       }
+
       setBasemap(provider === 'carto' ? 'cartodb' : provider);
 
       try {
@@ -5215,9 +5616,42 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         badge.innerText = 'АКТИВНИЙ';
         badge.className = 'badge-count calm';
       }
-      window.history.replaceState({}, '', '/map?token=' + encodeURIComponent(val));
+      if (typeof window !== 'undefined' && window.history && typeof window.history.replaceState === 'function') {
+        window.history.replaceState({}, '', '/map');
+      }
+      poiPromise = null;
+      slotsPromise = null;
+      initialSnapshotPromise = null;
+      loadPoiData();
       fetchUserSlots();
       initWebSocket();
+      fetchInitialSnapshot();
+    }
+
+    function clearClientAuthToken() {
+      localStorage.removeItem('radar_client_token');
+      clientToken = '';
+      const input = document.getElementById('clientAuthTokenInput');
+      if (input) input.value = '';
+      const badge = document.getElementById('clientTokenStatusBadge');
+      if (badge) {
+        badge.innerText = 'ГІСТЬ';
+        badge.className = 'badge-count';
+      }
+      const userOwnerEl = document.getElementById('userOwnerValue');
+      if (userOwnerEl) userOwnerEl.innerText = 'Загальний доступ / Гість';
+      const tokenInput = document.getElementById('mapApiToken');
+      if (tokenInput) tokenInput.value = '';
+      if (typeof window !== 'undefined' && window.history && typeof window.history.replaceState === 'function') {
+        window.history.replaceState({}, '', '/map');
+      }
+      poiPromise = null;
+      slotsPromise = null;
+      initialSnapshotPromise = null;
+      loadPoiData();
+      fetchUserSlots();
+      initWebSocket();
+      fetchInitialSnapshot();
     }
 
     // Map Layer Toggles
@@ -5654,28 +6088,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       if (durEl) durEl.innerText = total > 0 ? '34 хв' : '0 хв';
     }
 
-    async function loadAnalyticsPeriod() {
-      const fromEl = document.getElementById('dateFromInput') || document.getElementById('analyticsDateFrom');
-      const dateVal = fromEl ? fromEl.value : '';
-      const monthVal = dateVal ? dateVal.slice(0, 7) : new Date().toISOString().slice(0, 7);
 
-      let query = `token=${encodeURIComponent(clientToken)}&month=${monthVal}`;
-      if (dateVal) query += `&date=${dateVal}`;
-
-      try {
-        const res = await fetch(`/api/v1/history?${query}`);
-        if (res.ok) {
-          const histData = await res.json();
-          ingestHistoryDataset(histData);
-        }
-      } catch (err) {
-        console.warn('[Analytics] Failed to fetch history:', err);
-      }
-
-      drawTimelineDensity();
-      renderHourlyChart();
-      updateAnalyticsStats();
-    }
 
     
     function drawTimelineDensity() {
@@ -5751,13 +6164,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
 
 
-    function toggleAllPoiCategories() {
-      const list = document.getElementById('poiCategoriesList');
-      if (!list) return;
-      const inputs = list.querySelectorAll('input[type="checkbox"]');
-      const anyUnchecked = Array.from(inputs).some(i => !i.checked);
-      inputs.forEach(i => i.checked = anyUnchecked);
-    }
+
 
     
     // =========================================================================

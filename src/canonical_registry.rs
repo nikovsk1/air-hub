@@ -561,3 +561,88 @@ pub fn classify_official_alert(alert_type: &str, level: Option<&str>) -> (&'stat
         ("none", "none", &ALERT_CLEAR)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_classify_target_semantic_first() {
+        let (cat1, meta1) = classify_target("Шахед-136 курсом на Полтаву", 0);
+        assert_eq!(cat1, "shahed");
+        assert_eq!(meta1.color_hex, "#FFE600");
+
+        let (cat2, meta2) = classify_target("Реактивний шахед Shahed-238", 0);
+        assert_eq!(cat2, "shahed_jet");
+        assert_eq!(meta2.color_hex, "#00F0FF");
+
+        let (cat3, meta3) = classify_target("Загроза балістики (Іскандер-М)", 0);
+        assert_eq!(cat3, "ballistic");
+        assert_eq!(meta3.color_hex, "#FF003C");
+
+        let (cat4, meta4) = classify_target("Крилата ракета Х-101 / Калібр", 0);
+        assert_eq!(cat4, "missile");
+        assert_eq!(meta4.color_hex, "#FF2D55");
+
+        let (cat5, meta5) = classify_target("Скидання КАБ / керованих авіабомб", 0);
+        assert_eq!(cat5, "kab");
+        assert_eq!(meta5.color_hex, "#FF9500");
+
+        let (cat6, meta6) = classify_target("БпЛА Ланцет у зоні ураження", 0);
+        assert_eq!(cat6, "lancet");
+        assert_eq!(meta6.color_hex, "#FF007A");
+
+        let (cat7, meta7) = classify_target("Розвідник Zala / Supercam", 0);
+        assert_eq!(cat7, "recon");
+        assert_eq!(meta7.color_hex, "#B388FF");
+    }
+
+    #[test]
+    fn test_classify_target_raw_code_fallback() {
+        // Коли текстова назва відсутня або загальна ("ціль")
+        let (cat1, _) = classify_target("Ціль", 1);
+        assert_eq!(cat1, "shahed");
+
+        let (cat2, _) = classify_target("", 2);
+        assert_eq!(cat2, "shahed_jet");
+
+        let (cat3, _) = classify_target("Повітряна ціль", 3);
+        assert_eq!(cat3, "missile");
+
+        let (cat4, _) = classify_target("unknown", 12);
+        assert_eq!(cat4, "ballistic");
+
+        let (cat5, _) = classify_target("", 5);
+        assert_eq!(cat5, "kab");
+
+        let (cat6, _) = classify_target("", 99999);
+        assert_eq!(cat6, "unknown");
+    }
+
+    #[test]
+    fn test_classify_official_and_neptun_alerts() {
+        let (cat1, col1, _) = classify_official_alert("AIR", None);
+        assert_eq!(cat1, "missile");
+        assert_eq!(col1, "red");
+
+        let (cat2, col2, _) = classify_official_alert("AIR", Some("yellow"));
+        assert_eq!(cat2, "drone");
+        assert_eq!(col2, "yellow");
+
+        let (cat3, col3, _) = classify_official_alert("ARTILLERY", None);
+        assert_eq!(cat3, "artillery");
+        assert_eq!(col3, "red");
+
+        let (cat4, col4, _) = classify_neptun_alert("red");
+        assert_eq!(cat4, "missile");
+        assert_eq!(col4, "red");
+
+        let (cat5, col5, _) = classify_neptun_alert("yellow");
+        assert_eq!(cat5, "drone");
+        assert_eq!(col5, "yellow");
+
+        let (cat6, col6, _) = classify_neptun_alert("none");
+        assert_eq!(cat6, "none");
+        assert_eq!(col6, "none");
+    }
+}

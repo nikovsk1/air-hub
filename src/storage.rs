@@ -65,6 +65,25 @@ pub struct User {
     pub last_seen_ts: Option<i64>,
 }
 
+impl User {
+    pub fn guest(default_danger: f64) -> Self {
+        Self {
+            owner: "Загальний доступ".to_string(),
+            api_key: "".to_string(),
+            enabled: true,
+            default_danger_zone: default_danger,
+            target_alert_threat: true,
+            target_react_threats: default_react_threats(),
+            alert_siren: true,
+            alert_mig: true,
+            alert_artillery: true,
+            slots: HashMap::new(),
+            created_at: "".to_string(),
+            last_seen_ts: None,
+        }
+    }
+}
+
 fn default_true() -> bool { true }
 fn default_danger_zone() -> f64 { 35.0 }
 fn default_react_threats() -> Vec<String> {
@@ -870,5 +889,20 @@ impl StorageManager {
             guard.last_gdrive_sync_ts = Some(now_ts());
         }
         let _ = self.save_atomic();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_guest_user_isolation_contract() {
+        let guest = User::guest(35.0);
+        assert_eq!(guest.owner, "Загальний доступ");
+        assert_eq!(guest.api_key, "");
+        assert!(guest.slots.is_empty(), "Guest must not have pre-configured private observation slots");
+        assert_eq!(guest.default_danger_zone, 35.0);
+        assert!(guest.enabled);
     }
 }

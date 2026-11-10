@@ -182,6 +182,8 @@ async fn process_ukrainealarm_payload_inner(
         }
         state.update_seq += 1;
         state.upstream_provider = format!("{} ({})", source_label, stream_type);
+        state.targets_provider = "WS UkraineAlarm".to_string();
+        state.last_targets_provider_status = "primary".to_string();
         info!("Updated radar snapshot via {} ({} active targets)", state.upstream_provider, extracted.len());
 
         // Перевірка прапорця history_recording: уникати зайвих операцій диск/пам'ять при вимкненій історії

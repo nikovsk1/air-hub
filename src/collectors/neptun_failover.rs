@@ -7,6 +7,7 @@ use tokio::time::sleep;
 use tracing::{info, warn};
 
 use crate::canonical_registry::ExchangeLogManager;
+use crate::config::{NEPTUN_THREATS_POLL_INTERVAL_SEC, TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC};
 use crate::crypto_decoder::RawExtractedTarget;
 use crate::geo_math::calculate_bearing;
 use crate::history::HistoryManager;
@@ -25,30 +26,36 @@ pub async fn run_failover_neptun_collector(
     http_client: reqwest::Client,
 ) {
     loop {
-        sleep(Duration::from_secs(6)).await;
+        sleep(Duration::from_secs(NEPTUN_THREATS_POLL_INTERVAL_SEC)).await;
 
         let needs_failover = {
             let state = threat_state.read().await;
-            (now_sec() - state.last_primary_targets_ts) > 40.0
+            (now_sec() - state.last_primary_targets_ts) > TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC
         };
 
         if !needs_failover {
             continue;
         }
 
-        warn!("All UkraineAlarm streams (WebSocket & HTTP Fallback) silent >40s. Triggering Tier 3 Neptun disaster recovery poller...");
+        warn!("All UkraineAlarm streams (WebSocket & HTTP Fallback) silent >{:.0}s. Triggering Tier 3 Neptun disaster recovery poller...", TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC);
 
         // 1. Резервний збір повітряних цілей
         let threats_url = "https://neptun.in.ua/api/v1/threats";
         if let Ok(resp) = http_client.get(threats_url)
             .header(USER_AGENT, BROWSER_UA)
             .header(reqwest::header::REFERER, "https://neptun.in.ua/")
+            .header(reqwest::header::ACCEPT, "application/json")
             .timeout(Duration::from_secs(8))
             .send()
             .await
         {
-            if let Ok(val) = resp.json::<Value>().await {
-                if let Some(threats_raw) = val.get("threats").and_then(|t| t.as_array()) {
+            if resp.status().is_success() {
+                if let Ok(val) = resp.json::<Value>().await {
+                    let threats_opt = val.get("threats").and_then(|t| t.as_array())
+                        .or_else(|| val.get("data").and_then(|t| t.as_array()))
+                        .or_else(|| val.get("targets").and_then(|t| t.as_array()))
+                        .or_else(|| val.as_array());
+                    if let Some(threats_raw) = threats_opt {
                     let mut extracted = Vec::new();
                     for t in threats_raw {
                         let lat = t.get("lat").and_then(|v| v.as_f64()).unwrap_or(0.0);
@@ -111,7 +118,9 @@ pub async fn run_failover_neptun_collector(
                     state.last_targets_update_ts = now_sec();
                     state.last_update_ts = now_sec();
                     state.update_seq += 1;
-                    state.upstream_provider = "Neptun Failover REST API".to_string();
+                    state.upstream_provider = "Neptun (Резервний)".to_string();
+                    state.targets_provider = "Neptun (Резервний)".to_string();
+                    state.last_targets_provider_status = "failover".to_string();
 
                     if storage.is_history_recording_enabled() {
                         for trk in state.tracker.tracks.values_mut() {
@@ -133,4 +142,5 @@ pub async fn run_failover_neptun_collector(
             }
         }
     }
+}
 }

@@ -79,7 +79,7 @@ async fn authenticate_user(
     headers: &HeaderMap,
     query: &ClientQuery,
     state: &AppState,
-    addr: Option<SocketAddr>,
+    _addr: Option<SocketAddr>,
 ) -> Option<User> {
     let header_key = extract_client_api_key(headers, None);
     let key_opt = query.token.as_deref()
@@ -92,15 +92,6 @@ async fn authenticate_user(
                 state.storage.update_user_last_seen(key);
                 return Some(user);
             }
-        }
-    }
-
-    // Якщо це адмін у локальній мережі -> повертаємо першого доступного користувача або віртуального адміна
-    let peer_ip = addr.map(|a| a.ip());
-    if is_admin(headers, query.token.as_deref(), peer_ip, &state.config.admin_secret_key) {
-        let users = state.storage.get_all_users();
-        if let Some(first) = users.into_iter().next() {
-            return Some(first);
         }
     }
 
@@ -256,13 +247,30 @@ async fn handle_regions_geojson(
 
 async fn handle_get_poi(
     State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ClientQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
+    let user_opt = authenticate_user(&headers, &query, &state, Some(addr)).await;
+    let token_ref = query.token.as_deref().or_else(|| query.api_key.as_deref());
+    let is_admin_req = is_admin(&headers, token_ref, Some(addr.ip()), &state.config.admin_secret_key);
+
+    if user_opt.is_none() && !is_admin_req {
+        // Guests receive empty list: military strategic POIs are protected from public exposure
+        let empty: Vec<crate::storage::PoiItem> = Vec::new();
+        return (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/json"), (header::CACHE_CONTROL, "private, no-cache")],
+            Json(empty)
+        ).into_response();
+    }
+
     let pois = state.storage.get_pois();
     (
         StatusCode::OK,
-        [(header::CONTENT_TYPE, "application/json"), (header::CACHE_CONTROL, "public, max-age=60")],
+        [(header::CONTENT_TYPE, "application/json"), (header::CACHE_CONTROL, "private, max-age=60")],
         Json(pois)
-    )
+    ).into_response()
 }
 
 async fn handle_get_slots(
@@ -271,15 +279,14 @@ async fn handle_get_slots(
     Query(query): Query<ClientQuery>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> Response {
-    let user = match authenticate_user(&headers, &query, &state, Some(addr)).await {
-        Some(u) => u,
-        None => return StatusCode::UNAUTHORIZED.into_response(),
+    let (slots, total) = match authenticate_user(&headers, &query, &state, Some(addr)).await {
+        Some(u) => (u.slots.clone(), u.slots.len()),
+        None => (std::collections::HashMap::new(), 0),
     };
 
-    let total = user.slots.len();
     Json(json!({
         "status": "ok",
-        "slots": user.slots,
+        "slots": slots,
         "total_slots": total,
         "max_slots": 5,
         "can_add": total < 5
@@ -515,7 +522,8 @@ async fn handle_get_map_settings(
         .or_else(|| headers.get("x-api-key").and_then(|v| v.to_str().ok()))
         .unwrap_or("")
         .trim();
-    let relation = if !key.is_empty() {
+    let is_authenticated = !key.is_empty() && state.storage.get_user_by_key(key).is_some();
+    let relation = if is_authenticated {
         if let Some(user) = state.storage.get_user_by_key(key) {
             user.owner
         } else {
@@ -525,13 +533,20 @@ async fn handle_get_map_settings(
         "Загальна мапа".to_string()
     };
 
-    let cartodb_key = state.storage.get_cartodb_key(&relation);
+    // Глобальний системний ключ CartoDB сервера НІКОЛИ не передається у браузер клієнта
+    let user_custom_cartodb = if is_authenticated && relation != "Загальна мапа" {
+        state.storage.get_service_keys().cartodb_user_keys.get(&relation).cloned()
+    } else {
+        None
+    };
+
     Json(json!({
         "status": "ok",
         "default_provider": "arcgis",
         "relation": relation,
-        "cartodb_key": cartodb_key,
-        "cartodb_api_key": cartodb_key
+        "cartodb_key": user_custom_cartodb,
+        "cartodb_api_key": user_custom_cartodb,
+        "has_global_cartodb_key": state.storage.get_service_keys().cartodb_global_api_key.is_some()
     })).into_response()
 }
 
@@ -950,6 +965,14 @@ pub fn build_user_snapshot(
         "timestamp": (st.last_update_ts * 1000.0) as i64,
         "owner": user.owner,
         "upstream_provider": st.upstream_provider,
+        "sources": {
+            "alarms": st.alarms_provider,
+            "targets": st.targets_provider,
+            "alarms_status": st.last_alarms_provider_status,
+            "targets_status": st.last_targets_provider_status,
+            "last_alarms_ts": st.last_alerts_update_ts,
+            "last_targets_ts": st.last_targets_update_ts
+        },
         "active_threats_total": st.tracker.tracks.len(),
         "total_threats_in_country": st.tracker.tracks.len(),
         "general_alerts": {
@@ -1013,7 +1036,7 @@ async fn handle_get_threats(
 ) -> Response {
     let user = match authenticate_user(&headers, &query, &state, Some(addr)).await {
         Some(u) => u,
-        None => return StatusCode::UNAUTHORIZED.into_response(),
+        None => User::guest(state.config.danger_radius_km),
     };
 
     let selected_slot_id = query.slot.clone().or_else(|| query.slot_id.clone()).unwrap_or_else(|| "1".to_string());
@@ -1057,7 +1080,7 @@ async fn handle_get_radar(
 ) -> Response {
     let user = match authenticate_user(&headers, &query, &state, Some(addr)).await {
         Some(u) => u,
-        None => return StatusCode::UNAUTHORIZED.into_response(),
+        None => User::guest(state.config.danger_radius_km),
     };
 
     let st = state.threat_state.read().await;
@@ -1172,9 +1195,10 @@ async fn handle_get_map(
     Query(query): Query<ClientQuery>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> Response {
-    if authenticate_user(&headers, &query, &state, Some(addr)).await.is_none() {
-        return StatusCode::UNAUTHORIZED.into_response();
-    }
+    let _user = match authenticate_user(&headers, &query, &state, Some(addr)).await {
+        Some(u) => u,
+        None => User::guest(state.config.danger_radius_km),
+    };
     let st = state.threat_state.read().await;
     Json(json!({
         "timestamp": (st.last_update_ts * 1000.0) as i64,
@@ -1206,10 +1230,7 @@ async fn handle_ws_client(
 ) {
     let user = match authenticate_user(&headers, &query, &state, Some(addr)).await {
         Some(u) => u,
-        None => {
-            let _ = socket.send(Message::Text(json!({"error": "Unauthorized"}).to_string())).await;
-            return;
-        }
+        None => User::guest(state.config.danger_radius_km),
     };
 
     let mut selected_slot = query.slot.or(query.slot_id).unwrap_or_else(|| "1".to_string());
