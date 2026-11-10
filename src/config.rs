@@ -6,7 +6,7 @@ use tracing::{info, warn};
 // =========================================================================
 // ТРИВОГИ (OFFICIAL SIREN ALERTS) - AGENT_INSTRUCTIONS.md
 // =========================================================================
-pub const UKRAINEALARM_STATUS_POLL_INTERVAL_SEC: u64 = 4;       // Інтервал перевірки /status
+pub const UKRAINEALARM_STATUS_POLL_INTERVAL_SEC: u64 = 15;      // Інтервал перевірки /status (регламент UkraineAlarm: 12-15с)
 pub const UKRAINEALARM_FULL_ALERTS_FALLBACK_SEC: u64 = 12;      // Повний /alerts якщо немає /status
 pub const UKRAINEALARM_ALERTS_FAILOVER_TIMEOUT_SEC: f64 = 14.0; // Поріг тиші до старту Neptun
 pub const NEPTUN_ALERTS_POLL_INTERVAL_SEC: u64 = 6;             // Опитування Neptun Alerts (>=5с Cloudflare)

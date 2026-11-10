@@ -1014,10 +1014,14 @@
           }
         } else if (aProv.includes("neptun") || aStat === "failover" || aStat === "fallback") {
           if (alarmsTitle) alarmsTitle.innerText = "Neptun Alerts (Резервний)";
-          if (alarmsSub) alarmsSub.innerText = "neptun.in.ua/api/v1/alerts (Failover)";
+          if (alarmsSub) {
+            alarmsSub.innerText = (hData.ukrainealarm_configured === false)
+              ? "neptun.in.ua/api/v1/alerts (API v3 токен не налаштовано)"
+              : "neptun.in.ua/api/v1/alerts (Failover: збій API v3)";
+          }
           if (alarmsDot) alarmsDot.className = "w-3.5 h-3.5 rounded-full bg-amber-500 animate-pulse shrink-0";
           if (alarmsBadge) {
-            alarmsBadge.innerText = "FAILOVER (NEPTUN)";
+            alarmsBadge.innerText = (hData.ukrainealarm_configured === false) ? "РЕЗЕРВ (НЕМАЄ ТОКЕНА)" : "FAILOVER (NEPTUN)";
             alarmsBadge.className = "bg-amber-950 text-amber-400 border border-amber-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
           }
         } else if (hData.alarms_provider && hData.alarms_provider !== "none" && hData.alarms_provider !== "") {
@@ -1057,7 +1061,7 @@
           }
         } else if (tProv.includes("neptun") || tStat === "failover" || tStat === "fallback") {
           if (targetsTitle) targetsTitle.innerText = "Neptun Threats (Резервний)";
-          if (targetsSub) targetsSub.innerText = "neptun.in.ua/api/v1/threats (Failover)";
+          if (targetsSub) targetsSub.innerText = "neptun.in.ua/api/v1/threats (Failover: тиша WS >14с)";
           if (targetsDot) targetsDot.className = "w-3.5 h-3.5 rounded-full bg-amber-500 animate-pulse shrink-0";
           if (targetsBadge) {
             targetsBadge.innerText = "FAILOVER (NEPTUN)";

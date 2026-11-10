@@ -269,6 +269,24 @@ pub async fn run_ukrainealarm_collector(
             }
         };
 
+        // Витяг сесійних кук (зокрема MapTargetSession) для авторизованої підписки на Centrifugo
+        let mut session_cookies = Vec::new();
+        for cookie_header in page_resp.headers().get_all(reqwest::header::SET_COOKIE) {
+            if let Ok(s) = cookie_header.to_str() {
+                if let Some(c) = s.split(';').next() {
+                    let trimmed = c.trim();
+                    if !trimmed.is_empty() {
+                        session_cookies.push(trimmed.to_string());
+                    }
+                }
+            }
+        }
+        let cookie_header_val = if !session_cookies.is_empty() {
+            HeaderValue::from_str(&session_cookies.join("; ")).ok()
+        } else {
+            None
+        };
+
         let html = match page_resp.text().await {
             Ok(t) => t,
             Err(e) => {
@@ -314,6 +332,9 @@ pub async fn run_ukrainealarm_collector(
             }
         };
         req.headers_mut().insert(ORIGIN, HeaderValue::from_static("https://map.ukrainealarm.com"));
+        if let Some(ref c_val) = cookie_header_val {
+            req.headers_mut().insert(reqwest::header::COOKIE, c_val.clone());
+        }
 
         let (ws_stream, _) = match connect_async(req).await {
             Ok(pair) => pair,
@@ -385,13 +406,19 @@ pub async fn run_ukrainealarm_collector(
                         .unwrap_or("");
 
                     if !client_id.is_empty() {
-                        let sub_res = http_client
+                        let mut sub_builder = http_client
                             .post(&sub_ep)
                             .timeout(Duration::from_secs(6))
                             .header(USER_AGENT, BROWSER_UA)
                             .header(ORIGIN, "https://map.ukrainealarm.com")
                             .header(REFERER, "https://map.ukrainealarm.com/onlyMap")
-                            .header("X-Requested-With", "XMLHttpRequest")
+                            .header("X-Requested-With", "XMLHttpRequest");
+
+                        if let Some(ref c_val) = cookie_header_val {
+                            sub_builder = sub_builder.header(reqwest::header::COOKIE, c_val.clone());
+                        }
+
+                        let sub_res = sub_builder
                             .json(&json!({
                                 "client": client_id,
                                 "channels": [channel]

@@ -35,12 +35,12 @@ pub async fn run_alerts_collector(
     let mut last_provider_log = String::new();
 
     // Офіційний регламент UkraineAlarm API v3: запити раз на 12-15 секунд (4-5 запитів на хвилину)
-    // За замовчуванням 12 секунд (допустимий діапазон 10..60 сек)
+    // За замовчуванням 15 секунд (допустимий безпечний діапазон 12..60 сек)
     let poll_interval_secs: u64 = std::env::var("ALERTS_POLL_INTERVAL_SECS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(12)
-        .clamp(10, 60);
+        .unwrap_or(UKRAINEALARM_STATUS_POLL_INTERVAL_SEC)
+        .clamp(12, 60);
 
     info!(
         "Alerts collector initialized: polling interval = {}s (UkraineAlarm API v3 rate-limit compliant)",
@@ -51,7 +51,13 @@ pub async fn run_alerts_collector(
         let service_keys = storage.get_service_keys();
         let ua_token = service_keys
             .ukrainealarm_api_token
-            .filter(|t| !t.trim().is_empty());
+            .filter(|t| !t.trim().is_empty())
+            .or_else(|| {
+                std::env::var("UKRAINEALARM_API_TOKEN")
+                    .or_else(|_| std::env::var("UKRAINEALARM_API_KEY"))
+                    .ok()
+                    .filter(|t| !t.trim().is_empty())
+            });
 
         let now = now_sec();
         let mut used_primary = false;
@@ -105,8 +111,8 @@ pub async fn run_alerts_collector(
                             };
 
                             if should_fetch {
-                                // Запобігання мікро-спайкам (burst protection): 800мс між запитами
-                                sleep(Duration::from_millis(800)).await;
+                                // Запобігання мікро-спайкам (burst protection): 1500мс між запитами status та alerts
+                                sleep(Duration::from_millis(1500)).await;
 
                                 if let Ok(alerts_resp) = http_client
                                     .get(UKRAINEALARM_ALERTS_URL)
@@ -213,8 +219,8 @@ pub async fn run_alerts_collector(
             continue;
         }
 
-        // Штатний режим Smart Polling UkraineAlarm API v3 (/status кожні 4с)
-        sleep(Duration::from_secs(UKRAINEALARM_STATUS_POLL_INTERVAL_SEC)).await;
+        // Штатний режим Smart Polling UkraineAlarm API v3 (/status кожні 15с згідно ліміту 4-5 req/min)
+        sleep(Duration::from_secs(poll_interval_secs)).await;
     }
 }
 

@@ -118,6 +118,11 @@ async fn handle_health(
     let total_sirens = st.official_alerts.values().filter(|a| a.alert).count();
     let active_threats = st.tracker.tracks.len();
 
+    let sk = state.storage.get_service_keys();
+    let ua_configured = sk.ukrainealarm_api_token.as_ref().map(|t| !t.trim().is_empty()).unwrap_or(false)
+        || std::env::var("UKRAINEALARM_API_TOKEN").map(|t| !t.trim().is_empty()).unwrap_or(false)
+        || std::env::var("UKRAINEALARM_API_KEY").map(|t| !t.trim().is_empty()).unwrap_or(false);
+
     let ex_summary = state.exchange_mgr.get_summary();
     let unmapped_threats = ex_summary.get("unmapped_threats_count").and_then(|v| v.as_u64()).unwrap_or(0);
     let recent_unmapped_threats: Vec<_> = ex_summary.get("recent_entries")
@@ -138,6 +143,7 @@ async fn handle_health(
         "status": "online",
         "app": "Air Alert Radar Hub (Rust)",
         "version": "1.0.0",
+        "ukrainealarm_configured": ua_configured,
         "upstream_provider": st.upstream_provider,
         "alarms_provider": st.alarms_provider,
         "targets_provider": st.targets_provider,
