@@ -12,6 +12,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, info, warn};
 
 use crate::canonical_registry::ExchangeLogManager;
+use crate::config::UKRAINEALARM_FALLBACK_503_COOLDOWN_SEC;
 use crate::crypto_decoder::{decode_payload_native, decode_surface_v2_payload, extract_snapshot_meta, extract_targets, extract_taxonomy, RawExtractedTarget};
 use crate::history::HistoryManager;
 use crate::oblast_detector::OblastDetector;
@@ -363,6 +364,11 @@ pub async fn run_ukrainealarm_collector(
         }
 
         info!("Connected to Centrifugo WebSocket. Awaiting client ID...");
+        {
+            let mut state = threat_state.write().await;
+            state.last_primary_targets_ts = now_sec();
+            state.last_ws_targets_ts = now_sec();
+        }
 
         while let Some(msg_res) = read.next().await {
             let msg = match msg_res {
@@ -457,6 +463,13 @@ pub async fn run_ukrainealarm_collector(
                                         });
                                         let _ = write.send(Message::Text(sub_frame.to_string())).await;
                                         info!("Successfully subscribed to Centrifugo channel: {}", channel);
+                                        {
+                                            let mut state = threat_state.write().await;
+                                            state.last_primary_targets_ts = now_sec();
+                                            state.last_ws_targets_ts = now_sec();
+                                            state.targets_provider = "WS UkraineAlarm".to_string();
+                                            state.last_targets_provider_status = "primary".to_string();
+                                        }
                                     } else {
                                         warn!("Could not extract subscription token from response: {:?}", sub_data);
                                     }
@@ -528,7 +541,8 @@ pub async fn run_ukrainealarm_http_fallback(
             .timeout(Duration::from_secs(8));
 
         if let Ok(resp) = req.send().await {
-            if resp.status().is_success() {
+            let status = resp.status();
+            if status.is_success() {
                 if let Ok(data) = resp.json::<Value>().await {
                     if let Some(payload) = data.get("n").and_then(|v| v.as_str()) {
                         if !payload.is_empty() {
@@ -557,6 +571,8 @@ pub async fn run_ukrainealarm_http_fallback(
                         }
                     }
                 }
+            } else if status.as_u16() == 503 {
+                debug!("Cold Start bootstrap: Fallback returned 503 (WebSocket is active upstream), WS will supply initial radar targets");
             }
             last_fetch_instant = std::time::Instant::now();
         }
@@ -654,6 +670,13 @@ pub async fn run_ukrainealarm_http_fallback(
                 } else if status.as_u16() == 429 {
                     warn!("HTTP 429 Too Many Requests from Fallback endpoint. Backing off for 20s...");
                     sleep(Duration::from_secs(20)).await;
+                } else if status.as_u16() == 503 {
+                    // map.ukrainealarm.com fallback endpoint returns 503 Service Unavailable when WebSocket is online
+                    debug!(
+                        "UkraineAlarm Fallback HTTP endpoint returned 503 (WebSocket is primary stream), pausing requests for {}s without log spam...",
+                        UKRAINEALARM_FALLBACK_503_COOLDOWN_SEC
+                    );
+                    sleep(Duration::from_secs(UKRAINEALARM_FALLBACK_503_COOLDOWN_SEC)).await;
                 } else {
                     warn!("HTTP fallback endpoint returned HTTP {}", status);
                 }

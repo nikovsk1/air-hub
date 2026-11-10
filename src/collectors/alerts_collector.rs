@@ -9,19 +9,23 @@ use tokio::time::sleep;
 use tracing::{debug, info, warn};
 
 use crate::canonical_registry::{classify_neptun_alert, classify_official_alert, ExchangeLogManager};
-use crate::config::{NEPTUN_ALERTS_POLL_INTERVAL_SEC, UKRAINEALARM_STATUS_POLL_INTERVAL_SEC};
+use crate::config::{NEPTUN_ALERTS_POLL_INTERVAL_SEC, UKRAINEALARM_ALERTS_POLL_INTERVAL_SEC};
 use crate::oblast_detector::OblastDetector;
 use crate::storage::StorageManager;
 use crate::tracker::{now_sec, OfficialAlert, ThreatState};
 
-const UKRAINEALARM_STATUS_URL: &str = "https://api.ukrainealarm.com/api/v3/alerts/status";
 const UKRAINEALARM_ALERTS_URL: &str = "https://api.ukrainealarm.com/api/v3/alerts";
 const NEPTUN_ALERTS_URL: &str = "https://neptun.in.ua/api/v1/alerts";
-const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36";
+const API_UA: &str = "AirAlertHub-Backend/1.0 (Commercial Partner Integration)";
 
 /// Уніфікований фоновий сервіс збору офіційних тривог:
-/// 1. Основний рушій: Офіційний REST API api.ukrainealarm.com (API v3 з токеном, Smart Polling)
-/// 2. Альтернативний рушій: Neptun API (neptun.in.ua/api/v1/alerts, якщо токен не задано або API v3 недоступне)
+/// 1. Головне джерело: Офіційний REST API api.ukrainealarm.com/api/v3/alerts
+///    - Комерційний/партнерський токен
+///    - ОДИН прямий запит кожні 15 секунд (без проміжних викликів /status та без mapUpdate)
+///    - Чесний заголовок User-Agent: AirAlertHub-Backend/1.0
+/// 2. Резервне джерело (Disaster Recovery): Neptun API (neptun.in.ua/api/v1/alerts)
+///    - Активується при відсутності токена, збої мережі або отриманні HTTP 429
+///    - Опитування кожні 6 секунд (дотримання ліміту CDN)
 pub async fn run_alerts_collector(
     threat_state: Arc<RwLock<ThreatState>>,
     detector: Arc<OblastDetector>,
@@ -29,22 +33,19 @@ pub async fn run_alerts_collector(
     exchange_mgr: Arc<ExchangeLogManager>,
     http_client: reqwest::Client,
 ) {
-    let mut last_action_index: Option<u64> = None;
     let mut consecutive_ua_failures: u32 = 0;
     let mut ua_cooldown_until: f64 = 0.0;
     let mut last_provider_log = String::new();
 
-    // Офіційний регламент UkraineAlarm API v3: запити раз на 12-15 секунд (4-5 запитів на хвилину)
-    // За замовчуванням 15 секунд (допустимий безпечний діапазон 12..60 сек)
     let poll_interval_secs: u64 = std::env::var("ALERTS_POLL_INTERVAL_SECS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(UKRAINEALARM_STATUS_POLL_INTERVAL_SEC)
-        .clamp(12, 60);
+        .unwrap_or(UKRAINEALARM_ALERTS_POLL_INTERVAL_SEC)
+        .clamp(5, 300);
 
     info!(
-        "Alerts collector initialized: polling interval = {}s (UkraineAlarm API v3 rate-limit compliant)",
-        poll_interval_secs
+        "Alerts collector initialized: primary interval = {}s (UkraineAlarm API v3 direct poll), fallback interval = {}s (Neptun Alerts)",
+        poll_interval_secs, NEPTUN_ALERTS_POLL_INTERVAL_SEC
     );
 
     loop {
@@ -63,83 +64,50 @@ pub async fn run_alerts_collector(
         let mut used_primary = false;
 
         if let Some(token) = ua_token {
-            let should_try_ua = if consecutive_ua_failures < 5 {
-                now >= ua_cooldown_until
-            } else {
-                // Відновлювальне зондування (Recovery Probing): кожні 60с повторна спроба
-                now >= ua_cooldown_until
-            };
+            let should_try_ua = now >= ua_cooldown_until;
 
             if should_try_ua {
                 // =========================================================================
-                // ОСНОВНИЙ РУШІЙ: Офіційний API v3 (api.ukrainealarm.com)
+                // ОСНОВНИЙ РУШІЙ: Офіційний API v3 (api.ukrainealarm.com/api/v3/alerts)
+                // ОДИН прямий запит кожні 15 секунд
                 // =========================================================================
                 if last_provider_log != "UkraineAlarm API v3" {
-                    info!("Alerts collector: using primary engine UkraineAlarm Official API v3");
+                    info!("Alerts collector: using primary engine UkraineAlarm Official API v3 (15s direct poll)");
                     last_provider_log = "UkraineAlarm API v3".to_string();
                 }
 
-                let mut auth_val = HeaderValue::from_str(&token).unwrap_or_else(|_| HeaderValue::from_static(""));
-                if auth_val.is_empty() {
-                    // Fallback to empty if invalid chars
-                    auth_val = HeaderValue::from_static("");
-                }
+                let auth_val = HeaderValue::from_str(&token).unwrap_or_else(|_| HeaderValue::from_static(""));
 
-                let status_res = http_client
-                    .get(UKRAINEALARM_STATUS_URL)
-                    .header(AUTHORIZATION, auth_val.clone())
-                    .header(USER_AGENT, BROWSER_UA)
-                    .timeout(Duration::from_secs(6))
+                let alerts_res = http_client
+                    .get(UKRAINEALARM_ALERTS_URL)
+                    .header(AUTHORIZATION, auth_val)
+                    .header(USER_AGENT, API_UA)
+                    .header(reqwest::header::ACCEPT, "application/json")
+                    .timeout(Duration::from_secs(8))
                     .send()
                     .await;
 
-                match status_res {
+                match alerts_res {
                     Ok(resp) if resp.status().is_success() => {
                         consecutive_ua_failures = 0;
                         ua_cooldown_until = 0.0;
                         used_primary = true;
 
-                        if let Ok(status_json) = resp.json::<Value>().await {
-                            let curr_idx = status_json
-                                .get("lastActionIndex")
-                                .and_then(|v| v.as_u64());
-
-                            let should_fetch = match (last_action_index, curr_idx) {
-                                (None, _) => true,
-                                (Some(prev), Some(curr)) => curr != prev,
-                                _ => true,
-                            };
-
-                            if should_fetch {
-                                // Запобігання мікро-спайкам (burst protection): 1500мс між запитами status та alerts
-                                sleep(Duration::from_millis(1500)).await;
-
-                                if let Ok(alerts_resp) = http_client
-                                    .get(UKRAINEALARM_ALERTS_URL)
-                                    .header(AUTHORIZATION, auth_val)
-                                    .header(USER_AGENT, BROWSER_UA)
-                                    .timeout(Duration::from_secs(8))
-                                    .send()
-                                    .await
-                                {
-                                    if let Ok(alerts_val) = alerts_resp.json::<Value>().await {
-                                        if let Some(regions_arr) = alerts_val.as_array() {
-                                            process_ukrainealarm_v3_alerts(
-                                                regions_arr,
-                                                &threat_state,
-                                                &detector,
-                                                &exchange_mgr,
-                                            )
-                                            .await;
-                                            last_action_index = curr_idx;
-                                        }
-                                    }
-                                }
+                        if let Ok(alerts_val) = resp.json::<Value>().await {
+                            if let Some(regions_arr) = alerts_val.as_array() {
+                                process_ukrainealarm_v3_alerts(
+                                    regions_arr,
+                                    &threat_state,
+                                    &detector,
+                                    &exchange_mgr,
+                                    "UkraineAlarm (API v3)",
+                                )
+                                .await;
                             }
                         }
                     }
                     Ok(resp) if resp.status().as_u16() == 429 => {
-                        // Отримано HTTP 429 Too Many Requests: читаємо Retry-After або бекофф 60 сек
+                        // Отримано HTTP 429 Too Many Requests: читаємо Retry-After (+2с буфер)
                         let retry_after = resp
                             .headers()
                             .get(reqwest::header::RETRY_AFTER)
@@ -147,13 +115,14 @@ pub async fn run_alerts_collector(
                             .and_then(|s| s.parse::<u64>().ok())
                             .unwrap_or(60);
 
+                        let total_cooldown = retry_after + 2;
                         warn!(
-                            "UkraineAlarm API v3 returned HTTP 429 Too Many Requests. Rate limit triggered! Pausing requests for {}s (failures={})",
-                            retry_after,
+                            "UkraineAlarm API v3 returned HTTP 429 Too Many Requests. Cooling down for {}s (failures={})",
+                            total_cooldown,
                             consecutive_ua_failures + 1
                         );
                         consecutive_ua_failures += 1;
-                        ua_cooldown_until = now_sec() + (retry_after as f64);
+                        ua_cooldown_until = now_sec() + (total_cooldown as f64);
                     }
                     Ok(resp) => {
                         warn!(
@@ -176,28 +145,29 @@ pub async fn run_alerts_collector(
                         ua_cooldown_until = now_sec() + backoff;
                     }
                 }
-            } else if now < ua_cooldown_until {
+            } else {
                 debug!(
-                    "UkraineAlarm API v3 in cooldown for next {:.0}s, routing through fallback",
+                    "UkraineAlarm API v3 in cooldown for next {:.0}s, routing through Neptun backup",
                     ua_cooldown_until - now
                 );
             }
         }
 
         // =========================================================================
-        // АЛЬТЕРНАТИВНИЙ РУШІЙ: Neptun API (neptun.in.ua/api/v1/alerts)
-        // Спрацьовує, якщо токен UkraineAlarm не налаштований або запити зазнали збою / cooldown
+        // РЕЗЕРВНИЙ РУШІЙ: Neptun Alerts (neptun.in.ua/api/v1/alerts)
+        // Спрацьовує, якщо токен не задано або UkraineAlarm недоступний/у стані cooldown
         // =========================================================================
         if !used_primary {
             if last_provider_log != "Neptun Alerts" {
-                info!("Alerts collector: using failover/alternative engine Neptun Alerts (neptun.in.ua)");
+                info!("Alerts collector: using backup failover engine Neptun Alerts (neptun.in.ua)");
                 last_provider_log = "Neptun Alerts".to_string();
             }
 
             match http_client
                 .get(NEPTUN_ALERTS_URL)
-                .header(USER_AGENT, BROWSER_UA)
+                .header(USER_AGENT, API_UA)
                 .header(reqwest::header::REFERER, "https://neptun.in.ua/")
+                .header(reqwest::header::ACCEPT, "application/json")
                 .timeout(Duration::from_secs(8))
                 .send()
                 .await
@@ -214,12 +184,13 @@ pub async fn run_alerts_collector(
                     debug!("Neptun alerts request failed: {}", e);
                 }
             }
-            // Резервний цикл опитування: суворе дотримання ліміту Cloudflare CDN (>= 5с)
+
+            // Опитування резервного джерела кожні 6 секунд
             sleep(Duration::from_secs(NEPTUN_ALERTS_POLL_INTERVAL_SEC)).await;
             continue;
         }
 
-        // Штатний режим Smart Polling UkraineAlarm API v3 (/status кожні 15с згідно ліміту 4-5 req/min)
+        // Штатний інтервал опитування основного джерела (15 секунд)
         sleep(Duration::from_secs(poll_interval_secs)).await;
     }
 }
@@ -230,6 +201,7 @@ async fn process_ukrainealarm_v3_alerts(
     threat_state: &Arc<RwLock<ThreatState>>,
     detector: &Arc<OblastDetector>,
     exchange_mgr: &Arc<ExchangeLogManager>,
+    provider_name: &str,
 ) {
     let mut state = threat_state.write().await;
     let mut active_ids = HashSet::new();
@@ -292,7 +264,9 @@ async fn process_ukrainealarm_v3_alerts(
                 is_alert = true;
                 for a in active_alerts {
                     let raw_type = a.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                    let raw_level = a.get("level").and_then(|l| l.as_str());
+                    let raw_level = a.get("level").and_then(|l| l.as_str())
+                        .or_else(|| a.get("alertLevel").and_then(|l| l.as_str()))
+                        .or_else(|| a.pointer("/activeAlertLevels/0/alertLevel").and_then(|l| l.as_str()));
 
                     let (mapped_cat, mapped_color, _) = classify_official_alert(raw_type, raw_level);
                     if mapped_color == "red" || color != "red" {
@@ -301,12 +275,14 @@ async fn process_ukrainealarm_v3_alerts(
                     }
 
                     // Перевірка причини тривоги (МіГ-31К тощо)
-                    if let Some(rsn) = a.get("reason").and_then(|s| s.as_str()) {
+                    let rsn_opt = a.get("reason").and_then(|s| s.as_str())
+                        .or_else(|| a.pointer("/activeAlertLevels/0/reason").and_then(|s| s.as_str()));
+                    if let Some(rsn) = rsn_opt {
                         let lower_r = rsn.to_lowercase();
                         if lower_r.contains("міг-31") || lower_r.contains("mig-31") {
                             mig_detected = true;
                         }
-                        if !reasons.contains(&rsn.to_string()) {
+                        if !rsn.is_empty() && !reasons.contains(&rsn.to_string()) {
                             reasons.push(rsn.to_string());
                         }
                     }
@@ -352,7 +328,7 @@ async fn process_ukrainealarm_v3_alerts(
     state.alert_reasons = reasons;
     state.recompute_oblast_alerts(detector);
     state.last_alerts_update_ts = now_sec();
-    state.alarms_provider = "UkraineAlarm (API v3)".to_string();
+    state.alarms_provider = provider_name.to_string();
     state.last_alarms_provider_status = "primary".to_string();
     state.update_seq += 1;
 }

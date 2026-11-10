@@ -4,10 +4,10 @@ use reqwest::header::USER_AGENT;
 use serde_json::Value;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::canonical_registry::ExchangeLogManager;
-use crate::config::{NEPTUN_THREATS_POLL_INTERVAL_SEC, TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC};
+use crate::config::{NEPTUN_THREATS_POLL_INTERVAL_SEC, TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC, TARGETS_STARTUP_GRACE_PERIOD_SEC};
 use crate::crypto_decoder::RawExtractedTarget;
 use crate::geo_math::calculate_bearing;
 use crate::history::HistoryManager;
@@ -25,8 +25,20 @@ pub async fn run_failover_neptun_collector(
     storage: Arc<StorageManager>,
     http_client: reqwest::Client,
 ) {
+    let process_start_ts = now_sec();
+
     loop {
         sleep(Duration::from_secs(NEPTUN_THREATS_POLL_INTERVAL_SEC)).await;
+
+        // Стартовий Grace Period (25 секунд): не перевіряти таймаут тиші на старті, дати сокету спокійно підключитися
+        let uptime = now_sec() - process_start_ts;
+        if uptime < TARGETS_STARTUP_GRACE_PERIOD_SEC {
+            debug!(
+                "Neptun failover: startup grace period active ({:.1}s / {:.0}s), awaiting primary WebSocket stabilization",
+                uptime, TARGETS_STARTUP_GRACE_PERIOD_SEC
+            );
+            continue;
+        }
 
         let needs_failover = {
             let state = threat_state.read().await;
@@ -37,7 +49,10 @@ pub async fn run_failover_neptun_collector(
             continue;
         }
 
-        warn!("All UkraineAlarm streams (WebSocket & HTTP Fallback) silent >{:.0}s. Triggering Tier 3 Neptun disaster recovery poller...", TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC);
+        warn!(
+            "All UkraineAlarm streams (WebSocket & HTTP Fallback) silent >{:.0}s. Triggering Tier 3 Neptun disaster recovery poller...",
+            TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC
+        );
 
         // 1. Резервний збір повітряних цілей
         let threats_url = "https://neptun.in.ua/api/v1/threats";

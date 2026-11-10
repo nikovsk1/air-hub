@@ -4,28 +4,22 @@ use std::path::PathBuf;
 use tracing::{info, warn};
 
 // =========================================================================
-// ТРИВОГИ (OFFICIAL SIREN ALERTS) - AGENT_INSTRUCTIONS.md
+// ТРИВОГИ (OFFICIAL SIREN ALERTS) - Чиста архітектура джерел
 // =========================================================================
-pub const UKRAINEALARM_STATUS_POLL_INTERVAL_SEC: u64 = 15;      // Інтервал перевірки /status (регламент UkraineAlarm: 12-15с)
+pub const UKRAINEALARM_ALERTS_POLL_INTERVAL_SEC: u64 = 15;      // ОДИН прямий запит /alerts кожні 15с (комерційний/партнерський ключ)
+pub const NEPTUN_ALERTS_POLL_INTERVAL_SEC: u64 = 6;             // Резервне опитування Neptun Alerts (кожні 6с при збої або 429)
 #[allow(dead_code)]
-pub const UKRAINEALARM_FULL_ALERTS_FALLBACK_SEC: u64 = 12;      // Повний /alerts якщо немає /status
-#[allow(dead_code)]
-pub const UKRAINEALARM_ALERTS_FAILOVER_TIMEOUT_SEC: f64 = 14.0; // Поріг тиші до старту Neptun
-pub const NEPTUN_ALERTS_POLL_INTERVAL_SEC: u64 = 6;             // Опитування Neptun Alerts (>=5с Cloudflare)
-#[allow(dead_code)]
-pub const UKRAINEALARM_HEALTH_CHECK_INTERVAL_SEC: u64 = 12;     // Health check основного API
+pub const UKRAINEALARM_ALERTS_FAILOVER_TIMEOUT_SEC: f64 = 15.0; // Поріг тиші тривог до перемикання на Neptun
 
 // =========================================================================
-// РАДАРНІ ЦІЛІ ТА ЗАГРОЗИ (RADAR TARGETS & THREATS) - AGENT_INSTRUCTIONS.md
+// РАДАРНІ ЦІЛІ ТА ЗАГРОЗИ (RADAR TARGETS & THREATS) - Чиста архітектура джерел
 // =========================================================================
+pub const TARGETS_STARTUP_GRACE_PERIOD_SEC: f64 = 25.0;         // Стартовий Grace Period (25с) для стабілізації WebSocket
+pub const TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC: f64 = 15.0;     // Поріг тиші primary потоків UkraineAlarm (>15с) для переходу на Neptun
+pub const NEPTUN_THREATS_POLL_INTERVAL_SEC: u64 = 5;            // Резервне опитування цілей Neptun REST (кожні 5с)
 #[allow(dead_code)]
-pub const WS_SILENCE_TRIGGER_FALLBACK_SEC: f64 = 6.0;           // Тиша WS для включення Fallback HTTP
-#[allow(dead_code)]
-pub const UKRAINEALARM_HTTP_FALLBACK_INTERVAL_SEC: u64 = 5;     // Опитування Fallback HTTP
-pub const TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC: f64 = 14.0;     // Повна тиша UA для старту Neptun
-pub const NEPTUN_THREATS_POLL_INTERVAL_SEC: u64 = 5;            // Опитування Neptun REST (ліміт CDN)
-#[allow(dead_code)]
-pub const PRIMARY_RADAR_RECOVERY_PROBE_SEC: u64 = 8;            // Контрольний запит до Fallback UA
+pub const WS_SILENCE_TRIGGER_FALLBACK_SEC: f64 = 8.0;           // Тиша WS для активації Fallback HTTP
+pub const UKRAINEALARM_FALLBACK_503_COOLDOWN_SEC: u64 = 60;     // Пауза опитування Fallback HTTP при отриманні 503 (WS активний)
 
 #[derive(Clone, Debug)]
 pub struct Config {
