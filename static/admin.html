@@ -197,35 +197,67 @@
         <span>Швидко:</span>
         <a href="javascript:void(0)" onclick="scrollToFrame('usersFrame')" class="hover:text-orange-400 transition cursor-pointer">Користувачі</a> •
         <a href="javascript:void(0)" onclick="scrollToFrame('poiFrame')" class="hover:text-orange-400 transition cursor-pointer">Військові POI</a> •
-        <a href="javascript:void(0)" onclick="scrollToFrame('serviceKeysFrame')" class="hover:text-orange-400 transition cursor-pointer">Ключі сервісів</a> •
+        <a href="javascript:void(0)" onclick="scrollToFrame('serviceKeysFrame')" class="hover:text-orange-400 transition cursor-pointer">Джерела та ключі</a> •
         <a href="javascript:void(0)" onclick="scrollToFrame('historyFrame')" class="hover:text-orange-400 transition cursor-pointer">Архів історії</a> •
         <a href="javascript:void(0)" onclick="scrollToFrame('directoryFrame')" class="hover:text-orange-400 transition cursor-pointer">Лог обміну</a>
       </div>
     </nav>
 
-    <!-- СТАТУС ПІДКЛЮЧЕННЯ ТА ДЖЕРЕЛО (2 КОЛОНКИ) -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <!-- СТАТУС РОЗПОДІЛУ ПОТОКІВ ТА МЕРЕЖІ (3 КОЛОНКИ: ТРИВОГИ / ЦІЛІ / МЕРЕЖА) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <!-- 1. ПОТІК ТРИВОГ (ОФІЦІЙНІ СИРЕНИ) -->
       <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] p-4 rounded-xl flex items-center justify-between shadow">
-        <div class="flex items-center gap-3">
-          <div id="upstreamDot" class="w-3.5 h-3.5 rounded-full bg-orange-500 animate-pulse shrink-0"></div>
-          <div>
-            <div class="text-xs text-gray-400">Джерело даних (Апстрім)</div>
-            <div id="upstreamName" class="text-sm font-semibold text-white">Основний потік (WebSocket map.ukrainealarm.com)</div>
+        <div class="flex items-center gap-3 min-w-0">
+          <div id="alarmsDot" class="w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></div>
+          <div class="min-w-0">
+            <div class="text-xs text-gray-400 flex items-center gap-1.5">
+              <span>🚨</span>
+              <span>Потік тривог</span>
+            </div>
+            <div id="alarmsSourceTitle" class="text-sm font-semibold text-white truncate">UkraineAlarm (API v3)</div>
+            <div id="alarmsSubtext" class="text-[11px] text-gray-400 truncate">api.ukrainealarm.com (REST)</div>
           </div>
         </div>
-        <span id="upstreamBadge" class="bg-orange-950 text-orange-400 border border-orange-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0">ОСНОВНИЙ</span>
+        <span id="alarmsBadge" class="bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0">ОСНОВНИЙ</span>
       </div>
 
+      <!-- 2. ПОТІК ЦІЛЕЙ (РАДАРНІ ЗАГРОЗИ) -->
       <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] p-4 rounded-xl flex items-center justify-between shadow">
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div id="targetsDot" class="w-3.5 h-3.5 rounded-full bg-sky-500 animate-pulse shrink-0"></div>
+          <div class="min-w-0">
+            <div class="text-xs text-gray-400 flex items-center gap-1.5">
+              <span>🎯</span>
+              <span>Потік цілей</span>
+            </div>
+            <div id="targetsSourceTitle" class="text-sm font-semibold text-white truncate">WS UkraineAlarm</div>
+            <div id="targetsSubtext" class="text-[11px] text-gray-400 truncate">map.ukrainealarm.com (WS)</div>
+          </div>
+        </div>
+        <span id="targetsBadge" class="bg-sky-950 text-sky-400 border border-sky-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0">ОСНОВНИЙ</span>
+      </div>
+
+      <!-- 3. РЕЖИМ ПІДКЛЮЧЕННЯ (МЕРЕЖА / ПРОКСІ) -->
+      <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] p-4 rounded-xl flex items-center justify-between shadow">
+        <div class="flex items-center gap-3 min-w-0">
           <div id="proxyDot" class="w-3.5 h-3.5 rounded-full bg-blue-500 shrink-0"></div>
-          <div>
-            <div class="text-xs text-gray-400">Режим підключення</div>
-            <div id="proxyName" class="text-sm font-semibold text-white">Пряме підключення (Без проксі)</div>
+          <div class="min-w-0">
+            <div class="text-xs text-gray-400 flex items-center gap-1.5">
+              <span>🌐</span>
+              <span>Режим підключення</span>
+            </div>
+            <div id="proxyName" class="text-sm font-semibold text-white truncate">Пряме підключення (Без проксі)</div>
+            <div id="proxySubtext" class="text-[11px] text-gray-400 truncate">Direct TCP/TLS з'єднання</div>
           </div>
         </div>
         <span id="proxyBadge" class="bg-blue-950 text-blue-400 border border-blue-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0">DIRECT</span>
       </div>
+    </div>
+    <!-- Приховані елементи для сумісності -->
+    <div class="hidden" aria-hidden="true">
+      <div id="upstreamDot"></div>
+      <div id="upstreamName"></div>
+      <span id="upstreamBadge"></span>
     </div>
 
     <!-- БАНЕР НЕВІДОМИХ ЦІЛЕЙ (ЯКЩО ВИЯВЛЕНО) -->
@@ -328,15 +360,15 @@
       </div>
     </div>
 
-    <!-- ==================== ФРЕЙМ: API КЛЮЧІ СЕРВІСІВ ==================== -->
+    <!-- ==================== ФРЕЙМ: ДЖЕРЕЛА ТА API КЛЮЧІ СЕРВІСІВ ==================== -->
     <div class="bg-[#1e232d] border border-[rgba(128,149,158,0.16)] rounded-xl overflow-hidden shadow-xl" id="serviceKeysFrame">
       <div class="p-4 border-b border-gray-800 flex flex-wrap justify-between items-center gap-3">
         <div>
           <h2 class="font-semibold text-white flex items-center gap-2">
-            <span>🛡️ API ключі сервісів</span>
-            <span class="text-xs bg-amber-950 text-amber-400 border border-amber-800 px-2.5 py-0.5 rounded-full font-mono font-medium">Офіційне API & Мапа</span>
+            <span>🛡️ Джерела даних та API ключі сервісів</span>
+            <span class="text-xs bg-amber-950 text-amber-400 border border-amber-800 px-2.5 py-0.5 rounded-full font-mono font-medium">Розподіл потоків</span>
           </h2>
-          <p class="text-xs text-gray-400 mt-0.5">Керування ліцензійними ключами для офіційних тривог (api.ukrainealarm.com) та підложок мапи (CartoDB Dark Matter)</p>
+          <p class="text-xs text-gray-400 mt-0.5">Розподіл за потоками (Офіційні тривоги, Радарні цілі, Резервний агрегатор, Картографія) та прив'язка ключів</p>
         </div>
         <div>
           <button onclick="loadServiceKeys()" class="h-8 px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition" title="Оновити список ключів">
@@ -350,10 +382,10 @@
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-950 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
             <tr>
-              <th class="p-3 w-64">Назва сервісу</th>
-              <th class="p-3 min-w-[300px]">API ключ</th>
-              <th class="p-3 w-60">Відношення</th>
-              <th class="p-3 text-right w-48">Дії</th>
+              <th class="p-3 w-72">Сервіс та потік</th>
+              <th class="p-3 min-w-[300px]">API ключ / Токен доступу</th>
+              <th class="p-3 w-60">Призначення / Відношення</th>
+              <th class="p-3 text-right w-44">Дії / Статус</th>
             </tr>
           </thead>
           <tbody id="serviceKeysTableBody" class="divide-y divide-gray-800 text-gray-300">
@@ -963,48 +995,122 @@
         document.getElementById("statMig").innerText = hData.mig31k_active ? "АКТИВНА" : "НЕМАЄ";
         document.getElementById("statMig").className = "text-2xl font-bold mt-1 " + (hData.mig31k_active ? "text-red-400 animate-pulse" : "text-emerald-400");
 
-        // Upstream provider
-        const upName = document.getElementById("upstreamName");
-        const upDot = document.getElementById("upstreamDot");
-        const upBadge = document.getElementById("upstreamBadge");
-        const upStr = (hData.upstream_provider || "").toLowerCase();
-        if (upStr.includes("centrifugo") || upStr.includes("ukrainealarm")) {
-          upName.innerText = "Основний потік (WebSocket map.ukrainealarm.com)";
-          upDot.className = "w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse shrink-0";
-          upBadge.innerText = "ОСНОВНИЙ";
-          upBadge.className = "bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
-        } else if (upStr.includes("neptun")) {
-          upName.innerText = "Резервний потік (REST neptun.in.ua)";
-          upDot.className = "w-3.5 h-3.5 rounded-full bg-amber-500 animate-pulse shrink-0";
-          upBadge.innerText = "FAILOVER";
-          upBadge.className = "bg-amber-950 text-amber-400 border border-amber-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
-        } else if (hData.upstream_provider && hData.upstream_provider !== "none" && hData.upstream_provider !== "") {
-          upName.innerText = hData.upstream_provider;
-          upDot.className = "w-3.5 h-3.5 rounded-full bg-emerald-500 shrink-0";
-          upBadge.innerText = "ACTIVE";
-          upBadge.className = "bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+        // 1. Потік тривог (Офіційні сирени / UkraineAlarm v3 vs Neptun)
+        const alarmsTitle = document.getElementById("alarmsSourceTitle");
+        const alarmsDot = document.getElementById("alarmsDot");
+        const alarmsBadge = document.getElementById("alarmsBadge");
+        const alarmsSub = document.getElementById("alarmsSubtext");
+
+        const aProv = (hData.alarms_provider || (hData.sources && hData.sources.alarms) || "").toLowerCase();
+        const aStat = (hData.alarms_status || (hData.sources && hData.sources.alarms_status) || "").toLowerCase();
+
+        if (aProv.includes("ukrainealarm") || aStat === "primary") {
+          if (alarmsTitle) alarmsTitle.innerText = "UkraineAlarm (API v3)";
+          if (alarmsSub) alarmsSub.innerText = "api.ukrainealarm.com (REST Smart Polling)";
+          if (alarmsDot) alarmsDot.className = "w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse shrink-0";
+          if (alarmsBadge) {
+            alarmsBadge.innerText = "ОСНОВНИЙ (API v3)";
+            alarmsBadge.className = "bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          }
+        } else if (aProv.includes("neptun") || aStat === "failover" || aStat === "fallback") {
+          if (alarmsTitle) alarmsTitle.innerText = "Neptun Alerts (Резервний)";
+          if (alarmsSub) alarmsSub.innerText = "neptun.in.ua/api/v1/alerts (Failover)";
+          if (alarmsDot) alarmsDot.className = "w-3.5 h-3.5 rounded-full bg-amber-500 animate-pulse shrink-0";
+          if (alarmsBadge) {
+            alarmsBadge.innerText = "FAILOVER (NEPTUN)";
+            alarmsBadge.className = "bg-amber-950 text-amber-400 border border-amber-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          }
+        } else if (hData.alarms_provider && hData.alarms_provider !== "none" && hData.alarms_provider !== "") {
+          if (alarmsTitle) alarmsTitle.innerText = hData.alarms_provider;
+          if (alarmsSub) alarmsSub.innerText = "Активне джерело тривог";
+          if (alarmsDot) alarmsDot.className = "w-3.5 h-3.5 rounded-full bg-emerald-500 shrink-0";
+          if (alarmsBadge) {
+            alarmsBadge.innerText = "ACTIVE";
+            alarmsBadge.className = "bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          }
         } else {
-          upName.innerText = "Очікування підключення...";
-          upDot.className = "w-3.5 h-3.5 rounded-full bg-gray-500 shrink-0";
-          upBadge.innerText = "CONNECTING";
-          upBadge.className = "bg-gray-800 text-gray-400 border border-gray-700 text-xs px-2.5 py-1 rounded font-mono shrink-0";
+          if (alarmsTitle) alarmsTitle.innerText = "Очікування підключення...";
+          if (alarmsSub) alarmsSub.innerText = "Пошук офіційного API тривог...";
+          if (alarmsDot) alarmsDot.className = "w-3.5 h-3.5 rounded-full bg-gray-500 shrink-0";
+          if (alarmsBadge) {
+            alarmsBadge.innerText = "WAITING";
+            alarmsBadge.className = "bg-gray-800 text-gray-400 border border-gray-700 text-xs px-2.5 py-1 rounded font-mono shrink-0";
+          }
         }
 
-        // Proxy
+        // 2. Потік цілей (Радарні загрози / WS UkraineAlarm vs Neptun)
+        const targetsTitle = document.getElementById("targetsSourceTitle");
+        const targetsDot = document.getElementById("targetsDot");
+        const targetsBadge = document.getElementById("targetsBadge");
+        const targetsSub = document.getElementById("targetsSubtext");
+
+        const tProv = (hData.targets_provider || (hData.sources && hData.sources.targets) || "").toLowerCase();
+        const tStat = (hData.targets_status || (hData.sources && hData.sources.targets_status) || "").toLowerCase();
+
+        if (tProv.includes("ukrainealarm") || tProv.includes("centrifugo") || tStat === "primary") {
+          if (targetsTitle) targetsTitle.innerText = "WS UkraineAlarm";
+          if (targetsSub) targetsSub.innerText = "map.ukrainealarm.com (WebSocket)";
+          if (targetsDot) targetsDot.className = "w-3.5 h-3.5 rounded-full bg-sky-500 animate-pulse shrink-0";
+          if (targetsBadge) {
+            targetsBadge.innerText = "ОСНОВНИЙ (WS)";
+            targetsBadge.className = "bg-sky-950 text-sky-400 border border-sky-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          }
+        } else if (tProv.includes("neptun") || tStat === "failover" || tStat === "fallback") {
+          if (targetsTitle) targetsTitle.innerText = "Neptun Threats (Резервний)";
+          if (targetsSub) targetsSub.innerText = "neptun.in.ua/api/v1/threats (Failover)";
+          if (targetsDot) targetsDot.className = "w-3.5 h-3.5 rounded-full bg-amber-500 animate-pulse shrink-0";
+          if (targetsBadge) {
+            targetsBadge.innerText = "FAILOVER (NEPTUN)";
+            targetsBadge.className = "bg-amber-950 text-amber-400 border border-amber-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          }
+        } else if (hData.targets_provider && hData.targets_provider !== "none" && hData.targets_provider !== "") {
+          if (targetsTitle) targetsTitle.innerText = hData.targets_provider;
+          if (targetsSub) targetsSub.innerText = "Активне джерело цілей";
+          if (targetsDot) targetsDot.className = "w-3.5 h-3.5 rounded-full bg-sky-500 shrink-0";
+          if (targetsBadge) {
+            targetsBadge.innerText = "ACTIVE";
+            targetsBadge.className = "bg-sky-950 text-sky-400 border border-sky-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          }
+        } else {
+          if (targetsTitle) targetsTitle.innerText = "Очікування підключення...";
+          if (targetsSub) targetsSub.innerText = "Слухання радарних потоків...";
+          if (targetsDot) targetsDot.className = "w-3.5 h-3.5 rounded-full bg-gray-500 shrink-0";
+          if (targetsBadge) {
+            targetsBadge.innerText = "WAITING";
+            targetsBadge.className = "bg-gray-800 text-gray-400 border border-gray-700 text-xs px-2.5 py-1 rounded font-mono shrink-0";
+          }
+        }
+
+        // 3. Режим підключення (Проксі / Direct)
         const pName = document.getElementById("proxyName");
         const pDot = document.getElementById("proxyDot");
         const pBadge = document.getElementById("proxyBadge");
+        const pSub = document.getElementById("proxySubtext");
         if (hData.proxy_enabled) {
-          pName.innerText = "Проксі активний (" + hData.proxy_info + ")";
-          pDot.className = "w-3.5 h-3.5 rounded-full bg-orange-500 shrink-0";
-          pBadge.innerText = "PROXY";
-          pBadge.className = "bg-orange-950 text-orange-400 border border-orange-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          if (pName) pName.innerText = "Проксі активний (" + hData.proxy_info + ")";
+          if (pSub) pSub.innerText = "Маршрутизація через SOCKS5/HTTP тунель";
+          if (pDot) pDot.className = "w-3.5 h-3.5 rounded-full bg-orange-500 shrink-0";
+          if (pBadge) {
+            pBadge.innerText = "PROXY";
+            pBadge.className = "bg-orange-950 text-orange-400 border border-orange-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          }
         } else {
-          pName.innerText = "Пряме підключення (Без проксі)";
-          pDot.className = "w-3.5 h-3.5 rounded-full bg-blue-500 shrink-0";
-          pBadge.innerText = "DIRECT";
-          pBadge.className = "bg-blue-950 text-blue-400 border border-blue-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          if (pName) pName.innerText = "Пряме підключення (Без проксі)";
+          if (pSub) pSub.innerText = "Direct TCP/TLS з'єднання";
+          if (pDot) pDot.className = "w-3.5 h-3.5 rounded-full bg-blue-500 shrink-0";
+          if (pBadge) {
+            pBadge.innerText = "DIRECT";
+            pBadge.className = "bg-blue-950 text-blue-400 border border-blue-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          }
         }
+
+        // Legacy compatibility
+        const upName = document.getElementById("upstreamName");
+        const upDot = document.getElementById("upstreamDot");
+        const upBadge = document.getElementById("upstreamBadge");
+        if (upName) upName.innerText = hData.upstream_provider || "Розділені потоки (Тривоги + Цілі)";
+        if (upDot) upDot.className = "w-3.5 h-3.5 rounded-full bg-emerald-500 shrink-0";
+        if (upBadge) upBadge.innerText = "ONLINE";
 
         // Unknown target types banner з підтримкою закриття
         const unkBanner = document.getElementById("unknownTypesBanner");
@@ -1109,13 +1215,17 @@
       });
 
       tbody.innerHTML = `
+        <!-- 1. UKRAINEALARM ОФІЦІЙНИЙ API V3 (ПОТІК ТРИВОГ) -->
         <tr class="hover:bg-gray-900/60 transition">
           <td class="p-3">
             <div class="font-bold text-white flex items-center gap-2">
               <span>🚨</span>
               <span>${escapeHtml(ua.name || "UkraineAlarm Офіційний API v3")}</span>
             </div>
-            <div class="text-[11px] text-orange-400 mt-0.5">Мапа тривог (Офіційні сирени / Smart Polling)</div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <span class="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🚨 ПОТІК ТРИВОГ</span>
+              <span class="text-[11px] text-gray-400">api.ukrainealarm.com</span>
+            </div>
           </td>
           <td class="p-3">
             <div class="flex items-center gap-2 max-w-md">
@@ -1137,6 +1247,7 @@
             <span class="inline-flex items-center gap-1.5 bg-[#282227] text-[#cf9b6d] border border-[#6d5b57] px-2.5 py-1 rounded-lg text-xs font-semibold">
               <span>🌐</span><span>Загальна мапа</span>
             </span>
+            <div class="text-[11px] text-gray-400 mt-1">Офіційні тривоги та сирени</div>
           </td>
           <td class="p-3 text-right space-x-1.5">
             <button onclick="saveServiceKey('ukrainealarm')" class="h-8 px-3 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition shadow">
@@ -1148,13 +1259,75 @@
           </td>
         </tr>
 
+        <!-- 2. WS UKRAINEALARM (ПОТІК ЦІЛЕЙ) -->
+        <tr class="hover:bg-gray-900/60 transition">
+          <td class="p-3">
+            <div class="font-bold text-white flex items-center gap-2">
+              <span>🎯</span>
+              <span>WS UkraineAlarm (Парсер цілей)</span>
+            </div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <span class="bg-sky-950 text-sky-400 border border-sky-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🎯 ПОТІК ЦІЛЕЙ</span>
+              <span class="text-[11px] text-gray-400">map.ukrainealarm.com</span>
+            </div>
+          </td>
+          <td class="p-3">
+            <div class="bg-gray-950 border border-gray-800 px-3 py-1.5 rounded-lg flex items-center justify-between text-xs max-w-md">
+              <span class="text-sky-300 font-mono">Centrifugo WebSocket Stream</span>
+              <span class="text-[11px] text-emerald-400 font-medium bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">Основний</span>
+            </div>
+          </td>
+          <td class="p-3">
+            <span class="inline-flex items-center gap-1.5 bg-[#1b2533] text-sky-400 border border-sky-800 px-2.5 py-1 rounded-lg text-xs font-semibold">
+              <span>🌐</span><span>Загальна мапа</span>
+            </span>
+            <div class="text-[11px] text-gray-400 mt-1">Радарні онлайн загрози</div>
+          </td>
+          <td class="p-3 text-right">
+            <span class="text-xs text-sky-400 bg-sky-950/40 border border-sky-800 px-2.5 py-1 rounded-lg font-mono inline-block">Вбудований клієнт</span>
+          </td>
+        </tr>
+
+        <!-- 3. NEPTUN HUB API (РЕЗЕРВНИЙ ФЕЙЛОВЕР ПОТІК) -->
+        <tr class="hover:bg-gray-900/60 transition">
+          <td class="p-3">
+            <div class="font-bold text-white flex items-center gap-2">
+              <span>🔄</span>
+              <span>Neptun Hub API (Failover)</span>
+            </div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <span class="bg-amber-950 text-amber-400 border border-amber-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🔄 FAILOVER РЕЗЕРВ</span>
+              <span class="text-[11px] text-gray-400">neptun.in.ua</span>
+            </div>
+          </td>
+          <td class="p-3">
+            <div class="bg-gray-950 border border-gray-800 px-3 py-1.5 rounded-lg flex items-center justify-between text-xs max-w-md">
+              <span class="text-amber-300 font-mono">REST Failover (/alerts, /threats)</span>
+              <span class="text-[11px] text-amber-400 font-medium bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800">Резерв готовий</span>
+            </div>
+          </td>
+          <td class="p-3">
+            <span class="inline-flex items-center gap-1.5 bg-[#2b241c] text-amber-400 border border-amber-800 px-2.5 py-1 rounded-lg text-xs font-semibold">
+              <span>🌐</span><span>Загальна мапа</span>
+            </span>
+            <div class="text-[11px] text-gray-400 mt-1">Резерв тривог та цілей</div>
+          </td>
+          <td class="p-3 text-right">
+            <span class="text-xs text-amber-400 bg-amber-950/40 border border-amber-800 px-2.5 py-1 rounded-lg font-mono inline-block">Авто-перемикання</span>
+          </td>
+        </tr>
+
+        <!-- 4. CARTODB DARK MATTER (КАРТОГРАФІЯ) -->
         <tr class="hover:bg-gray-900/60 transition">
           <td class="p-3">
             <div class="font-bold text-white flex items-center gap-2">
               <span>🗺️</span>
               <span>${escapeHtml(carto.name || "CartoDB Dark Matter")}</span>
             </div>
-            <div class="text-[11px] text-sky-400 mt-0.5">Підложка мапи (CARTO Basemaps API)</div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <span class="bg-purple-950 text-purple-400 border border-purple-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🗺️ КАРТОГРАФІЯ</span>
+              <span class="text-[11px] text-gray-400">CARTO Basemaps API</span>
+            </div>
           </td>
           <td class="p-3">
             <div class="flex items-center gap-2 max-w-md">
@@ -1176,6 +1349,7 @@
             <select id="cartodbRelationSelect" onchange="onCartodbRelationChange(this.value)" class="bg-gray-950 border border-gray-700 text-xs text-white rounded-lg px-2.5 py-1.5 focus:border-sky-500 focus:outline-none w-full max-w-[200px]">
               ${relOptionsHtml}
             </select>
+            <div class="text-[11px] text-gray-400 mt-1">Векторна темна підложка</div>
           </td>
           <td class="p-3 text-right space-x-1.5">
             <button onclick="saveServiceKey('cartodb')" class="h-8 px-3 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition shadow">

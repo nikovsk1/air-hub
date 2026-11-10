@@ -490,15 +490,35 @@ async fn handle_get_service_keys(
             "ukrainealarm": {
                 "id": "ukrainealarm",
                 "name": "UkraineAlarm Офіційний API v3",
-                "category": "Мапа тривог",
+                "category": "🚨 Потік тривог (Офіційні сирени)",
+                "stream": "alarms",
+                "usage": "api.ukrainealarm.com/api/v3/alerts",
                 "key": sk.ukrainealarm_api_token.unwrap_or_default(),
                 "relation": "Загальна мапа",
                 "is_fixed_relation": true
             },
+            "centrifugo_ws": {
+                "id": "centrifugo_ws",
+                "name": "WS UkraineAlarm (Парсер цілей)",
+                "category": "🎯 Потік цілей (Радарні загрози)",
+                "stream": "targets",
+                "usage": "map.ukrainealarm.com (Centrifugo WebSocket)",
+                "is_autonomous": true
+            },
+            "neptun": {
+                "id": "neptun",
+                "name": "Neptun API (Failover Агрегатор)",
+                "category": "🔄 Резервний потік (Failover)",
+                "stream": "failover",
+                "usage": "neptun.in.ua (Alerts + Threats)",
+                "is_autonomous": true
+            },
             "cartodb": {
                 "id": "cartodb",
                 "name": "CartoDB Dark Matter",
-                "category": "Підложка мапи",
+                "category": "🗺️ Підложка мапи (CARTO Tiles)",
+                "stream": "basemap",
+                "usage": "basemaps.cartocdn.com (Dark Matter)",
                 "global_key": sk.cartodb_global_api_key.unwrap_or_default(),
                 "user_keys": sk.cartodb_user_keys,
                 "available_relations": relations,

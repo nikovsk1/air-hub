@@ -58,26 +58,32 @@ pub async fn run_failover_neptun_collector(
                     if let Some(threats_raw) = threats_opt {
                     let mut extracted = Vec::new();
                     for t in threats_raw {
-                        let lat = t.get("lat").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                        let lon = t.get("lon").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                        let heading_raw = t.get("heading").and_then(|v| v.as_f64());
+                        let lat = t.get("lat").and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse().ok()))).unwrap_or(0.0);
+                        let lon = t.get("lon").and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse().ok()))).unwrap_or(0.0);
+                        let heading_raw = t.get("heading").and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse().ok())));
                         let mut heading = heading_raw.unwrap_or(0.0);
 
-                        // Якщо курс відсутній (null) або 0.0, спробувати обчислити за останніми двома точками треку
-                        if heading <= 0.0 {
-                            if let Some(trail) = t.get("trail").and_then(|tr| tr.as_array()) {
-                                if trail.len() >= 2 {
-                                    let p_prev = &trail[trail.len() - 2];
-                                    let p_curr = &trail[trail.len() - 1];
-                                    if let (Some(lat1), Some(lon1), Some(lat2), Some(lon2)) = (
-                                        p_prev.get("lat").and_then(|v| v.as_f64()),
-                                        p_prev.get("lon").and_then(|v| v.as_f64()),
-                                        p_curr.get("lat").and_then(|v| v.as_f64()),
-                                        p_curr.get("lon").and_then(|v| v.as_f64()),
-                                    ) {
-                                        heading = calculate_bearing(lat1, lon1, lat2, lon2);
-                                    }
+                        let mut trail_pts = Vec::new();
+                        if let Some(trail) = t.get("trail").and_then(|tr| tr.as_array()) {
+                            for pt in trail {
+                                if let (Some(p_lat), Some(p_lon)) = (
+                                    pt.get("lat").and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse().ok()))),
+                                    pt.get("lon").and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse().ok()))),
+                                ) {
+                                    trail_pts.push((p_lat, p_lon));
                                 }
+                            }
+                        }
+
+                        // Якщо курс відсутній (null) або 0.0, спробувати обчислити за останніми двома точками треку
+                        if heading <= 0.0 && trail_pts.len() >= 2 {
+                            let p_prev = trail_pts[trail_pts.len() - 2];
+                            let p_curr = trail_pts[trail_pts.len() - 1];
+                            heading = calculate_bearing(p_prev.0, p_prev.1, p_curr.0, p_curr.1);
+                        } else if heading <= 0.0 && !trail_pts.is_empty() && (lat != 0.0 || lon != 0.0) {
+                            let p_last = trail_pts[trail_pts.len() - 1];
+                            if (p_last.0 - lat).abs() > 0.001 || (p_last.1 - lon).abs() > 0.001 {
+                                heading = calculate_bearing(p_last.0, p_last.1, lat, lon);
                             }
                         }
 
@@ -94,7 +100,7 @@ pub async fn run_failover_neptun_collector(
 
                         // Нептун реєструє цілі незалежно без об'єднання з UkraineAlarm
                         let id = t.get("id").and_then(|v| v.as_str()).map(|s| s.to_string())
-                            .unwrap_or_else(|| format!("nep_{:.2}_{:.2}", lat, lon));
+                            .unwrap_or_else(|| format!("nep_{:.4}_{:.4}", lat, lon));
 
                         extracted.push(RawExtractedTarget {
                             id,
@@ -106,7 +112,7 @@ pub async fn run_failover_neptun_collector(
                             speed_kmh: None,
                             confidence: None,
                             time_offset_ms: None,
-                            trail_points: Vec::new(),
+                            trail_points: trail_pts,
                             upstream_status: "active".to_string(),
                         });
                     }
