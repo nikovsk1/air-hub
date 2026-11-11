@@ -109,6 +109,96 @@ pub struct ServiceKeysConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamSourceConfig {
+    pub id: String,                    // "ukrainealarm_alerts", "neptun_alerts", "ukrainealarm_ws", "neptun_targets"
+    pub name: String,                  // "UkraineAlarm Офіційний API v3", "Neptun API (Резерв тривог)", etc.
+    pub stream_type: String,           // "alerts" | "targets" | "basemap"
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_priority")]
+    pub priority: u32,                 // 1 = primary, 2 = secondary, 3 = tertiary...
+    #[serde(default = "default_poll_interval")]
+    pub poll_interval_sec: u64,        // e.g. 15, 6, 0 (real-time WS), 5
+    #[serde(default = "default_failover_timeout")]
+    pub failover_timeout_sec: f64,     // e.g. 15.0
+    #[serde(default)]
+    pub endpoint_url: String,
+    #[serde(default)]
+    pub autonomous: bool,
+    #[serde(default)]
+    pub relation: Option<String>,
+}
+
+fn default_priority() -> u32 { 1 }
+fn default_poll_interval() -> u64 { 15 }
+fn default_failover_timeout() -> f64 { 15.0 }
+
+pub fn default_stream_sources() -> Vec<StreamSourceConfig> {
+    vec![
+        StreamSourceConfig {
+            id: "ukrainealarm_alerts".to_string(),
+            name: "UkraineAlarm Офіційний API v3".to_string(),
+            stream_type: "alerts".to_string(),
+            enabled: true,
+            priority: 1,
+            poll_interval_sec: 15,
+            failover_timeout_sec: 15.0,
+            endpoint_url: "api.ukrainealarm.com/api/v3/alerts".to_string(),
+            autonomous: false,
+            relation: Some("Загальна мапа".to_string()),
+        },
+        StreamSourceConfig {
+            id: "neptun_alerts".to_string(),
+            name: "Neptun API (Резерв тривог)".to_string(),
+            stream_type: "alerts".to_string(),
+            enabled: true,
+            priority: 2,
+            poll_interval_sec: 6,
+            failover_timeout_sec: 15.0,
+            endpoint_url: "neptun.in.ua/api/v1/alerts".to_string(),
+            autonomous: true,
+            relation: Some("Загальна мапа".to_string()),
+        },
+        StreamSourceConfig {
+            id: "ukrainealarm_ws".to_string(),
+            name: "WS UkraineAlarm (Парсер цілей)".to_string(),
+            stream_type: "targets".to_string(),
+            enabled: true,
+            priority: 1,
+            poll_interval_sec: 0,
+            failover_timeout_sec: 15.0,
+            endpoint_url: "map.ukrainealarm.com (Centrifugo WS)".to_string(),
+            autonomous: true,
+            relation: Some("Загальна мапа".to_string()),
+        },
+        StreamSourceConfig {
+            id: "neptun_targets".to_string(),
+            name: "Neptun API (Резерв цілей)".to_string(),
+            stream_type: "targets".to_string(),
+            enabled: true,
+            priority: 2,
+            poll_interval_sec: 5,
+            failover_timeout_sec: 15.0,
+            endpoint_url: "neptun.in.ua/api/v1/threats".to_string(),
+            autonomous: true,
+            relation: Some("Загальна мапа".to_string()),
+        },
+        StreamSourceConfig {
+            id: "mapa_targets".to_string(),
+            name: "MAPA.UA API (Цілі/загрози)".to_string(),
+            stream_type: "targets".to_string(),
+            enabled: true,
+            priority: 3,
+            poll_interval_sec: 10,
+            failover_timeout_sec: 20.0,
+            endpoint_url: "mapa.ua/api/v1/current".to_string(),
+            autonomous: true,
+            relation: Some("Загальна мапа".to_string()),
+        },
+    ]
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HubConfigData {
     pub users: HashMap<String, User>,
     #[serde(default)]
@@ -122,6 +212,8 @@ pub struct HubConfigData {
     pub last_gdrive_sync_ts: Option<i64>,
     #[serde(default)]
     pub service_keys: ServiceKeysConfig,
+    #[serde(default = "default_stream_sources")]
+    pub streams: Vec<StreamSourceConfig>,
 }
 
 fn default_sync_hours() -> u32 { 12 }
@@ -137,6 +229,7 @@ impl Default for HubConfigData {
             gdrive_auto_sync_hours: 12,
             last_gdrive_sync_ts: None,
             service_keys: ServiceKeysConfig::default(),
+            streams: default_stream_sources(),
         }
     }
 }
@@ -236,6 +329,15 @@ impl StorageManager {
             }
         }
 
+        // Гарантуємо наявність усіх 4 стандартних потоків конфігурації
+        let defaults = default_stream_sources();
+        for def in defaults {
+            if !loaded.streams.iter().any(|s| s.id == def.id) {
+                loaded.streams.push(def);
+            }
+        }
+        loaded.streams.sort_by_key(|s| s.priority);
+
         let mgr = Self {
             file_path,
             poi_path,
@@ -246,6 +348,55 @@ impl StorageManager {
         let _ = mgr.save_atomic();
         let _ = mgr.save_pois_atomic();
         mgr
+    }
+
+    pub fn get_streams(&self) -> Vec<StreamSourceConfig> {
+        let guard = self.data.read();
+        let mut streams = guard.streams.clone();
+        streams.sort_by_key(|s| s.priority);
+        streams
+    }
+
+    pub fn get_stream(&self, id: &str) -> Option<StreamSourceConfig> {
+        let guard = self.data.read();
+        guard.streams.iter().find(|s| s.id == id).cloned()
+    }
+
+    #[allow(dead_code)]
+    pub fn is_stream_enabled(&self, id: &str) -> bool {
+        let guard = self.data.read();
+        guard.streams.iter().find(|s| s.id == id).map(|s| s.enabled).unwrap_or(false)
+    }
+
+    pub fn set_streams(&self, new_streams: Vec<StreamSourceConfig>) -> Result<(), String> {
+        {
+            let mut guard = self.data.write();
+            guard.streams = new_streams;
+            guard.streams.sort_by_key(|s| s.priority);
+        }
+        self.save_atomic()
+    }
+
+    pub fn update_stream(
+        &self,
+        id: &str,
+        enabled: Option<bool>,
+        priority: Option<u32>,
+        poll_interval_sec: Option<u64>,
+        failover_timeout_sec: Option<f64>,
+    ) -> Result<StreamSourceConfig, String> {
+        let mut guard = self.data.write();
+        let stream = guard.streams.iter_mut().find(|s| s.id == id)
+            .ok_or_else(|| format!("Stream '{}' not found", id))?;
+        if let Some(en) = enabled { stream.enabled = en; }
+        if let Some(pr) = priority { stream.priority = pr; }
+        if let Some(pi) = poll_interval_sec { stream.poll_interval_sec = pi; }
+        if let Some(ft) = failover_timeout_sec { stream.failover_timeout_sec = ft; }
+        let res = stream.clone();
+        guard.streams.sort_by_key(|s| s.priority);
+        drop(guard);
+        self.save_atomic()?;
+        Ok(res)
     }
 
     pub fn get_pois(&self) -> Vec<PoiItem> {
@@ -516,6 +667,14 @@ impl StorageManager {
             if let Some(sk_val) = payload.get("service_keys") {
                 if let Ok(sk) = serde_json::from_value::<ServiceKeysConfig>(sk_val.clone()) {
                     guard.service_keys = sk;
+                }
+            }
+
+            // Відновлення конфігурації потоків (якщо присутні в бекапі)
+            if let Some(st_val) = payload.get("streams") {
+                if let Ok(st) = serde_json::from_value::<Vec<StreamSourceConfig>>(st_val.clone()) {
+                    guard.streams = st;
+                    guard.streams.sort_by_key(|s| s.priority);
                 }
             }
         }
@@ -929,5 +1088,22 @@ mod tests {
         assert!(guest.slots.is_empty(), "Guest must not have pre-configured private observation slots");
         assert_eq!(guest.default_danger_zone, 35.0);
         assert!(guest.enabled);
+    }
+
+    #[test]
+    fn test_stream_source_config_defaults_and_sorting() {
+        let mut defaults = default_stream_sources();
+        assert_eq!(defaults.len(), 5);
+        assert_eq!(defaults[0].id, "ukrainealarm_alerts");
+        assert_eq!(defaults[1].id, "neptun_alerts");
+        assert_eq!(defaults[2].id, "ukrainealarm_ws");
+        assert_eq!(defaults[3].id, "neptun_targets");
+        assert_eq!(defaults[4].id, "mapa_targets");
+
+        // Пріоритет переставляється динамічно
+        defaults[3].priority = 0;
+        defaults.sort_by_key(|s| s.priority);
+        assert_eq!(defaults[0].priority, 0);
+        assert_eq!(defaults[0].id, "neptun_targets");
     }
 }

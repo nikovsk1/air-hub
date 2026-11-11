@@ -170,6 +170,29 @@ async fn process_ukrainealarm_payload_inner(
     }
 
     if let Some((extracted, stream_type)) = extracted_targets {
+        let ua_stream = storage.get_stream("ukrainealarm_ws");
+        let neptun_stream = storage.get_stream("neptun_targets");
+
+        let ua_enabled = ua_stream.as_ref().map(|s| s.enabled).unwrap_or(true);
+        if !ua_enabled {
+            debug!("WS UkraineAlarm: stream is disabled by admin configuration. Skipping payload commit.");
+            return false;
+        }
+
+        let neptun_enabled = neptun_stream.as_ref().map(|s| s.enabled).unwrap_or(true);
+        let neptun_priority = neptun_stream.as_ref().map(|s| s.priority).unwrap_or(2);
+        let ua_priority = ua_stream.as_ref().map(|s| s.priority).unwrap_or(1);
+
+        let mapa_stream = storage.get_stream("mapa_targets");
+        let mapa_enabled = mapa_stream.as_ref().map(|s| s.enabled).unwrap_or(true);
+        let mapa_priority = mapa_stream.as_ref().map(|s| s.priority).unwrap_or(3);
+
+        // Якщо Neptun Targets або MAPA.UA призначено вищим за пріоритетом потоком
+        if (neptun_enabled && neptun_priority < ua_priority) || (mapa_enabled && mapa_priority < ua_priority) {
+            debug!("WS UkraineAlarm: Alternative target stream has higher priority. Ignoring secondary WS stream.");
+            return false;
+        }
+
         let mut state = threat_state.write().await;
         let provider_name = format!("{} ({})", source_label, stream_type);
         let lost_tracks = state.tracker.update_batch(&extracted, detector, Some(exchange_mgr), &provider_name);
@@ -198,9 +221,14 @@ async fn process_ukrainealarm_payload_inner(
                     trk.last_history_sync_ts = now;
                 }
             }
-            // Фіксація завершення польоту зі збереженням повної траєкторії!
+            // Фіксація завершення польоту зі збереженням повної траєкторії та точного статусу (збито/приліт/втрачено)!
             for trk in &lost_tracks {
-                history_mgr.record_track(trk, "lost");
+                let hist_status = match trk.status.as_str() {
+                    "eliminated" => "eliminated",
+                    "hit_target" => "hit_target",
+                    _ => "lost",
+                };
+                history_mgr.record_track(trk, hist_status);
             }
         }
         true
@@ -463,12 +491,26 @@ pub async fn run_ukrainealarm_collector(
                                         });
                                         let _ = write.send(Message::Text(sub_frame.to_string())).await;
                                         info!("Successfully subscribed to Centrifugo channel: {}", channel);
+                                        let is_ua_primary = {
+                                            let ua_s = storage.get_stream("ukrainealarm_ws");
+                                            let nep_s = storage.get_stream("neptun_targets");
+                                            let map_s = storage.get_stream("mapa_targets");
+                                            let ua_en = ua_s.as_ref().map(|s| s.enabled).unwrap_or(true);
+                                            let nep_en = nep_s.as_ref().map(|s| s.enabled).unwrap_or(true);
+                                            let map_en = map_s.as_ref().map(|s| s.enabled).unwrap_or(true);
+                                            let ua_p = ua_s.as_ref().map(|s| s.priority).unwrap_or(1);
+                                            let nep_p = nep_s.as_ref().map(|s| s.priority).unwrap_or(2);
+                                            let map_p = map_s.as_ref().map(|s| s.priority).unwrap_or(3);
+                                            ua_en && (!nep_en || ua_p <= nep_p) && (!map_en || ua_p <= map_p)
+                                        };
                                         {
                                             let mut state = threat_state.write().await;
                                             state.last_primary_targets_ts = now_sec();
                                             state.last_ws_targets_ts = now_sec();
-                                            state.targets_provider = "WS UkraineAlarm".to_string();
-                                            state.last_targets_provider_status = "primary".to_string();
+                                            if is_ua_primary {
+                                                state.targets_provider = "WS UkraineAlarm".to_string();
+                                                state.last_targets_provider_status = "primary".to_string();
+                                            }
                                         }
                                     } else {
                                         warn!("Could not extract subscription token from response: {:?}", sub_data);
@@ -580,6 +622,12 @@ pub async fn run_ukrainealarm_http_fallback(
 
     // 2. Dual-Stack Smart Fusion Engine
     loop {
+        let ua_stream = storage.get_stream("ukrainealarm_ws");
+        if !ua_stream.as_ref().map(|s| s.enabled).unwrap_or(true) {
+            sleep(Duration::from_secs(5)).await;
+            continue;
+        }
+
         let ws_silence_sec = {
             let state = threat_state.read().await;
             now_sec() - state.last_ws_targets_ts

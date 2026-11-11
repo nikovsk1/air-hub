@@ -82,9 +82,22 @@ async fn authenticate_user(
     _addr: Option<SocketAddr>,
 ) -> Option<User> {
     let header_key = extract_client_api_key(headers, None);
+    let cookie_key = headers.get(header::COOKIE).and_then(|h| h.to_str().ok()).and_then(|cookies| {
+        for part in cookies.split(';') {
+            let mut kv = part.splitn(2, '=');
+            let k = kv.next()?.trim();
+            let v = kv.next()?.trim();
+            if k == "radar_client_token" || k == "air_alert_token" {
+                return Some(v.to_string());
+            }
+        }
+        None
+    });
+
     let key_opt = query.token.as_deref()
         .or_else(|| query.api_key.as_deref())
-        .or_else(|| header_key.as_deref());
+        .or_else(|| header_key.as_deref())
+        .or_else(|| cookie_key.as_deref());
 
     if let Some(key) = key_opt {
         if let Some(user) = state.storage.get_user_by_key(key) {
@@ -1255,7 +1268,7 @@ async fn handle_ws_client(
 
     let mut selected_slot = query.slot.or(query.slot_id).unwrap_or_else(|| "1".to_string());
     let mut watch_rx = state.threat_watch_rx.clone();
-    let timeout_duration = Duration::from_secs(3);
+    let timeout_duration = Duration::from_secs(15);
     let mut fallback_tick = tokio::time::interval(Duration::from_millis(1000));
     let mut last_sent_seq;
 
@@ -1306,7 +1319,7 @@ async fn handle_ws_client(
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
                         let trimmed = text.trim();
-                        if trimmed == "ping" {
+                        if trimmed == "ping" || trimmed.contains("\"ping\"") {
                             let _ = tokio::time::timeout(timeout_duration, socket.send(Message::Text("{\"type\":\"pong\"}".to_string()))).await;
                         } else if let Ok(cmd) = serde_json::from_str::<Value>(trimmed) {
                             if cmd.get("action").and_then(|a| a.as_str()) == Some("switch_slot") {

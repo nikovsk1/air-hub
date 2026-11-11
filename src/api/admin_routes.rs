@@ -79,6 +79,7 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/api/v1/admin/history/download/:month", get(handle_download_history_month))
         .route("/api/v1/admin/history/upload", post(handle_upload_history_json))
         .route("/api/v1/admin/service_keys", get(handle_get_service_keys).post(handle_save_service_key).delete(handle_delete_service_key))
+        .route("/api/v1/admin/streams", get(handle_get_streams).post(handle_save_streams))
         .route("/api/v1/admin/poi", get(handle_admin_list_poi).post(handle_admin_save_poi))
         .route("/api/v1/admin/poi/:id", put(handle_admin_save_poi).delete(handle_admin_delete_poi))
         .route("/api/v1/admin/backup", get(handle_download_backup))
@@ -477,6 +478,7 @@ async fn handle_get_service_keys(
 
     let sk = state.storage.get_service_keys();
     let all_users = state.storage.get_all_users();
+    let streams = state.storage.get_streams();
     let mut relations = vec!["Загальна мапа".to_string()];
     for u in &all_users {
         if !relations.contains(&u.owner) {
@@ -486,6 +488,7 @@ async fn handle_get_service_keys(
 
     Json(json!({
         "status": "ok",
+        "streams": streams,
         "service_keys": {
             "ukrainealarm": {
                 "id": "ukrainealarm",
@@ -562,6 +565,69 @@ async fn handle_delete_service_key(
         Ok(_) => Json(json!({"status": "ok", "message": "deleted"})).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"status": "error", "message": e}))).into_response(),
     }
+}
+
+#[derive(Deserialize)]
+pub struct StreamUpdatePayload {
+    pub id: Option<String>,
+    pub enabled: Option<bool>,
+    pub priority: Option<u32>,
+    pub poll_interval_sec: Option<u64>,
+    pub failover_timeout_sec: Option<f64>,
+    pub streams: Option<Vec<crate::storage::StreamSourceConfig>>,
+}
+
+async fn handle_get_streams(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Response {
+    if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
+        return status.into_response();
+    }
+    let streams = state.storage.get_streams();
+    Json(json!({
+        "status": "ok",
+        "streams": streams
+    })).into_response()
+}
+
+async fn handle_save_streams(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(payload): Json<StreamUpdatePayload>,
+) -> Response {
+    if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
+        return status.into_response();
+    }
+
+    if let Some(streams_list) = payload.streams {
+        if let Err(e) = state.storage.set_streams(streams_list) {
+            return (StatusCode::BAD_REQUEST, Json(json!({"status": "error", "message": e}))).into_response();
+        }
+    } else if let Some(id) = payload.id {
+        if let Err(e) = state.storage.update_stream(
+            &id,
+            payload.enabled,
+            payload.priority,
+            payload.poll_interval_sec,
+            payload.failover_timeout_sec,
+        ) {
+            return (StatusCode::BAD_REQUEST, Json(json!({"status": "error", "message": e}))).into_response();
+        }
+    } else {
+        return (StatusCode::BAD_REQUEST, Json(json!({"status": "error", "message": "Missing streams array or stream id"}))).into_response();
+    }
+
+    let streams = state.storage.get_streams();
+    Json(json!({
+        "status": "ok",
+        "message": "saved",
+        "streams": streams
+    })).into_response()
 }
 
 async fn handle_download_backup(

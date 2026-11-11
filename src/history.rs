@@ -52,6 +52,12 @@ pub struct DailySummary {
     pub status: String, // "accumulated" | "reconciled"
     pub total: usize,
     pub types: HashMap<String, usize>,
+    #[serde(default)]
+    pub eliminated: usize,
+    #[serde(default)]
+    pub hit_target: usize,
+    #[serde(default)]
+    pub lost: usize,
     pub hours: Vec<HourlySummary>,
     pub regions: Vec<RegionSummary>,
     pub last_updated_at: String,
@@ -74,6 +80,9 @@ impl DailySummary {
             status: "accumulated".to_string(),
             total: 0,
             types: HashMap::new(),
+            eliminated: 0,
+            hit_target: 0,
+            lost: 0,
             hours,
             regions: Vec::new(),
             last_updated_at: Utc::now().to_rfc3339(),
@@ -89,6 +98,9 @@ struct TodayStats {
     tracked_target_ids: HashSet<String>,
     total: usize,
     by_category: HashMap<String, usize>,
+    eliminated_count: usize,
+    hit_target_count: usize,
+    lost_count: usize,
 }
 
 pub struct HistoryManager {
@@ -162,6 +174,9 @@ impl HistoryManager {
                 tracked_target_ids: today_ids,
                 total: today_total,
                 by_category: today_by_cat,
+                eliminated_count: 0,
+                hit_target_count: 0,
+                lost_count: 0,
             }),
             month_meta_cache: RwLock::new(HashMap::new()),
             daily_summaries: RwLock::new(initial_daily_summaries),
@@ -222,6 +237,9 @@ impl HistoryManager {
                 ts.tracked_target_ids.clear();
                 ts.total = 0;
                 ts.by_category.clear();
+                ts.eliminated_count = 0;
+                ts.hit_target_count = 0;
+                ts.lost_count = 0;
             }
             if ts.tracked_target_ids.insert(trk.id.clone()) {
                 ts.total += 1;
@@ -254,6 +272,44 @@ impl HistoryManager {
                 }
             }
             day_summary.last_updated_at = Utc::now().to_rfc3339();
+        }
+
+        // 2.1 Накопичувальний облік завершення цілей (збито / приліт / втрачено)
+        match status {
+            "eliminated" => {
+                let mut ts = self.today_stats.write();
+                if ts.date == date_str {
+                    ts.eliminated_count += 1;
+                }
+                let mut all_summaries = self.daily_summaries.write();
+                let month_map = all_summaries.entry(month.clone()).or_default();
+                let day_summary = month_map.entry(date_str.clone()).or_insert_with(|| DailySummary::new_empty(&date_str));
+                day_summary.eliminated += 1;
+                day_summary.last_updated_at = Utc::now().to_rfc3339();
+            }
+            "hit_target" => {
+                let mut ts = self.today_stats.write();
+                if ts.date == date_str {
+                    ts.hit_target_count += 1;
+                }
+                let mut all_summaries = self.daily_summaries.write();
+                let month_map = all_summaries.entry(month.clone()).or_default();
+                let day_summary = month_map.entry(date_str.clone()).or_insert_with(|| DailySummary::new_empty(&date_str));
+                day_summary.hit_target += 1;
+                day_summary.last_updated_at = Utc::now().to_rfc3339();
+            }
+            "lost" => {
+                let mut ts = self.today_stats.write();
+                if ts.date == date_str {
+                    ts.lost_count += 1;
+                }
+                let mut all_summaries = self.daily_summaries.write();
+                let month_map = all_summaries.entry(month.clone()).or_default();
+                let day_summary = month_map.entry(date_str.clone()).or_insert_with(|| DailySummary::new_empty(&date_str));
+                day_summary.lost += 1;
+                day_summary.last_updated_at = Utc::now().to_rfc3339();
+            }
+            _ => {}
         }
 
         // 3. Формуємо запис траєкторії для збереження
@@ -678,6 +734,19 @@ impl HistoryManager {
             (ts.total, ts.by_category.clone())
         } else {
             (0, HashMap::new())
+        }
+    }
+
+    /// Повертає кількість збитих, прильотів та втрачених цілей за поточну добу (eliminated, hit_target, lost)
+    #[allow(dead_code)]
+    pub fn get_today_outcome_stats(&self) -> (usize, usize, usize) {
+        let kyiv = Self::now_kyiv();
+        let now_date = kyiv.format("%Y-%m-%d").to_string();
+        let ts = self.today_stats.read();
+        if ts.date == now_date {
+            (ts.eliminated_count, ts.hit_target_count, ts.lost_count)
+        } else {
+            (0, 0, 0)
         }
     }
 

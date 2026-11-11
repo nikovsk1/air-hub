@@ -610,11 +610,13 @@ pub fn extract_targets(decoded: &Value) -> Vec<RawExtractedTarget> {
         if t[0] < 0.0 || t[1] < 0.0 || t[2] < 0.0 || t[0].is_nan() || t[1].is_nan() || t[2].is_nan() {
             continue;
         }
-        // Статус засічки з t[4]: 1.0 => active, 0.0 => lost (archived), 2.0 => cooldown (blind zone), 3.0 => lost (destroyed)
+        // Статус засічки з t[4]: 1.0 => active, 0.0 => lost (archived / disappeared), 2.0 => cooldown (blind zone), 3.0 => eliminated (destroyed ППО), 4.0 => hit_target (impact)
         let upstream_status = if t.len() > 4 {
             match t[4] as i64 {
-                0 | 3 => "lost".to_string(),
+                0 => "lost".to_string(),
                 2 => "cooldown".to_string(),
+                3 => "eliminated".to_string(),
+                4 => "hit_target".to_string(),
                 _ => "active".to_string(),
             }
         } else {

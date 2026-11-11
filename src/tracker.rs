@@ -291,7 +291,9 @@ pub struct LostTargetRecord {
     pub lat: f64,
     pub lon: f64,
     pub heading: f64,
-    pub status: String, // "lost"
+    pub status: String, // "lost" (Варіант А: тактичний червоний хрест для мапи)
+    #[serde(default = "default_lost_outcome")]
+    pub outcome: String, // "lost" | "eliminated" | "hit_target" (точний результат для статистики)
     pub lost_ts: f64,
     #[serde(default)]
     pub first_seen: f64,
@@ -299,13 +301,30 @@ pub struct LostTargetRecord {
     pub trajectory: Vec<TrajectoryPoint>,
 }
 
+fn default_lost_outcome() -> String {
+    "lost".to_string()
+}
+
 #[derive(Default)]
 pub struct TargetTracker {
     pub tracks: HashMap<String, TargetTrack>,
     pub recent_lost: HashMap<String, LostTargetRecord>,
+    pub current_source: String,
 }
 
 impl TargetTracker {
+    /// Безслідне видалення цілі з пам'яті та карти (remove) без створення хрестика в recent_lost
+    pub fn silent_remove(&mut self, id: &str) {
+        self.tracks.remove(id);
+        self.recent_lost.remove(id);
+    }
+
+    #[allow(dead_code)]
+    pub fn silent_source_switch(&mut self, new_source: &str) {
+        self.tracks.clear();
+        self.current_source = new_source.to_string();
+    }
+
     pub fn update_batch(
         &mut self,
         incoming_targets: &[RawExtractedTarget],
@@ -317,13 +336,31 @@ impl TargetTracker {
         let mut seen_ids = std::collections::HashSet::new();
         let mut lost_tracks = Vec::new();
 
+        // Захист від хибних хрестів збиття: тихий перехід між будь-якими джерелами (UkraineAlarm <-> Neptun <-> MAPA.UA)
+        let is_source_switch = !self.current_source.is_empty()
+            && !source.is_empty()
+            && self.current_source != source;
+
+        if is_source_switch {
+            // Очищаємо попередні треки попереднього провайдера БЕЗ переведення їх у recent_lost
+            self.tracks.clear();
+        }
+        self.current_source = source.to_string();
+
         for t in incoming_targets {
             seen_ids.insert(&t.id);
 
-            // Якщо джерело явно сповіщає про втрату / знищення цілі ("lost")
-            if t.upstream_status == "lost" {
+            // 1. Обробка "remove" — видалення БЕЗСЛІДНО (без хрестика, без cooldown)
+            if t.upstream_status == "remove" {
+                self.silent_remove(&t.id);
+                continue;
+            }
+
+            // 2. Обробка "eliminated" (збиття ППО) або "hit_target" (приліт) — остаточна фіксація
+            if t.upstream_status == "eliminated" || t.upstream_status == "hit_target" {
+                let status_str = t.upstream_status.clone();
                 if let Some(mut trk) = self.tracks.remove(&t.id) {
-                    trk.status = "lost".to_string();
+                    trk.status = status_str.clone();
                     trk.last_seen = now;
                     self.recent_lost.insert(
                         t.id.clone(),
@@ -335,7 +372,8 @@ impl TargetTracker {
                             lat: trk.lat,
                             lon: trk.lon,
                             heading: trk.heading,
-                            status: "lost".to_string(),
+                            status: "lost".to_string(), // Варіант А: єдиний червоний хрест для мапи
+                            outcome: status_str,        // точний результат для статистики
                             lost_ts: now,
                             first_seen: trk.first_seen,
                             trajectory: trk.trajectory.clone(),
@@ -375,10 +413,17 @@ impl TargetTracker {
 
             let eff_speed = t.speed_kmh.unwrap_or(0.0);
 
+            // 3. Статуси "lost", "disappeared", "cooldown" входять у стан cooldown з вікном мовчання 30 сек
+            let is_incoming_cooldown = t.upstream_status == "cooldown"
+                || t.upstream_status == "lost"
+                || t.upstream_status == "disappeared";
+
             if let Some(trk) = self.tracks.get_mut(&t.id) {
-                if t.upstream_status == "cooldown" {
-                    trk.status = "cooldown".to_string();
-                    trk.cooldown_start_ts = Some(now);
+                if is_incoming_cooldown {
+                    if trk.status != "cooldown" {
+                        trk.status = "cooldown".to_string();
+                        trk.cooldown_start_ts = Some(now);
+                    }
                 } else if t.upstream_status == "active" {
                     trk.status = "active".to_string();
                     trk.cooldown_start_ts = None;
@@ -423,6 +468,10 @@ impl TargetTracker {
                     ob_info.id,
                     ob_info.raion_id,
                 );
+                if is_incoming_cooldown {
+                    trk.status = "cooldown".to_string();
+                    trk.cooldown_start_ts = Some(now);
+                }
                 if !t.trail_points.is_empty() {
                     trk = trk.with_trail(&t.trail_points, now as i64);
                 }
@@ -435,7 +484,7 @@ impl TargetTracker {
 
         // Дворівневий життєвий цикл без оновлень від джерела:
         // 1. Якщо ціль у статусі "active" не оновлювалась >= 20 сек -> переводимо в "cooldown"
-        // 2. Якщо ціль у статусі "cooldown" не оновлювалась >= 60 сек -> остаточний перехід у "lost"
+        // 2. Якщо ціль у статусі "cooldown" мовчить >= 30 сек (від cooldown_start_ts) -> остаточний перехід у "lost"
         let mut expired_ids = Vec::new();
         for (id, trk) in self.tracks.iter_mut() {
             if !seen_ids.contains(id) {
@@ -447,9 +496,15 @@ impl TargetTracker {
                     }
                 } else if trk.status == "cooldown" {
                     let cd_start = trk.cooldown_start_ts.unwrap_or(trk.last_seen);
-                    if (now - cd_start) >= 60.0 {
+                    if (now - cd_start) >= 30.0 {
                         expired_ids.push(id.clone());
                     }
+                }
+            } else if trk.status == "cooldown" {
+                // Якщо ціль передається джерелом у статусі cooldown/lost довше ніж 30 секунд без повернення в active
+                let cd_start = trk.cooldown_start_ts.unwrap_or(trk.last_seen);
+                if (now - cd_start) >= 30.0 {
+                    expired_ids.push(id.clone());
                 }
             }
         }
@@ -468,6 +523,7 @@ impl TargetTracker {
                         lon: trk.lon,
                         heading: trk.heading,
                         status: "lost".to_string(),
+                        outcome: "lost".to_string(),
                         lost_ts: now,
                         first_seen: trk.first_seen,
                         trajectory: trk.trajectory.clone(),
@@ -508,6 +564,7 @@ impl TargetTracker {
                         lon: trk.lon,
                         heading: trk.heading,
                         status: "lost".to_string(),
+                        outcome: "lost".to_string(),
                         lost_ts: now,
                         first_seen: trk.first_seen,
                         trajectory: trk.trajectory.clone(),
@@ -564,6 +621,7 @@ pub struct ThreatState {
     pub last_primary_targets_ts: f64,
     pub last_ws_targets_ts: f64,
     pub last_alerts_update_ts: f64,
+    pub ua_alerts_cooldown_until: f64,
     pub update_seq: u64,
     pub upstream_provider: String,
     pub alarms_provider: String,
@@ -586,6 +644,7 @@ impl Default for ThreatState {
             last_primary_targets_ts: now_sec(),
             last_ws_targets_ts: now_sec(),
             last_alerts_update_ts: now_sec(),
+            ua_alerts_cooldown_until: 0.0,
             update_seq: 1,
             upstream_provider: "Centrifugo (ws.ukrainealarm.com)".to_string(),
             alarms_provider: "UkraineAlarm (API v3)".to_string(),
@@ -834,5 +893,149 @@ mod tests {
         assert_eq!(track.lat, 50.05);
         assert_eq!(track.lon, 30.0);
         assert_eq!(track.speed_kmh, 220.0);
+    }
+
+    #[test]
+    fn test_silent_source_switch_zero_fake_shootdowns() {
+        let detector = OblastDetector::default();
+        let mut tracker = TargetTracker::default();
+
+        let ua_target = RawExtractedTarget {
+            id: "trk_001".to_string(),
+            lat: 50.45,
+            lon: 30.52,
+            raw_name: "shahed".to_string(),
+            raw_type_code: 8,
+            heading_deg: 90.0,
+            speed_kmh: Some(185.0),
+            confidence: None,
+            time_offset_ms: None,
+            trail_points: vec![(50.45, 30.50), (50.45, 30.52)],
+            upstream_status: "active".to_string(),
+        };
+
+        // 1. Початковий пакет цілей від WS UkraineAlarm
+        let _ = tracker.update_batch(&[ua_target], &detector, None, "WS UkraineAlarm");
+        assert_eq!(tracker.tracks.len(), 1);
+        assert!(tracker.tracks.contains_key("trk_001"));
+        assert!(tracker.recent_lost.is_empty());
+
+        // 2. Перехід на Neptun: тихий перехід має видалити trk_001 БЕЗ переведення у recent_lost
+        let neptun_target = RawExtractedTarget {
+            id: "nep_001".to_string(),
+            lat: 50.46,
+            lon: 30.53,
+            raw_name: "uav".to_string(),
+            raw_type_code: 8,
+            heading_deg: 95.0,
+            speed_kmh: Some(180.0),
+            confidence: None,
+            time_offset_ms: None,
+            trail_points: vec![],
+            upstream_status: "active".to_string(),
+        };
+
+        let _ = tracker.update_batch(&[neptun_target], &detector, None, "Neptun Failover");
+        assert_eq!(tracker.tracks.len(), 1);
+        assert!(tracker.tracks.contains_key("nep_001"));
+        assert!(!tracker.tracks.contains_key("trk_001"));
+        // КРИТИЧНИЙ ІНВАРІАНТ: recent_lost має бути пустим, жодних хибних червоних хрестів збиття!
+        assert!(tracker.recent_lost.is_empty(), "Silent source switch must NOT add retired provider targets to recent_lost!");
+
+        // 3. Перехід на MAPA.UA: тихий перехід має очистити nep_001 БЕЗ хибних хрестів збиття
+        let mapa_target = RawExtractedTarget {
+            id: "mapa_1001".to_string(),
+            lat: 50.47,
+            lon: 30.54,
+            raw_name: "drone_piston shahed Shahed-136".to_string(),
+            raw_type_code: 8,
+            heading_deg: 100.0,
+            speed_kmh: Some(185.0),
+            confidence: Some(95),
+            time_offset_ms: None,
+            trail_points: vec![],
+            upstream_status: "active".to_string(),
+        };
+
+        let _ = tracker.update_batch(&[mapa_target], &detector, None, "MAPA.UA (Резервний)");
+        assert_eq!(tracker.tracks.len(), 1);
+        assert!(tracker.tracks.contains_key("mapa_1001"));
+        assert!(!tracker.tracks.contains_key("nep_001"));
+        assert!(tracker.recent_lost.is_empty(), "Silent source switch to MAPA.UA must NOT create fake shootdowns!");
+    }
+
+    #[test]
+    fn test_target_lifecycle_remove_and_cooldown_30s_invariants() {
+        let detector = OblastDetector::default();
+        let mut tracker = TargetTracker::default();
+
+        let t1 = RawExtractedTarget {
+            id: "trk_alpha".to_string(),
+            lat: 50.45,
+            lon: 30.52,
+            raw_name: "shahed".to_string(),
+            raw_type_code: 8,
+            heading_deg: 90.0,
+            speed_kmh: Some(185.0),
+            confidence: None,
+            time_offset_ms: None,
+            trail_points: vec![],
+            upstream_status: "active".to_string(),
+        };
+
+        // 1. Поява активної цілі
+        let _ = tracker.update_batch(&[t1.clone()], &detector, None, "TestFeed");
+        assert_eq!(tracker.tracks.len(), 1);
+        assert_eq!(tracker.tracks["trk_alpha"].status, "active");
+
+        // 2. Джерело надсилає статус "lost" / "disappeared" -> перехід у cooldown на 30 сек
+        let mut t1_lost = t1.clone();
+        t1_lost.upstream_status = "lost".to_string();
+        let _ = tracker.update_batch(&[t1_lost.clone()], &detector, None, "TestFeed");
+        assert_eq!(tracker.tracks.len(), 1, "Target in lost/cooldown must remain in tracks during 30s window");
+        assert_eq!(tracker.tracks["trk_alpha"].status, "cooldown");
+        assert!(tracker.tracks["trk_alpha"].cooldown_start_ts.is_some());
+        assert!(tracker.recent_lost.is_empty(), "Cooldown must NOT create impact cross yet!");
+
+        // 3. Повернення свіжої телеметрії "active" -> повернення в active без втрати треку
+        let mut t1_active = t1.clone();
+        t1_active.upstream_status = "active".to_string();
+        let _ = tracker.update_batch(&[t1_active], &detector, None, "TestFeed");
+        assert_eq!(tracker.tracks["trk_alpha"].status, "active");
+        assert!(tracker.tracks["trk_alpha"].cooldown_start_ts.is_none());
+
+        // 4. Подія "remove" -> безслідне видалення
+        let mut t1_remove = t1.clone();
+        t1_remove.upstream_status = "remove".to_string();
+        let _ = tracker.update_batch(&[t1_remove], &detector, None, "TestFeed");
+        assert!(!tracker.tracks.contains_key("trk_alpha"), "Remove must delete track from memory");
+        assert!(!tracker.recent_lost.contains_key("trk_alpha"), "Remove must be silent without red cross!");
+
+        // 5. Подія "eliminated" (збиття ППО) -> миттєвий хрест та статус
+        let t2 = RawExtractedTarget {
+            id: "trk_beta".to_string(),
+            lat: 49.0,
+            lon: 32.0,
+            raw_name: "missile".to_string(),
+            raw_type_code: 3,
+            heading_deg: 270.0,
+            speed_kmh: Some(850.0),
+            confidence: None,
+            time_offset_ms: None,
+            trail_points: vec![],
+            upstream_status: "active".to_string(),
+        };
+        let _ = tracker.update_batch(&[t2.clone()], &detector, None, "TestFeed");
+        assert_eq!(tracker.tracks.len(), 1);
+
+        let mut t2_elim = t2.clone();
+        t2_elim.upstream_status = "eliminated".to_string();
+        let lost_list = tracker.update_batch(&[t2_elim], &detector, None, "TestFeed");
+        assert!(!tracker.tracks.contains_key("trk_beta"));
+        assert_eq!(lost_list.len(), 1);
+        assert_eq!(lost_list[0].status, "eliminated");
+        assert!(tracker.recent_lost.contains_key("trk_beta"));
+        assert_eq!(tracker.recent_lost["trk_beta"].outcome, "eliminated");
+        assert_eq!(tracker.recent_lost["trk_beta"].status, "lost"); // Варіант А на мапі
     }
 }

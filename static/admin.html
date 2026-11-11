@@ -1067,6 +1067,14 @@
             targetsBadge.innerText = "FAILOVER (NEPTUN)";
             targetsBadge.className = "bg-amber-950 text-amber-400 border border-amber-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
           }
+        } else if (tProv.includes("mapa")) {
+          if (targetsTitle) targetsTitle.innerText = "MAPA.UA (Резервний)";
+          if (targetsSub) targetsSub.innerText = "mapa.ua/api/v1/current (OpenData API)";
+          if (targetsDot) targetsDot.className = "w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse shrink-0";
+          if (targetsBadge) {
+            targetsBadge.innerText = "MAPA.UA";
+            targetsBadge.className = "bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          }
         } else if (hData.targets_provider && hData.targets_provider !== "none" && hData.targets_provider !== "") {
           if (targetsTitle) targetsTitle.innerText = hData.targets_provider;
           if (targetsSub) targetsSub.innerText = "Активне джерело цілей";
@@ -1164,6 +1172,7 @@
     }
 
     let currentServiceKeysData = null;
+    let currentStreamsData = null;
     let serviceKeyVisibility = {
       ukrainealarm: false,
       cartodb: false
@@ -1178,12 +1187,90 @@
         const res = await fetch("/api/v1/admin/service_keys?admin_key=" + encodeURIComponent(currentAdminKey));
         if (res.status === 403) return;
         const data = await res.json();
-        if (data.status === "ok" && data.service_keys) {
-          currentServiceKeysData = data.service_keys;
+        if (data.status === "ok") {
+          if (data.service_keys) currentServiceKeysData = data.service_keys;
+          if (data.streams) currentStreamsData = data.streams;
           renderServiceKeysTable();
         }
       } catch(e) {
         console.warn("Could not load service keys:", e);
+      }
+    }
+
+    async function toggleStreamEnabled(id, enabled) {
+      if (!currentAdminKey) return showLoginScreen();
+      try {
+        const res = await fetch("/api/v1/admin/streams?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, enabled })
+        });
+        const resp = await res.json();
+        if (res.ok && resp.status === "ok") {
+          currentStreamsData = resp.streams;
+          renderServiceKeysTable();
+        }
+      } catch (e) {
+        alert("Помилка перемикання стану потоку: " + e);
+      }
+    }
+
+    async function shiftStreamPriority(id, delta) {
+      if (!currentAdminKey) return showLoginScreen();
+      if (!currentStreamsData) return;
+      const s = currentStreamsData.find(x => x.id === id);
+      if (!s) return;
+      const sameType = currentStreamsData.filter(x => x.stream_type === s.stream_type);
+      const curP = s.priority;
+      const newP = curP + delta;
+      if (newP < 1) return;
+      const maxP = Math.max(...sameType.map(x => x.priority));
+      if (newP > maxP) return;
+
+      // Знайти сусідній потік того ж типу
+      const target = sameType.find(x => x.priority === newP);
+      if (target) {
+        target.priority = curP;
+      }
+      s.priority = newP;
+      currentStreamsData.sort((a, b) => a.priority - b.priority);
+
+      try {
+        const res = await fetch("/api/v1/admin/streams?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ streams: currentStreamsData })
+        });
+        const resp = await res.json();
+        if (res.ok && resp.status === "ok") {
+          currentStreamsData = resp.streams;
+          renderServiceKeysTable();
+        }
+      } catch (e) {
+        alert("Помилка збереження пріоритетів: " + e);
+      }
+    }
+
+    async function updateStreamTiming(id, field, value) {
+      if (!currentAdminKey) return showLoginScreen();
+      const valNum = parseInt(value, 10);
+      if (isNaN(valNum) || valNum <= 0) return;
+      const payload = { id };
+      if (field === 'poll') payload.poll_interval_sec = valNum;
+      if (field === 'timeout') payload.failover_timeout_sec = valNum;
+
+      try {
+        const res = await fetch("/api/v1/admin/streams?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const resp = await res.json();
+        if (res.ok && resp.status === "ok") {
+          currentStreamsData = resp.streams;
+        }
+      } catch (e) {
+        console.warn("Failed to update stream timing:", e);
       }
     }
 
@@ -1194,37 +1281,97 @@
       const ua = currentServiceKeysData.ukrainealarm || {};
       const carto = currentServiceKeysData.cartodb || {};
 
-      // UkraineAlarm
+      // Defaults for streams if not yet loaded from backend
+      const defaultStreams = [
+        { id: "ukrainealarm_alerts", name: "UkraineAlarm Офіційний API v3", stream_type: "alerts", enabled: true, priority: 1, poll_interval_sec: 15, failover_timeout_sec: 15 },
+        { id: "neptun_alerts", name: "Neptun API (Резерв тривог)", stream_type: "alerts", enabled: true, priority: 2, poll_interval_sec: 6, failover_timeout_sec: 15 },
+        { id: "ukrainealarm_ws", name: "WS UkraineAlarm (Парсер цілей)", stream_type: "targets", enabled: true, priority: 1, poll_interval_sec: 0, failover_timeout_sec: 15 },
+        { id: "neptun_targets", name: "Neptun API (Резерв цілей)", stream_type: "targets", enabled: true, priority: 2, poll_interval_sec: 5, failover_timeout_sec: 15 },
+        { id: "mapa_targets", name: "MAPA.UA API (Цілі/загрози)", stream_type: "targets", enabled: true, priority: 3, poll_interval_sec: 10, failover_timeout_sec: 20 }
+      ];
+      const streams = currentStreamsData || defaultStreams;
+      const sUaAlerts = streams.find(s => s.id === "ukrainealarm_alerts") || defaultStreams[0];
+      const sNeptunAlerts = streams.find(s => s.id === "neptun_alerts") || defaultStreams[1];
+      const sUaWs = streams.find(s => s.id === "ukrainealarm_ws") || defaultStreams[2];
+      const sNeptunTargets = streams.find(s => s.id === "neptun_targets") || defaultStreams[3];
+      const sMapaTargets = streams.find(s => s.id === "mapa_targets") || defaultStreams[4];
+
+      // UkraineAlarm Token
       const uaVisible = !!serviceKeyVisibility.ukrainealarm;
       const uaVal = ua.key || "";
 
       // CartoDB
       const cartoVisible = !!serviceKeyVisibility.cartodb;
-      const relSelectEl = document.getElementById("cartodbRelationSelect");
-      const relSelectVal = relSelectEl ? relSelectEl.value : "Загальна мапа";
-      
-      let cartoVal = "";
-      if (relSelectVal === "Загальна мапа") {
-        cartoVal = carto.global_key || "";
-      } else {
-        cartoVal = (carto.user_keys && carto.user_keys[relSelectVal]) ? carto.user_keys[relSelectVal] : "";
-      }
-
-      // Options for cartodb relation
+      const globalCartoVal = carto.global_key || "";
+      const userKeys = carto.user_keys || {};
       const relations = carto.available_relations || ["Загальна мапа"];
-      let relOptionsHtml = "";
-      relations.forEach(r => {
-        const sel = (r === relSelectVal) ? "selected" : "";
-        relOptionsHtml += `<option value="${escapeHtml(r)}" ${sel}>${escapeHtml(r)}</option>`;
+      const userRelations = relations.filter(r => r !== "Загальна мапа");
+
+      // Build User CartoDB Rows
+      let userCartoRowsHtml = "";
+      userRelations.forEach((uName, idx) => {
+        const uVal = userKeys[uName] || "";
+        const safeId = "cartodbUserKeyInput_" + idx;
+        userCartoRowsHtml += `
+          <tr class="hover:bg-gray-900/60 transition bg-gray-900/20">
+            <td class="p-3">
+              <div class="font-bold text-white flex items-center gap-2">
+                <span>🗺️</span>
+                <span>CartoDB Dark Matter (Користувач: ${escapeHtml(uName)})</span>
+              </div>
+              <div class="flex items-center gap-1.5 mt-1">
+                <span class="bg-purple-950 text-purple-400 border border-purple-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🗺️ КАРТОГРАФІЯ</span>
+                <span class="text-[11px] text-gray-400">Персональний токен користувача</span>
+              </div>
+            </td>
+            <td class="p-3">
+              <div class="flex items-center gap-2 max-w-md">
+                <div class="relative flex-1">
+                  <input type="${cartoVisible ? 'text' : 'password'}" id="${safeId}" 
+                         value="${escapeHtml(uVal)}" 
+                         placeholder="Введіть персональний CARTO API ключ для ${escapeHtml(uName)}..." 
+                         class="w-full bg-gray-950 border border-gray-700 px-3 py-1.5 rounded-lg text-xs text-white font-mono focus:border-sky-500 focus:outline-none pr-9">
+                  <button type="button" onclick="toggleServiceKeyEye('cartodb')" 
+                          class="absolute right-2.5 top-1.5 text-gray-400 hover:text-gray-200 text-xs" 
+                          title="${cartoVisible ? 'Приховати токен' : 'Показати токен'}">
+                    ${cartoVisible ? '👁️' : '🔒'}
+                  </button>
+                </div>
+                ${uVal ? '<span class="text-[11px] text-emerald-400 shrink-0 font-medium bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">Встановлено</span>' : '<span class="text-[11px] text-gray-400 shrink-0 font-medium bg-gray-900 px-2 py-0.5 rounded border border-gray-800">Не задано</span>'}
+              </div>
+            </td>
+            <td class="p-3">
+              <span class="inline-flex items-center gap-1.5 bg-[#1b2533] text-sky-400 border border-sky-800 px-2.5 py-1 rounded-lg text-xs font-semibold">
+                <span>👤</span><span>${escapeHtml(uName)}</span>
+              </span>
+              <div class="text-[11px] text-gray-400 mt-1">Індивідуальна підложка користувача</div>
+            </td>
+            <td class="p-3 text-right space-x-1.5">
+              <button onclick="saveCartodbKey('${escapeHtml(uName)}', '${safeId}')" class="h-8 px-3 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition shadow">
+                <span>💾</span><span>Зберегти</span>
+              </button>
+              <button onclick="deleteCartodbKey('${escapeHtml(uName)}')" class="h-8 px-2.5 bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 rounded-lg text-xs font-medium inline-flex items-center gap-1 transition">
+                <span>🗑️</span><span>Видалити</span>
+              </button>
+            </td>
+          </tr>
+        `;
       });
 
       tbody.innerHTML = `
         <!-- 1. UKRAINEALARM ОФІЦІЙНИЙ API V3 (ПОТІК ТРИВОГ) -->
-        <tr class="hover:bg-gray-900/60 transition">
+        <tr class="hover:bg-gray-900/60 transition ${!sUaAlerts.enabled ? 'opacity-60 bg-red-950/10' : ''}">
           <td class="p-3">
-            <div class="font-bold text-white flex items-center gap-2">
-              <span>🚨</span>
-              <span>${escapeHtml(ua.name || "UkraineAlarm Офіційний API v3")}</span>
+            <div class="font-bold text-white flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span>🚨</span>
+                <span>${escapeHtml(ua.name || "UkraineAlarm Офіційний API v3")}</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <button onclick="shiftStreamPriority('${sUaAlerts.id}', -1)" class="w-6 h-6 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white rounded text-xs font-bold transition" title="Підвищити пріоритет (вгору)">▲</button>
+                <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded ${sUaAlerts.priority === 1 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-gray-800 text-gray-300'}">#${sUaAlerts.priority} ${sUaAlerts.priority === 1 ? 'Основний' : 'Резерв'}</span>
+                <button onclick="shiftStreamPriority('${sUaAlerts.id}', 1)" class="w-6 h-6 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white rounded text-xs font-bold transition" title="Знизити пріоритет (вниз)">▼</button>
+              </div>
             </div>
             <div class="flex items-center gap-1.5 mt-1">
               <span class="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🚨 ПОТІК ТРИВОГ</span>
@@ -1246,11 +1393,20 @@
               </div>
               ${uaVal ? '<span class="text-[11px] text-emerald-400 shrink-0 font-medium bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">Активний</span>' : '<span class="text-[11px] text-amber-400 shrink-0 font-medium bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800">Neptun Fallback</span>'}
             </div>
+            <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
+              <span>Опитування:</span>
+              <input type="number" min="10" max="300" value="${sUaAlerts.poll_interval_sec}" onchange="updateStreamTiming('${sUaAlerts.id}', 'poll', this.value)" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
+              <span>сек</span>
+            </div>
           </td>
           <td class="p-3">
-            <span class="inline-flex items-center gap-1.5 bg-[#282227] text-[#cf9b6d] border border-[#6d5b57] px-2.5 py-1 rounded-lg text-xs font-semibold">
-              <span>🌐</span><span>Загальна мапа</span>
-            </span>
+            <div class="flex items-center gap-2">
+              <label class="relative inline-flex items-center cursor-pointer select-none">
+                <input type="checkbox" ${sUaAlerts.enabled ? 'checked' : ''} onchange="toggleStreamEnabled('${sUaAlerts.id}', this.checked)" class="sr-only peer">
+                <div class="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+                <span class="ml-2 text-xs font-semibold ${sUaAlerts.enabled ? 'text-emerald-400' : 'text-gray-500'}">${sUaAlerts.enabled ? 'Увімкнено' : 'Вимкнено'}</span>
+              </label>
+            </div>
             <div class="text-[11px] text-gray-400 mt-1">Офіційні тривоги та сирени</div>
           </td>
           <td class="p-3 text-right space-x-1.5">
@@ -1263,12 +1419,64 @@
           </td>
         </tr>
 
-        <!-- 2. WS UKRAINEALARM (ПОТІК ЦІЛЕЙ) -->
-        <tr class="hover:bg-gray-900/60 transition">
+        <!-- 2. NEPTUN ALERTS API (РЕЗЕРВ СИРЕН) -->
+        <tr class="hover:bg-gray-900/60 transition ${!sNeptunAlerts.enabled ? 'opacity-60 bg-red-950/10' : ''}">
           <td class="p-3">
-            <div class="font-bold text-white flex items-center gap-2">
-              <span>🎯</span>
-              <span>WS UkraineAlarm (Парсер цілей)</span>
+            <div class="font-bold text-white flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span>🚨</span>
+                <span>Neptun API (Резерв тривог)</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <button onclick="shiftStreamPriority('${sNeptunAlerts.id}', -1)" class="w-6 h-6 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white rounded text-xs font-bold transition" title="Підвищити пріоритет (вгору)">▲</button>
+                <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded ${sNeptunAlerts.priority === 1 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-gray-800 text-gray-300'}">#${sNeptunAlerts.priority} ${sNeptunAlerts.priority === 1 ? 'Основний' : 'Резерв'}</span>
+                <button onclick="shiftStreamPriority('${sNeptunAlerts.id}', 1)" class="w-6 h-6 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white rounded text-xs font-bold transition" title="Знизити пріоритет (вниз)">▼</button>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <span class="bg-amber-950 text-amber-400 border border-amber-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🚨 РЕЗЕРВ ТРИВОГ</span>
+              <span class="text-[11px] text-gray-400">wss://neptun.in.ua/api/v1/stream (REST neptun.in.ua/api/v1/alerts)</span>
+            </div>
+          </td>
+          <td class="p-3">
+            <div class="bg-gray-950 border border-gray-800 px-3 py-1.5 rounded-lg flex items-center justify-between text-xs max-w-md">
+              <span class="text-amber-300 font-mono">WebSocket + REST (/alerts)</span>
+              <span class="text-[11px] text-amber-400 font-medium bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800">Резерв готовий</span>
+            </div>
+            <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
+              <span>Опитування:</span>
+              <input type="number" min="3" max="60" value="${sNeptunAlerts.poll_interval_sec}" onchange="updateStreamTiming('${sNeptunAlerts.id}', 'poll', this.value)" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
+              <span>сек</span>
+            </div>
+          </td>
+          <td class="p-3">
+            <div class="flex items-center gap-2">
+              <label class="relative inline-flex items-center cursor-pointer select-none">
+                <input type="checkbox" ${sNeptunAlerts.enabled ? 'checked' : ''} onchange="toggleStreamEnabled('${sNeptunAlerts.id}', this.checked)" class="sr-only peer">
+                <div class="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+                <span class="ml-2 text-xs font-semibold ${sNeptunAlerts.enabled ? 'text-emerald-400' : 'text-gray-500'}">${sNeptunAlerts.enabled ? 'Увімкнено' : 'Вимкнено'}</span>
+              </label>
+            </div>
+            <div class="text-[11px] text-gray-400 mt-1">Резервне опитування при 429/тиші</div>
+          </td>
+          <td class="p-3 text-right">
+            <span class="text-xs text-amber-400 bg-amber-950/40 border border-amber-800 px-2.5 py-1 rounded-lg font-mono inline-block">Авто-перемикання</span>
+          </td>
+        </tr>
+
+        <!-- 3. WS UKRAINEALARM (ПОТІК ЦІЛЕЙ) -->
+        <tr class="hover:bg-gray-900/60 transition ${!sUaWs.enabled ? 'opacity-60 bg-red-950/10' : ''}">
+          <td class="p-3">
+            <div class="font-bold text-white flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span>🎯</span>
+                <span>WS UkraineAlarm (Парсер цілей)</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <button onclick="shiftStreamPriority('${sUaWs.id}', -1)" class="w-6 h-6 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white rounded text-xs font-bold transition" title="Підвищити пріоритет (вгору)">▲</button>
+                <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded ${sUaWs.priority === 1 ? 'bg-sky-950 text-sky-400 border border-sky-800' : 'bg-gray-800 text-gray-300'}">#${sUaWs.priority} ${sUaWs.priority === 1 ? 'Основний' : 'Резерв'}</span>
+                <button onclick="shiftStreamPriority('${sUaWs.id}', 1)" class="w-6 h-6 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white rounded text-xs font-bold transition" title="Знизити пріоритет (вниз)">▼</button>
+              </div>
             </div>
             <div class="flex items-center gap-1.5 mt-1">
               <span class="bg-sky-950 text-sky-400 border border-sky-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🎯 ПОТІК ЦІЛЕЙ</span>
@@ -1280,11 +1488,20 @@
               <span class="text-sky-300 font-mono">Centrifugo WebSocket Stream</span>
               <span class="text-[11px] text-emerald-400 font-medium bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">Основний</span>
             </div>
+            <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
+              <span>Таймаут тиші WS:</span>
+              <input type="number" min="5" max="120" value="${sUaWs.failover_timeout_sec}" onchange="updateStreamTiming('${sUaWs.id}', 'timeout', this.value)" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
+              <span>сек</span>
+            </div>
           </td>
           <td class="p-3">
-            <span class="inline-flex items-center gap-1.5 bg-[#1b2533] text-sky-400 border border-sky-800 px-2.5 py-1 rounded-lg text-xs font-semibold">
-              <span>🌐</span><span>Загальна мапа</span>
-            </span>
+            <div class="flex items-center gap-2">
+              <label class="relative inline-flex items-center cursor-pointer select-none">
+                <input type="checkbox" ${sUaWs.enabled ? 'checked' : ''} onchange="toggleStreamEnabled('${sUaWs.id}', this.checked)" class="sr-only peer">
+                <div class="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+                <span class="ml-2 text-xs font-semibold ${sUaWs.enabled ? 'text-emerald-400' : 'text-gray-500'}">${sUaWs.enabled ? 'Увімкнено' : 'Вимкнено'}</span>
+              </label>
+            </div>
             <div class="text-[11px] text-gray-400 mt-1">Радарні онлайн загрози</div>
           </td>
           <td class="p-3 text-right">
@@ -1292,28 +1509,46 @@
           </td>
         </tr>
 
-        <!-- 3. NEPTUN HUB API (РЕЗЕРВНИЙ ФЕЙЛОВЕР ПОТІК) -->
-        <tr class="hover:bg-gray-900/60 transition">
+        <!-- 4. NEPTUN TARGETS API (РЕЗЕРВ ЦІЛЕЙ) -->
+        <tr class="hover:bg-gray-900/60 transition ${!sNeptunTargets.enabled ? 'opacity-60 bg-red-950/10' : ''}">
           <td class="p-3">
-            <div class="font-bold text-white flex items-center gap-2">
-              <span>🔄</span>
-              <span>Neptun Hub API (Failover)</span>
+            <div class="font-bold text-white flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span>🔄</span>
+                <span>Neptun Hub API (Failover)</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <button onclick="shiftStreamPriority('${sNeptunTargets.id}', -1)" class="w-6 h-6 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white rounded text-xs font-bold transition" title="Підвищити пріоритет (вгору)">▲</button>
+                <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded ${sNeptunTargets.priority === 1 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-gray-800 text-gray-300'}">#${sNeptunTargets.priority} ${sNeptunTargets.priority === 1 ? 'Основний' : 'Резерв'}</span>
+                <button onclick="shiftStreamPriority('${sNeptunTargets.id}', 1)" class="w-6 h-6 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white rounded text-xs font-bold transition" title="Знизити пріоритет (вниз)">▼</button>
+              </div>
             </div>
             <div class="flex items-center gap-1.5 mt-1">
               <span class="bg-amber-950 text-amber-400 border border-amber-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🔄 FAILOVER РЕЗЕРВ</span>
-              <span class="text-[11px] text-gray-400">neptun.in.ua</span>
+              <span class="text-[11px] text-gray-400">wss://neptun.in.ua/api/v1/stream (REST neptun.in.ua/api/v1/threats)</span>
             </div>
           </td>
           <td class="p-3">
             <div class="bg-gray-950 border border-gray-800 px-3 py-1.5 rounded-lg flex items-center justify-between text-xs max-w-md">
-              <span class="text-amber-300 font-mono">REST Failover (/alerts, /threats)</span>
+              <span class="text-amber-300 font-mono">WebSocket + REST (/threats)</span>
               <span class="text-[11px] text-amber-400 font-medium bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800">Резерв готовий</span>
+            </div>
+            <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
+              <span>Опитування:</span>
+              <input type="number" min="3" max="60" value="${sNeptunTargets.poll_interval_sec}" onchange="updateStreamTiming('${sNeptunTargets.id}', 'poll', this.value)" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
+              <span>сек | Поріг тиші:</span>
+              <input type="number" min="5" max="120" value="${sNeptunTargets.failover_timeout_sec}" onchange="updateStreamTiming('${sNeptunTargets.id}', 'timeout', this.value)" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
+              <span>сек</span>
             </div>
           </td>
           <td class="p-3">
-            <span class="inline-flex items-center gap-1.5 bg-[#2b241c] text-amber-400 border border-amber-800 px-2.5 py-1 rounded-lg text-xs font-semibold">
-              <span>🌐</span><span>Загальна мапа</span>
-            </span>
+            <div class="flex items-center gap-2">
+              <label class="relative inline-flex items-center cursor-pointer select-none">
+                <input type="checkbox" ${sNeptunTargets.enabled ? 'checked' : ''} onchange="toggleStreamEnabled('${sNeptunTargets.id}', this.checked)" class="sr-only peer">
+                <div class="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+                <span class="ml-2 text-xs font-semibold ${sNeptunTargets.enabled ? 'text-emerald-400' : 'text-gray-500'}">${sNeptunTargets.enabled ? 'Увімкнено' : 'Вимкнено'}</span>
+              </label>
+            </div>
             <div class="text-[11px] text-gray-400 mt-1">Резерв тривог та цілей</div>
           </td>
           <td class="p-3 text-right">
@@ -1321,24 +1556,71 @@
           </td>
         </tr>
 
-        <!-- 4. CARTODB DARK MATTER (КАРТОГРАФІЯ) -->
+        <!-- 5. MAPA.UA TARGETS API (ВІДКРИТИЙ РЕЗЕРВ ЦІЛЕЙ) -->
+        <tr class="hover:bg-gray-900/60 transition ${!sMapaTargets.enabled ? 'opacity-60 bg-red-950/10' : ''}">
+          <td class="p-3">
+            <div class="font-bold text-white flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span>🛰️</span>
+                <span>MAPA.UA API (Цілі/загрози)</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <button onclick="shiftStreamPriority('${sMapaTargets.id}', -1)" class="w-6 h-6 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white rounded text-xs font-bold transition" title="Підвищити пріоритет (вгору)">▲</button>
+                <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded ${sMapaTargets.priority === 1 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-gray-800 text-gray-300'}">#${sMapaTargets.priority} ${sMapaTargets.priority === 1 ? 'Основний' : 'Резерв'}</span>
+                <button onclick="shiftStreamPriority('${sMapaTargets.id}', 1)" class="w-6 h-6 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white rounded text-xs font-bold transition" title="Знизити пріоритет (вниз)">▼</button>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <span class="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🛰️ OPENDATA ЦІЛІ</span>
+              <span class="text-[11px] text-gray-400">mapa.ua/api/v1/current</span>
+            </div>
+          </td>
+          <td class="p-3">
+            <div class="bg-gray-950 border border-gray-800 px-3 py-1.5 rounded-lg flex items-center justify-between text-xs max-w-md">
+              <span class="text-emerald-300 font-mono">OpenData API (/api/v1/current)</span>
+              <span class="text-[11px] text-emerald-400 font-medium bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">Відкритий доступ</span>
+            </div>
+            <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
+              <span>Опитування:</span>
+              <input type="number" min="3" max="60" value="${sMapaTargets.poll_interval_sec}" onchange="updateStreamTiming('${sMapaTargets.id}', 'poll', this.value)" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
+              <span>сек | Поріг тиші:</span>
+              <input type="number" min="5" max="120" value="${sMapaTargets.failover_timeout_sec}" onchange="updateStreamTiming('${sMapaTargets.id}', 'timeout', this.value)" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
+              <span>сек</span>
+            </div>
+          </td>
+          <td class="p-3">
+            <div class="flex items-center gap-2">
+              <label class="relative inline-flex items-center cursor-pointer select-none">
+                <input type="checkbox" ${sMapaTargets.enabled ? 'checked' : ''} onchange="toggleStreamEnabled('${sMapaTargets.id}', this.checked)" class="sr-only peer">
+                <div class="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+                <span class="ml-2 text-xs font-semibold ${sMapaTargets.enabled ? 'text-emerald-400' : 'text-gray-500'}">${sMapaTargets.enabled ? 'Увімкнено' : 'Вимкнено'}</span>
+              </label>
+            </div>
+            <div class="text-[11px] text-gray-400 mt-1">Резервний трекер OSINT-загроз</div>
+          </td>
+          <td class="p-3 text-right">
+            <span class="text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800 px-2.5 py-1 rounded-lg font-mono inline-block">Авто-перемикання</span>
+          </td>
+        </tr>
+
+        <!-- 5a. CARTODB DARK MATTER (ЗАГАЛЬНА МАПА) -->
         <tr class="hover:bg-gray-900/60 transition">
           <td class="p-3">
             <div class="font-bold text-white flex items-center gap-2">
               <span>🗺️</span>
-              <span>${escapeHtml(carto.name || "CartoDB Dark Matter")}</span>
+              <span>CartoDB Dark Matter (Загальна мапа)</span>
             </div>
             <div class="flex items-center gap-1.5 mt-1">
               <span class="bg-purple-950 text-purple-400 border border-purple-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🗺️ КАРТОГРАФІЯ</span>
-              <span class="text-[11px] text-gray-400">CARTO Basemaps API</span>
+              <span class="text-[11px] text-gray-400">CARTO Basemaps API (Глобальний ключ)</span>
             </div>
           </td>
           <td class="p-3">
             <div class="flex items-center gap-2 max-w-md">
               <div class="relative flex-1">
                 <input type="${cartoVisible ? 'text' : 'password'}" id="cartodbKeyInput" 
-                       value="${escapeHtml(cartoVal)}" 
-                       placeholder="Введіть CARTO API ключ (напр. pk.eyJ1...)..." 
+                       value="${escapeHtml(globalCartoVal)}" 
+                       placeholder="Введіть глобальний CARTO API ключ (напр. pk.eyJ1...)..." 
                        class="w-full bg-gray-950 border border-gray-700 px-3 py-1.5 rounded-lg text-xs text-white font-mono focus:border-sky-500 focus:outline-none pr-9">
                 <button type="button" onclick="toggleServiceKeyEye('cartodb')" 
                         class="absolute right-2.5 top-1.5 text-gray-400 hover:text-gray-200 text-xs" 
@@ -1346,51 +1628,87 @@
                   ${cartoVisible ? '👁️' : '🔒'}
                 </button>
               </div>
-              ${cartoVal ? '<span class="text-[11px] text-emerald-400 shrink-0 font-medium bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">Встановлено</span>' : '<span class="text-[11px] text-gray-400 shrink-0 font-medium bg-gray-900 px-2 py-0.5 rounded border border-gray-800">Не задано</span>'}
+              ${globalCartoVal ? '<span class="text-[11px] text-emerald-400 shrink-0 font-medium bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">Встановлено</span>' : '<span class="text-[11px] text-gray-400 shrink-0 font-medium bg-gray-900 px-2 py-0.5 rounded border border-gray-800">Не задано</span>'}
             </div>
           </td>
           <td class="p-3">
-            <select id="cartodbRelationSelect" onchange="onCartodbRelationChange(this.value)" class="bg-gray-950 border border-gray-700 text-xs text-white rounded-lg px-2.5 py-1.5 focus:border-sky-500 focus:outline-none w-full max-w-[200px]">
-              ${relOptionsHtml}
-            </select>
-            <div class="text-[11px] text-gray-400 mt-1">Векторна темна підложка</div>
+            <span class="inline-flex items-center gap-1.5 bg-[#282227] text-[#cf9b6d] border border-[#6d5b57] px-2.5 py-1 rounded-lg text-xs font-semibold">
+              <span>🌐</span><span>Загальна мапа</span>
+            </span>
+            <div class="text-[11px] text-gray-400 mt-1">Векторна темна підложка за замовчуванням</div>
           </td>
           <td class="p-3 text-right space-x-1.5">
-            <button onclick="saveServiceKey('cartodb')" class="h-8 px-3 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition shadow">
+            <button onclick="saveCartodbKey('Загальна мапа', 'cartodbKeyInput')" class="h-8 px-3 bg-[#cf9b6d] hover:bg-[#e2b184] text-[#13161c] font-bold rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition shadow">
               <span>💾</span><span>Зберегти</span>
             </button>
-            <button onclick="deleteServiceKey('cartodb')" class="h-8 px-2.5 bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 rounded-lg text-xs font-medium inline-flex items-center gap-1 transition">
+            <button onclick="deleteCartodbKey('Загальна мапа')" class="h-8 px-2.5 bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 rounded-lg text-xs font-medium inline-flex items-center gap-1 transition">
               <span>🗑️</span><span>Видалити</span>
             </button>
           </td>
         </tr>
-      `;
-    }
 
-    function onCartodbRelationChange(rel) {
-      if (!currentServiceKeysData || !currentServiceKeysData.cartodb) return;
-      const carto = currentServiceKeysData.cartodb;
-      let val = "";
-      if (rel === "Загальна мапа") {
-        val = carto.global_key || "";
-      } else {
-        val = (carto.user_keys && carto.user_keys[rel]) ? carto.user_keys[rel] : "";
-      }
-      const inp = document.getElementById("cartodbKeyInput");
-      if (inp) {
-        inp.value = val;
-      }
+        <!-- 5b..N. CARTODB DARK MATTER (ПЕРСОНАЛЬНІ КЛЮЧІ КОРИСТУВАЧІВ) -->
+        ${userCartoRowsHtml}
+      `;
     }
 
     function toggleServiceKeyEye(service) {
       serviceKeyVisibility[service] = !serviceKeyVisibility[service];
-      const isVis = serviceKeyVisibility[service];
-      const inpId = service === 'ukrainealarm' ? 'ukrainealarmKeyInput' : 'cartodbKeyInput';
-      const inp = document.getElementById(inpId);
-      if (inp) {
-        inp.type = isVis ? 'text' : 'password';
-      }
       renderServiceKeysTable();
+    }
+
+    async function saveCartodbKey(relVal, inputId) {
+      if (!currentAdminKey) return showLoginScreen();
+      const inp = document.getElementById(inputId || "cartodbKeyInput");
+      const keyVal = inp ? inp.value.trim() : "";
+
+      try {
+        const res = await fetch("/api/v1/admin/service_keys?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            service: "cartodb",
+            relation: relVal,
+            key: keyVal
+          })
+        });
+        const resp = await res.json();
+        if (res.ok && resp.status === "ok") {
+          alert(`✅ Ключ CartoDB для (${relVal}) успішно збережено!`);
+          await loadServiceKeys();
+        } else {
+          alert("Помилка збереження ключа: " + (resp.message || "Невідома помилка"));
+        }
+      } catch(e) {
+        alert("Помилка мережі при збереженні ключа: " + e);
+      }
+    }
+
+    async function deleteCartodbKey(relVal) {
+      if (!currentAdminKey) return showLoginScreen();
+      if (!confirm(`Ви дійсно бажаєте видалити збережений API-ключ CartoDB для (${relVal})?`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/v1/admin/service_keys?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            service: "cartodb",
+            relation: relVal
+          })
+        });
+        const resp = await res.json();
+        if (res.ok && resp.status === "ok") {
+          alert(`🗑️ Ключ CartoDB для (${relVal}) видалено!`);
+          await loadServiceKeys();
+        } else {
+          alert("Помилка видалення ключа: " + (resp.message || "Невідома помилка"));
+        }
+      } catch(e) {
+        alert("Помилка мережі при видаленні ключа: " + e);
+      }
     }
 
     async function saveServiceKey(service) {
@@ -1402,10 +1720,7 @@
         const inp = document.getElementById("ukrainealarmKeyInput");
         keyVal = inp ? inp.value.trim() : "";
       } else if (service === "cartodb") {
-        const inp = document.getElementById("cartodbKeyInput");
-        keyVal = inp ? inp.value.trim() : "";
-        const relSel = document.getElementById("cartodbRelationSelect");
-        if (relSel) relVal = relSel.value;
+        return saveCartodbKey("Загальна мапа", "cartodbKeyInput");
       }
 
       try {
@@ -1434,8 +1749,7 @@
       if (!currentAdminKey) return showLoginScreen();
       let relVal = "Загальна мапа";
       if (service === "cartodb") {
-        const relSel = document.getElementById("cartodbRelationSelect");
-        if (relSel) relVal = relSel.value;
+        return deleteCartodbKey("Загальна мапа");
       }
 
       if (!confirm(`Ви дійсно бажаєте видалити збережений API-ключ для ${service === 'ukrainealarm' ? 'UkraineAlarm' : 'CartoDB (' + relVal + ')'}?`)) {

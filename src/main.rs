@@ -167,6 +167,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    {
+        let t_state = threat_state.clone();
+        let det = detector.clone();
+        let hist = history_mgr.clone();
+        let exch = exchange_mgr.clone();
+        let stor = storage.clone();
+        let client = http_client.clone();
+        tokio::spawn(async move {
+            collectors::mapa_collector::run_mapa_targets_collector(t_state, det, hist, exch, stor, client).await;
+        });
+    }
+
     // 9. Фонова задача періодичного скиду історії на диск (кожні 300 сек для захисту SD-карти)
     {
         let hist = history_mgr.clone();
@@ -196,7 +208,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let expired = st.tracker.cleanup_stale(now);
                     if stor.is_history_recording_enabled() {
                         for trk in &expired {
-                            hist.record_track(trk, "lost");
+                            let hist_status = match trk.status.as_str() {
+                                "eliminated" => "eliminated",
+                                "hit_target" => "hit_target",
+                                _ => "lost",
+                            };
+                            hist.record_track(trk, hist_status);
                         }
                     }
                 }

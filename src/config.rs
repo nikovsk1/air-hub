@@ -15,7 +15,9 @@ pub const UKRAINEALARM_ALERTS_FAILOVER_TIMEOUT_SEC: f64 = 15.0; // Поріг т
 // РАДАРНІ ЦІЛІ ТА ЗАГРОЗИ (RADAR TARGETS & THREATS) - Чиста архітектура джерел
 // =========================================================================
 pub const TARGETS_STARTUP_GRACE_PERIOD_SEC: f64 = 25.0;         // Стартовий Grace Period (25с) для стабілізації WebSocket
+#[allow(dead_code)]
 pub const TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC: f64 = 15.0;     // Поріг тиші primary потоків UkraineAlarm (>15с) для переходу на Neptun
+#[allow(dead_code)]
 pub const NEPTUN_THREATS_POLL_INTERVAL_SEC: u64 = 5;            // Резервне опитування цілей Neptun REST (кожні 5с)
 #[allow(dead_code)]
 pub const WS_SILENCE_TRIGGER_FALLBACK_SEC: f64 = 8.0;           // Тиша WS для активації Fallback HTTP
