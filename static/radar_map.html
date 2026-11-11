@@ -826,7 +826,7 @@
       border: 1px solid var(--accent-amber);
       border-radius: 20px;
       padding: 6px 14px;
-      display: none;
+      display: none !important; /* Unified into top HUD pill3DTelemetry */
       align-items: center;
       gap: 10px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
@@ -835,7 +835,7 @@
       color: #fff;
     }
     .orbit-3d-banner.active {
-      display: flex;
+      display: none !important;
     }
     .orbit-exit-btn {
       background: rgba(239, 68, 68, 0.25);
@@ -1237,12 +1237,14 @@
       <div class="hud-mini-view">
         <span id="telemetry3DMiniText" style="font-weight:600; color:#38BDF8; font-size:11px;">🎯 3D Ціль</span>
       </div>
-      <div class="hud-full-view" id="pill3DTelemetryFull">
+      <div class="hud-full-view" id="pill3DTelemetryFull" style="display:flex; align-items:center; gap:6px;">
         <span style="font-size:11px; color:var(--text-muted);">3D Ціль:</span>
         <strong id="telemetry3DId" style="color:#38BDF8;">#--</strong>
         <span class="badge-count" id="telemetry3DAlt" style="background:rgba(56,189,248,0.2); color:#38bdf8; font-size:10px;">-- м</span>
         <span class="badge-count" id="telemetry3DSpeed" style="background:rgba(245,158,11,0.2); color:#f59e0b; font-size:10px;">-- км/г</span>
-        <span style="font-size:8px;">▼</span>
+        <button type="button" class="btn-micro" style="padding:2px 6px; font-size:9.5px; background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.35); border-radius:4px; color:#38BDF8; cursor:pointer;" onclick="event.stopPropagation(); resetChaseCameraBehind();" title="Камера за хвостом">↺ Хвіст</button>
+        <button type="button" class="btn-micro" style="padding:2px 6px; font-size:9.5px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.35); border-radius:4px; color:#F87171; cursor:pointer;" onclick="event.stopPropagation(); exit3DFocus();" title="Вийти з 3D режиму">✖</button>
+        <span style="font-size:8px; margin-left:2px;">▼</span>
       </div>
       <div class="hud-dropdown-panel" id="panel3DTelemetryDetails" onclick="event.stopPropagation()">
         <div style="font-weight:700; font-size:11px; margin-bottom:5px; color:#38BDF8;">Параметри цілі у 3D</div>
@@ -1252,6 +1254,10 @@
           <div style="display:flex; justify-content:space-between;"><span>Швидкість:</span><b id="t3dSpd" style="color:#F59E0B;">--</b></div>
           <div style="display:flex; justify-content:space-between;"><span>Курс / Азимут:</span><b id="t3dHdg" style="color:#34D399;">--</b></div>
           <div style="display:flex; justify-content:space-between;"><span>Найближча точка:</span><b id="t3dDist" style="color:#EF4444;">--</b></div>
+        </div>
+        <div style="margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.08); display:flex; gap:6px;">
+          <button type="button" class="hud-btn" style="flex:1; height:24px; padding:0 6px; font-size:10px;" onclick="resetChaseCameraBehind()" title="Камера за хвостом">↺ За хвостом</button>
+          <button type="button" class="orbit-exit-btn" style="flex:1; height:24px; padding:0 6px; font-size:10px;" onclick="exit3DFocus()" title="Вийти з 3D супроводу">✖ Вийти з 3D</button>
         </div>
         <div style="margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center;">
           <span style="font-size:10px; color:var(--text-muted);">Освітлення 3D:</span>
@@ -2282,6 +2288,23 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       };
     }
 
+    let activeRegionPopup = null;
+    let currentlySelectedRegionId = null;
+
+    function deselectRegion() {
+      currentlySelectedRegionId = null;
+      if (activeRegionPopup) {
+        try { activeRegionPopup.remove(); } catch (_) {}
+        activeRegionPopup = null;
+      }
+      if (map && map.getSource('selected-region-source')) {
+        map.getSource('selected-region-source').setData({
+          type: 'FeatureCollection',
+          features: []
+        });
+      }
+    }
+
     // =========================================================================
     // MAPLIBRE GL INITIALIZATION & STRICT LAYER STACK
     // =========================================================================
@@ -2298,6 +2321,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         renderWorldCopies: true,
         attributionControl: false
       });
+
+      // Disable double click zoom so fast double-clicks or double-taps to dismiss never zoom in
+      map.doubleClickZoom.disable();
 
       map.on('load', () => {
         isMapLoaded = true;
@@ -2459,14 +2485,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         const bbox = [[e.point.x - 4, e.point.y - 4], [e.point.x + 4, e.point.y + 4]];
         const features = map.queryRenderedFeatures(bbox, { layers: ['alerts-fill'] });
         if (!features || !features.length) {
-          currentlySelectedRegionId = null;
-          if (map.getSource('selected-region-source')) {
-            map.getSource('selected-region-source').setData({ type: 'FeatureCollection', features: [] });
-          }
-          if (activeRegionPopup) {
-            activeRegionPopup.remove();
-            activeRegionPopup = null;
-          }
+          deselectRegion();
         }
       });
 
@@ -2489,14 +2508,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
         // Toggle check: if already selected, deselect on second click!
         if (currentlySelectedRegionId && currentlySelectedRegionId === regId) {
-          currentlySelectedRegionId = null;
-          if (activeRegionPopup) {
-            activeRegionPopup.remove();
-            activeRegionPopup = null;
-          }
-          if (map.getSource('selected-region-source')) {
-            map.getSource('selected-region-source').setData({ type: 'FeatureCollection', features: [] });
-          }
+          deselectRegion();
           return;
         }
         currentlySelectedRegionId = regId;
@@ -2570,12 +2582,17 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         .setHTML(html)
         .addTo(map);
 
+        const popupEl = activeRegionPopup.getElement();
+        if (popupEl) {
+          popupEl.style.cursor = 'pointer';
+          popupEl.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            deselectRegion();
+          });
+        }
+
         activeRegionPopup.on('close', () => {
-          currentlySelectedRegionId = null;
-          if (map.getSource('selected-region-source')) {
-            map.getSource('selected-region-source').setData({ type: 'FeatureCollection', features: [] });
-          }
-          activeRegionPopup = null;
+          deselectRegion();
         });
       });
 
@@ -2625,6 +2642,15 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         .setLngLat([lon, lat])
         .setHTML(html)
         .addTo(map);
+
+        const popupEl = activeRegionPopup.getElement();
+        if (popupEl) {
+          popupEl.style.cursor = 'pointer';
+          popupEl.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            deselectRegion();
+          });
+        }
       }
 
       map.on('click', 'poi-layer', (e) => {
@@ -2640,8 +2666,6 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     let rawRegionsGeoJson = null;
     let activeAlertRegionIds = new Set();
-    let activeRegionPopup = null;
-    let currentlySelectedRegionId = null;
 
     
     // Канонічна мапа прив'язки 122 районів до областей
@@ -2843,6 +2867,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
       lastAlertsStateHash = currentAlertsHash;
 
+      // Set of oblast IDs that have raions covering them in the geojson (all 24 oblasts)
+      const OBLASTS_WITH_RAIONS = (typeof RAION_TO_OBLAST_MAP !== 'undefined') ? new Set(Object.values(RAION_TO_OBLAST_MAP)) : new Set();
+
       const features = [];
 
       (rawRegionsGeoJson.features || []).forEach((feat, idx) => {
@@ -2850,7 +2877,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         const rank = Number(props.rank || 0);
         const regId = String(props.regionId || feat.id || idx);
 
-        // Ігноруємо 1447 дрібних громад (rank === 3), крім 4 міст-анклавів (Харків 1293, Запоріжжя 564, Славутич 750, Коцюбинське 707)
+        // Ігноруємо дрібні громади (rank === 3), крім 4 міст-анклавів (Харків 1293, Запоріжжя 564, Славутич 750, Коцюбинське 707)
         if (rank === 3 && !ENCLAVE_PARENT_MAP[regId]) return;
 
         let alertInfo = null;
@@ -2876,7 +2903,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
         const isAlert = !!(alertInfo && alertInfo.alert);
         const alertColorKey = isAlert ? (alertInfo.color || 'red') : 'none';
-        const fillHex = (alertColorKey === 'yellow') ? '#F59E0B' : '#EF4444';
+        const fillHex = (alertColorKey === 'yellow') ? '#F59E0B' : (isAlert ? '#EF4444' : '#0B0E14');
 
         let cleanGeom = feat.geometry;
         if ((rank === 1 || rank === 2) && regId !== '14' && cleanGeom) {
@@ -2887,14 +2914,17 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           }
         }
 
-        let fillOpacity = 0.0;
+        // DEDUPLICATION ARCHITECTURE:
+        // For the 24 oblasts partitioned into raions, fill is applied ONLY at rank 2 (the raions).
+        // This guarantees EXACTLY ONE fill polygon per coordinate in Ukraine, eliminating color stacking/darker shades!
+        // Kyiv City ('31') and Crimea ('9999') have no raions, so they are filled at rank 1.
+        let fillOpacity = 0.005; // Hit-testable baseline so ALL regions (even peaceful) register click events!
         if (isAlert) {
-          if (rank === 1) {
-            fillOpacity = (alertColorKey === 'yellow') ? 0.20 : 0.26;
-          } else if (rank === 2) {
+          if (rank === 2 || (rank === 1 && !OBLASTS_WITH_RAIONS.has(regId)) || ENCLAVE_PARENT_MAP[regId]) {
             fillOpacity = (alertColorKey === 'yellow') ? 0.22 : 0.28;
-          } else if (rank === 3 || ENCLAVE_PARENT_MAP[regId]) {
-            fillOpacity = (alertColorKey === 'yellow') ? 0.24 : 0.30;
+          } else if (rank === 1 && OBLASTS_WITH_RAIONS.has(regId)) {
+            // Oblast with raions: keep minimal hit-testable opacity so oblast boundary/click works without stacking fill color!
+            fillOpacity = 0.005;
           }
         }
 
@@ -3011,6 +3041,19 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     function applyPoiFilterToMap() {
       if (!map || !map.getSource('poi-source')) return;
+
+      // Ensure all POI sprites are registered in MapLibre HiDPI sprite atlas
+      if (typeof POI_CATEGORIES_META !== 'undefined') {
+        for (const catKey in POI_CATEGORIES_META) {
+          if (!map.hasImage(`poi-${catKey}`)) {
+            try {
+              const sprite = createPoiSprite(catKey, POI_CATEGORIES_META[catKey].color);
+              map.addImage(`poi-${catKey}`, sprite, { pixelRatio: 2 });
+            } catch (_) {}
+          }
+        }
+      }
+
       const features = (poiItems || [])
         .filter(p => enabledPoiCategories.has(p.category))
         .map(p => {
@@ -3023,6 +3066,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
               name: p.name,
               category: p.category,
               color: meta.color,
+              icon: 'poi-' + (p.category || 'airbases'),
               oblast: p.oblast
             }
           };
@@ -3166,23 +3210,21 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         paint: {
           'line-color': [
             'case',
-            ['==', ['get', 'alert'], true],
-            ['get', 'alert_color'],
             ['==', ['get', 'rank'], 1],
-            'rgba(255, 255, 255, 0.28)',
+            'rgba(255, 255, 255, 0.22)',
             ['==', ['get', 'rank'], 3],
-            'rgba(255, 255, 255, 0.35)',
-            'rgba(255, 255, 255, 0.07)'
+            'rgba(255, 255, 255, 0.25)',
+            'rgba(255, 255, 255, 0.08)'
           ],
           'line-width': [
             'case',
             ['==', ['get', 'rank'], 1],
-            1.6,
+            1.4,
             ['==', ['get', 'rank'], 3],
-            1.2,
-            0.6
+            1.0,
+            0.8
           ],
-          'line-opacity': 0.9
+          'line-opacity': 0.85
         }
       });
 
@@ -3228,6 +3270,21 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           'line-color': '#60A5FA',
           'line-width': 1.5,
           'line-dasharray': [3, 2]
+        }
+      });
+
+      // Strategic Objects (POI) Glowing Base Pin
+      map.addLayer({
+        id: 'poi-circle-base',
+        type: 'circle',
+        source: 'poi-source',
+        paint: {
+          'circle-radius': 5,
+          'circle-color': ['coalesce', ['get', 'color'], '#10B981'],
+          'circle-opacity': 0.85,
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#FFFFFF',
+          'circle-stroke-opacity': 0.95
         }
       });
 
@@ -4364,6 +4421,15 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       }
       collapseAllHudPanels();
 
+      // Collapse all other HUD cards so the 3D focus view is clean
+      ['threatsCard', 'slotSelectorCard', 'closestCard'].forEach(cid => {
+        const c = document.getElementById(cid);
+        if (c) {
+          c.classList.remove('hud-expanded');
+          c.classList.add('hud-collapsed');
+        }
+      });
+
       is3DModeActive = true;
       focusedTargetId = tid;
       chaseCam.active = true;
@@ -4373,6 +4439,19 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       chaseCam.zoomLevel = 14.5;
       chaseCam.isTransitioning = true;
       chaseCamPanPauseUntil = 0;
+
+      // Show and expand 3D telemetry pill directly in the HUD
+      const pill3d = document.getElementById('pill3DTelemetry');
+      if (pill3d) {
+        pill3d.style.display = 'flex';
+        pill3d.classList.remove('hud-collapsed');
+        pill3d.classList.add('hud-expanded');
+      }
+
+      // Populate 3D pill telemetry
+      const sim = t.sim;
+      const altM = t.altitudeM || getNominalAltitudeMeters(t.cat);
+      update3DTelemetryUI(t, tid, sim, altM);
 
       // Ensure dragPan stays enabled for intuitive mobile pan & gestures
       if (map.dragPan) map.dragPan.enable();
@@ -4429,6 +4508,21 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
       const banner = document.getElementById('orbitHudBanner');
       if (banner) banner.classList.remove('active');
+
+      const pill3d = document.getElementById('pill3DTelemetry');
+      if (pill3d) {
+        pill3d.style.display = is3D ? 'flex' : 'none';
+        pill3d.classList.remove('hud-expanded');
+        pill3d.classList.add('hud-collapsed');
+      }
+      collapseAllHudPanels();
+
+      // Restore closestCard to expanded
+      const closest = document.getElementById('closestCard');
+      if (closest) {
+        closest.classList.remove('hud-collapsed');
+        closest.classList.add('hud-expanded');
+      }
 
       if (map) {
         map.easeTo({ pitch: 0, bearing: 0, zoom: Math.min(map.getZoom(), 9.5), duration: 800 });
@@ -5170,7 +5264,11 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     function toggleHudCard(cardType, event) {
       if (event) event.stopPropagation();
-      const card = document.getElementById(cardType === 'threats' ? 'threatsCard' : (cardType === 'slot' ? 'slotSelectorCard' : 'closestCard'));
+      const card = document.getElementById(
+        cardType === 'threats' ? 'threatsCard' :
+        (cardType === 'slot' ? 'slotSelectorCard' :
+        (cardType === 'telemetry3d' ? 'pill3DTelemetry' : 'closestCard'))
+      );
       if (!card) return;
       const isColl = card.classList.contains('hud-collapsed');
       if (isColl) {
@@ -5184,13 +5282,21 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     function handleCardClick(cardType, event) {
       if (event && event.target && event.target.closest && event.target.closest('.hud-dropdown-panel')) return;
-      const card = document.getElementById(cardType === 'threats' ? 'threatsCard' : (cardType === 'slot' ? 'slotSelectorCard' : 'closestCard'));
+      if (event && event.target && event.target.closest && event.target.closest('.hud-subframe')) return;
+      const card = document.getElementById(
+        cardType === 'threats' ? 'threatsCard' :
+        (cardType === 'slot' ? 'slotSelectorCard' :
+        (cardType === 'telemetry3d' ? 'pill3DTelemetry' : 'closestCard'))
+      );
       if (!card) return;
       if (card.classList.contains('hud-collapsed')) {
         card.classList.remove('hud-collapsed');
         card.classList.add('hud-expanded');
       } else {
-        toggleHudPanel(cardType === 'threats' ? 'panelThreatsDetails' : (cardType === 'slot' ? 'panelSlotSelector' : 'panelClosestDetails'));
+        const panelId = cardType === 'threats' ? 'panelThreatsDetails' :
+          (cardType === 'slot' ? 'panelSlotSelector' :
+          (cardType === 'telemetry3d' ? 'panel3DTelemetryDetails' : 'panelClosestDetails'));
+        toggleHudPanel(panelId);
       }
     }
 
@@ -6771,6 +6877,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     function togglePoiVisibility(isVisible) {
       showPoiIn2D = isVisible;
       if (map && map.setLayoutProperty) {
+        if (map.getLayer('poi-circle-base')) map.setLayoutProperty('poi-circle-base', 'visibility', isVisible ? 'visible' : 'none');
         map.setLayoutProperty('poi-layer', 'visibility', isVisible ? 'visible' : 'none');
         map.setLayoutProperty('poi-labels', 'visibility', isVisible ? 'visible' : 'none');
       }

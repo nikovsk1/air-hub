@@ -37,11 +37,11 @@ pub async fn run_alerts_collector(
     let mut ua_cooldown_until: f64 = 0.0;
     let mut last_provider_log = String::new();
 
-    let poll_interval_secs: u64 = std::env::var("ALERTS_POLL_INTERVAL_SECS")
+    let mut poll_interval_secs: u64 = std::env::var("ALERTS_POLL_INTERVAL_SECS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(UKRAINEALARM_ALERTS_POLL_INTERVAL_SEC)
-        .clamp(5, 300);
+        .clamp(10, 300);
 
     info!(
         "Alerts collector initialized: primary interval = {}s (UkraineAlarm API v3 direct poll), fallback interval = {}s (Neptun Alerts)",
@@ -69,10 +69,10 @@ pub async fn run_alerts_collector(
             if should_try_ua {
                 // =========================================================================
                 // ОСНОВНИЙ РУШІЙ: Офіційний API v3 (api.ukrainealarm.com/api/v3/alerts)
-                // ОДИН прямий запит кожні 15 секунд
+                // Прямий запит (квота: 1 req/60s для стандартного токена, 1 req/15s для комерційного)
                 // =========================================================================
                 if last_provider_log != "UkraineAlarm API v3" {
-                    info!("Alerts collector: using primary engine UkraineAlarm Official API v3 (15s direct poll)");
+                    info!("Alerts collector: using primary engine UkraineAlarm Official API v3 ({}s direct poll)", poll_interval_secs);
                     last_provider_log = "UkraineAlarm API v3".to_string();
                 }
 
@@ -89,6 +89,9 @@ pub async fn run_alerts_collector(
 
                 match alerts_res {
                     Ok(resp) if resp.status().is_success() => {
+                        if consecutive_ua_failures > 0 {
+                            info!("UkraineAlarm API v3 connection restored successfully");
+                        }
                         consecutive_ua_failures = 0;
                         ua_cooldown_until = 0.0;
                         used_primary = true;
@@ -116,11 +119,19 @@ pub async fn run_alerts_collector(
                             .unwrap_or(60);
 
                         let total_cooldown = retry_after + 2;
-                        warn!(
-                            "UkraineAlarm API v3 returned HTTP 429 Too Many Requests. Cooling down for {}s (failures={})",
-                            total_cooldown,
-                            consecutive_ua_failures + 1
-                        );
+                        if poll_interval_secs < 60 {
+                            warn!(
+                                "UkraineAlarm API v3 returned HTTP 429 (token quota is 1 req/60s). Auto-adjusting poll interval from {}s to 60s to prevent lockouts. Cooling down for {}s",
+                                poll_interval_secs, total_cooldown
+                            );
+                            poll_interval_secs = 60;
+                        } else {
+                            warn!(
+                                "UkraineAlarm API v3 returned HTTP 429 Too Many Requests. Cooling down for {}s (failures={})",
+                                total_cooldown,
+                                consecutive_ua_failures + 1
+                            );
+                        }
                         consecutive_ua_failures += 1;
                         ua_cooldown_until = now_sec() + (total_cooldown as f64);
                     }

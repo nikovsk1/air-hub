@@ -6,7 +6,7 @@ use tracing::{info, warn};
 // =========================================================================
 // ТРИВОГИ (OFFICIAL SIREN ALERTS) - Чиста архітектура джерел
 // =========================================================================
-pub const UKRAINEALARM_ALERTS_POLL_INTERVAL_SEC: u64 = 15;      // ОДИН прямий запит /alerts кожні 15с (комерційний/партнерський ключ)
+pub const UKRAINEALARM_ALERTS_POLL_INTERVAL_SEC: u64 = 60;      // Офіційна квота Stfalcon API v3: 1 запит на 60 сек (запобігає 429 Too Many Requests)
 pub const NEPTUN_ALERTS_POLL_INTERVAL_SEC: u64 = 6;             // Резервне опитування Neptun Alerts (кожні 6с при збої або 429)
 #[allow(dead_code)]
 pub const UKRAINEALARM_ALERTS_FAILOVER_TIMEOUT_SEC: f64 = 15.0; // Поріг тиші тривог до перемикання на Neptun

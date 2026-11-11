@@ -26,6 +26,8 @@ pub async fn run_failover_neptun_collector(
     http_client: reqwest::Client,
 ) {
     let process_start_ts = now_sec();
+    let mut was_in_failover = false;
+    let mut last_logged_count: Option<usize> = None;
 
     loop {
         sleep(Duration::from_secs(NEPTUN_THREATS_POLL_INTERVAL_SEC)).await;
@@ -46,13 +48,21 @@ pub async fn run_failover_neptun_collector(
         };
 
         if !needs_failover {
+            if was_in_failover {
+                info!("Primary UkraineAlarm stream resumed. Neptun failover deactivated.");
+                was_in_failover = false;
+                last_logged_count = None;
+            }
             continue;
         }
 
-        warn!(
-            "All UkraineAlarm streams (WebSocket & HTTP Fallback) silent >{:.0}s. Triggering Tier 3 Neptun disaster recovery poller...",
-            TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC
-        );
+        if !was_in_failover {
+            warn!(
+                "Primary UkraineAlarm streams (WebSocket & HTTP Fallback) silent >{:.0}s. Switching to Tier 3 Neptun disaster recovery...",
+                TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC
+            );
+            was_in_failover = true;
+        }
 
         // 1. Резервний збір повітряних цілей
         let threats_url = "https://neptun.in.ua/api/v1/threats";
@@ -156,8 +166,9 @@ pub async fn run_failover_neptun_collector(
                             history_mgr.record_track(trk, "lost");
                         }
                     }
-                    if extracted_count > 0 {
-                        info!("Neptun failover: updated {} active targets from backup feed", extracted_count);
+                    if extracted_count > 0 && last_logged_count != Some(extracted_count) {
+                        info!("Neptun failover: tracking {} active targets from backup feed", extracted_count);
+                        last_logged_count = Some(extracted_count);
                     }
                 }
             }
