@@ -149,13 +149,13 @@ pub fn default_stream_sources() -> Vec<StreamSourceConfig> {
         },
         StreamSourceConfig {
             id: "neptun_alerts".to_string(),
-            name: "Neptun API (Резерв тривог)".to_string(),
+            name: "Neptun Stream (Резерв тривог)".to_string(),
             stream_type: "alerts".to_string(),
             enabled: true,
             priority: 2,
             poll_interval_sec: 6,
             failover_timeout_sec: 15.0,
-            endpoint_url: "neptun.in.ua/api/v1/alerts".to_string(),
+            endpoint_url: "wss://neptun.in.ua/api/v1/stream".to_string(),
             autonomous: true,
             relation: Some("Загальна мапа".to_string()),
         },
@@ -173,13 +173,13 @@ pub fn default_stream_sources() -> Vec<StreamSourceConfig> {
         },
         StreamSourceConfig {
             id: "neptun_targets".to_string(),
-            name: "Neptun API (Резерв цілей)".to_string(),
+            name: "Neptun Stream (Парсер цілей)".to_string(),
             stream_type: "targets".to_string(),
             enabled: true,
             priority: 2,
             poll_interval_sec: 5,
             failover_timeout_sec: 15.0,
-            endpoint_url: "neptun.in.ua/api/v1/threats".to_string(),
+            endpoint_url: "wss://neptun.in.ua/api/v1/stream".to_string(),
             autonomous: true,
             relation: Some("Загальна мапа".to_string()),
         },
@@ -386,13 +386,44 @@ impl StorageManager {
         failover_timeout_sec: Option<f64>,
     ) -> Result<StreamSourceConfig, String> {
         let mut guard = self.data.write();
-        let stream = guard.streams.iter_mut().find(|s| s.id == id)
+        let target_pos = guard.streams.iter().position(|s| s.id == id)
             .ok_or_else(|| format!("Stream '{}' not found", id))?;
-        if let Some(en) = enabled { stream.enabled = en; }
-        if let Some(pr) = priority { stream.priority = pr; }
-        if let Some(pi) = poll_interval_sec { stream.poll_interval_sec = pi; }
-        if let Some(ft) = failover_timeout_sec { stream.failover_timeout_sec = ft; }
-        let res = stream.clone();
+
+        if let Some(en) = enabled {
+            guard.streams[target_pos].enabled = en;
+        }
+        if let Some(pi) = poll_interval_sec {
+            guard.streams[target_pos].poll_interval_sec = pi;
+        }
+        if let Some(ft) = failover_timeout_sec {
+            guard.streams[target_pos].failover_timeout_sec = ft;
+        }
+
+        if let Some(new_pr) = priority {
+            let old_pr = guard.streams[target_pos].priority;
+            let st_type = guard.streams[target_pos].stream_type.clone();
+            if old_pr != new_pr {
+                guard.streams[target_pos].priority = new_pr;
+                let sid = id.to_string();
+                for other in guard.streams.iter_mut() {
+                    if other.id != sid && other.stream_type == st_type {
+                        if new_pr < old_pr {
+                            // Підвищили рівень: той хто займав цей рівень і нижче зміщуються на рівень нижче (+1)
+                            if other.priority >= new_pr && other.priority < old_pr {
+                                other.priority += 1;
+                            }
+                        } else {
+                            // Знизили рівень: ті хто були між old_pr та new_pr піднімаються (-1)
+                            if other.priority > old_pr && other.priority <= new_pr {
+                                other.priority -= 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let res = guard.streams[target_pos].clone();
         guard.streams.sort_by_key(|s| s.priority);
         drop(guard);
         self.save_atomic()?;

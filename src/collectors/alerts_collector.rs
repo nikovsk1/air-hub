@@ -15,17 +15,16 @@ use crate::storage::StorageManager;
 use crate::tracker::{now_sec, OfficialAlert, ThreatState};
 
 const UKRAINEALARM_ALERTS_URL: &str = "https://api.ukrainealarm.com/api/v3/alerts";
-const NEPTUN_ALERTS_URL: &str = "https://neptun.in.ua/api/v1/alerts";
 const API_UA: &str = "AirAlertHub-Backend/1.0 (Commercial Partner Integration)";
 
 /// Уніфікований фоновий сервіс збору офіційних тривог:
-/// 1. Головне джерело: Офіційний REST API api.ukrainealarm.com/api/v3/alerts
+/// 1. Головне джерело (за замовчуванням): Офіційний REST API api.ukrainealarm.com/api/v3/alerts
 ///    - Комерційний/партнерський токен
 ///    - ОДИН прямий запит кожні 15 секунд (без проміжних викликів /status та без mapUpdate)
 ///    - Чесний заголовок User-Agent: AirAlertHub-Backend/1.0
-/// 2. Резервне джерело (Disaster Recovery): Neptun API (neptun.in.ua/api/v1/alerts)
-///    - Активується при відсутності токена, збої мережі або отриманні HTTP 429
-///    - Опитування кожні 6 секунд (дотримання ліміту CDN)
+/// 2. Резервне джерело / Альтернативний первинний потік: Neptun Alerts
+///    - Працює ВИКЛЮЧНО через чистий WebSocket stream (wss://neptun.in.ua/api/v1/stream) в neptun_failover
+///    - Жодного REST до neptun.in.ua/api/v1/alerts!
 pub async fn run_alerts_collector(
     threat_state: Arc<RwLock<ThreatState>>,
     detector: Arc<OblastDetector>,
@@ -89,34 +88,23 @@ pub async fn run_alerts_collector(
 
         // ЯКЩО NEPTUN ПРИЗНАЧЕНО ОСНОВНИМ ПОТОКОМ ТРИВОГ (Пріоритет #1)
         if is_neptun_primary {
-            if last_provider_log != "Neptun Alerts (Primary)" {
-                info!("Alerts collector: using Neptun Alerts as PRIMARY engine ({}s poll interval)", neptun_poll_interval);
-                last_provider_log = "Neptun Alerts (Primary)".to_string();
-            }
-
-            let neptun_ok = match http_client
-                .get(NEPTUN_ALERTS_URL)
-                .header(USER_AGENT, API_UA)
-                .header(reqwest::header::REFERER, "https://neptun.in.ua/")
-                .header(reqwest::header::ACCEPT, "application/json")
-                .timeout(Duration::from_secs(8))
-                .send()
-                .await
-            {
-                Ok(resp) if resp.status().is_success() => {
-                    if let Ok(val) = resp.json::<Value>().await {
-                        process_neptun_alerts(&val, &threat_state, &detector, &exchange_mgr, "Neptun Alerts (Primary)", "primary").await;
-                        true
-                    } else { false }
-                }
-                _ => false,
+            let (neptun_active, neptun_timeout) = {
+                let st = threat_state.read().await;
+                let to = neptun_stream.as_ref().map(|s| s.failover_timeout_sec).unwrap_or(15.0).max(5.0);
+                let alive = st.alarms_provider.contains("Neptun") && (now - st.last_alerts_update_ts) <= to;
+                (alive, to)
             };
 
-            if neptun_ok {
+            if neptun_active {
+                if last_provider_log != "Neptun Alerts (Primary)" {
+                    info!("Alerts collector: Neptun Alerts is PRIMARY engine (pure WebSocket). UkraineAlarm API v3 in standby.");
+                    last_provider_log = "Neptun Alerts (Primary)".to_string();
+                }
                 sleep(Duration::from_secs(neptun_poll_interval)).await;
                 continue;
+            } else {
+                debug!("Neptun primary WebSocket alerts silent > {:.0}s. Engaging UkraineAlarm API v3 as failover...", neptun_timeout);
             }
-            warn!("Neptun primary alerts poll failed, checking secondary failover...");
         }
 
         // ЯКЩО UKRAINEALARM УВІМКНЕНО
@@ -240,44 +228,20 @@ pub async fn run_alerts_collector(
         }
 
         // =========================================================================
-        // РЕЗЕРВНИЙ РУШІЙ: Neptun Alerts (neptun.in.ua/api/v1/alerts)
-        // Спрацьовує, якщо токен не задано або UkraineAlarm недоступний/у стані cooldown,
-        // І ТІЛЬКИ ЯКЩО потік Neptun Alerts увімкнено!
+        // РЕЗЕРВНЕ ОЧІКУВАННЯ: Якщо UkraineAlarm не спрацював (cooldown / помилка мережі)
+        // Neptun Alerts обробляється автономним арбітром neptun_alerts через чистий WebSocket!
+        // Жодних HTTP REST викликів не виконується!
         // =========================================================================
-        if !used_primary && neptun_enabled {
-            if last_provider_log != "Neptun Alerts" {
-                info!("Alerts collector: using backup failover engine Neptun Alerts (neptun.in.ua)");
-                last_provider_log = "Neptun Alerts".to_string();
+        if !used_primary {
+            if neptun_enabled {
+                if last_provider_log != "Neptun Alerts Failover Standby" {
+                    info!("Alerts collector: UkraineAlarm silent/cooldown. Failover active via Neptun pure WebSocket stream.");
+                    last_provider_log = "Neptun Alerts Failover Standby".to_string();
+                }
+            } else {
+                debug!("Alerts collector: UkraineAlarm unavailable and Neptun backup is disabled. Waiting for retry...");
             }
-
-            match http_client
-                .get(NEPTUN_ALERTS_URL)
-                .header(USER_AGENT, API_UA)
-                .header(reqwest::header::REFERER, "https://neptun.in.ua/")
-                .header(reqwest::header::ACCEPT, "application/json")
-                .timeout(Duration::from_secs(8))
-                .send()
-                .await
-            {
-                Ok(resp) if resp.status().is_success() => {
-                    if let Ok(val) = resp.json::<Value>().await {
-                        process_neptun_alerts(&val, &threat_state, &detector, &exchange_mgr, "Neptun (Резервний)", "failover").await;
-                    }
-                }
-                Ok(resp) => {
-                    debug!("Neptun alerts HTTP error: {}", resp.status());
-                }
-                Err(e) => {
-                    debug!("Neptun alerts request failed: {}", e);
-                }
-            }
-
-            // Опитування резервного джерела
-            sleep(Duration::from_secs(neptun_poll_interval)).await;
-            continue;
-        } else if !used_primary && !neptun_enabled {
-            debug!("Alerts collector: UkraineAlarm unavailable and Neptun backup is disabled. Waiting for retry...");
-            sleep(Duration::from_secs(10)).await;
+            sleep(Duration::from_secs(5)).await;
             continue;
         }
 

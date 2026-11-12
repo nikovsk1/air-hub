@@ -275,7 +275,7 @@ async fn run_neptun_alerts_arbiter(
     detector: Arc<OblastDetector>,
     exchange_mgr: Arc<ExchangeLogManager>,
     storage: Arc<StorageManager>,
-    http_client: reqwest::Client,
+    _http_client: reqwest::Client,
     alerts_buf: Arc<RwLock<NeptunAlertsBuffer>>,
 ) {
     let mut was_active = false;
@@ -354,24 +354,8 @@ async fn run_neptun_alerts_arbiter(
 
         if let Some(val) = ws_alerts_opt {
             process_neptun_alerts(&val, &threat_state, &detector, &exchange_mgr, provider_name, status_str).await;
-            continue;
-        }
-
-        // 2. Якщо WS мовчить або відключений — REST Fallback до neptun.in.ua/api/v1/alerts
-        let alerts_url = "https://neptun.in.ua/api/v1/alerts";
-        if let Ok(resp) = http_client.get(alerts_url)
-            .header(USER_AGENT, BROWSER_UA)
-            .header(reqwest::header::REFERER, "https://neptun.in.ua/")
-            .header(reqwest::header::ACCEPT, "application/json")
-            .timeout(Duration::from_secs(8))
-            .send()
-            .await
-        {
-            if resp.status().is_success() {
-                if let Ok(val) = resp.json::<Value>().await {
-                    process_neptun_alerts(&val, &threat_state, &detector, &exchange_mgr, provider_name, status_str).await;
-                }
-            }
+        } else {
+            debug!("Neptun alerts: WebSocket buffer silent (>25s). Pure WebSocket mode — no REST fallback.");
         }
     }
 }
@@ -383,7 +367,7 @@ async fn run_neptun_targets_arbiter(
     history_mgr: Arc<HistoryManager>,
     exchange_mgr: Arc<ExchangeLogManager>,
     storage: Arc<StorageManager>,
-    http_client: reqwest::Client,
+    _http_client: reqwest::Client,
     targets_buf: Arc<RwLock<NeptunTargetsBuffer>>,
 ) {
     let mut was_active = false;
@@ -393,12 +377,15 @@ async fn run_neptun_targets_arbiter(
     loop {
         let neptun_tgt_cfg = storage.get_stream("neptun_targets");
         let ua_ws_cfg = storage.get_stream("ukrainealarm_ws");
+        let mapa_cfg = storage.get_stream("mapa_targets");
 
         let neptun_enabled = neptun_tgt_cfg.as_ref().map(|s| s.enabled).unwrap_or(true);
         let ua_enabled = ua_ws_cfg.as_ref().map(|s| s.enabled).unwrap_or(true);
+        let mapa_enabled = mapa_cfg.as_ref().map(|s| s.enabled).unwrap_or(true);
 
         let neptun_priority = neptun_tgt_cfg.as_ref().map(|s| s.priority).unwrap_or(2);
         let ua_priority = ua_ws_cfg.as_ref().map(|s| s.priority).unwrap_or(1);
+        let mapa_priority = mapa_cfg.as_ref().map(|s| s.priority).unwrap_or(3);
 
         let poll_interval_sec = neptun_tgt_cfg.as_ref().map(|s| s.poll_interval_sec).unwrap_or(5).max(3);
         let failover_timeout_sec = neptun_tgt_cfg.as_ref().map(|s| s.failover_timeout_sec).unwrap_or(15.0).max(5.0);
@@ -413,27 +400,31 @@ async fn run_neptun_targets_arbiter(
             continue;
         }
 
-        let is_neptun_primary = !ua_enabled || neptun_priority < ua_priority;
+        let is_neptun_primary = (!ua_enabled || neptun_priority < ua_priority)
+            && (!mapa_enabled || neptun_priority < mapa_priority);
         let now = now_sec();
 
         if !is_neptun_primary {
             let uptime = now - process_start_ts;
             if uptime < TARGETS_STARTUP_GRACE_PERIOD_SEC {
                 debug!(
-                    "Neptun failover: startup grace period active ({:.1}s / {:.0}s), awaiting primary WebSocket stabilization",
+                    "Neptun failover: startup grace period active ({:.1}s / {:.0}s), awaiting higher-priority targets stream stabilization",
                     uptime, TARGETS_STARTUP_GRACE_PERIOD_SEC
                 );
                 continue;
             }
 
-            let needs_failover = {
-                let state = threat_state.read().await;
-                (now - state.last_primary_targets_ts) > failover_timeout_sec
-            };
+            let state_read = threat_state.read().await;
+            let ua_alive = ua_enabled && ua_priority < neptun_priority
+                && (now - state_read.last_primary_targets_ts) <= failover_timeout_sec;
+            let mapa_alive = mapa_enabled && mapa_priority < neptun_priority
+                && state_read.targets_provider.contains("MAPA")
+                && (now - state_read.last_targets_update_ts) <= failover_timeout_sec;
+            drop(state_read);
 
-            if !needs_failover {
+            if ua_alive || mapa_alive {
                 if was_active {
-                    info!("Primary UkraineAlarm stream resumed. Neptun targets arbiter in standby.");
+                    info!("Higher priority targets stream active. Neptun targets arbiter in standby.");
                     was_active = false;
                     last_logged_count = None;
                 }
@@ -442,7 +433,7 @@ async fn run_neptun_targets_arbiter(
 
             if !was_active {
                 warn!(
-                    "Primary UkraineAlarm streams (WebSocket & HTTP Fallback) silent >{:.0}s. Switching to Tier 3 Neptun disaster recovery...",
+                    "Higher priority target streams silent >{:.0}s. Switching to Neptun pure WebSocket stream...",
                     failover_timeout_sec
                 );
                 was_active = true;
@@ -470,22 +461,8 @@ async fn run_neptun_targets_arbiter(
         let extracted = if let Some(ws_targets) = ws_extracted_opt {
             ws_targets
         } else {
-            // 2. Якщо WS недоступний — REST Fallback до neptun.in.ua/api/v1/threats
-            let threats_url = "https://neptun.in.ua/api/v1/threats";
-            if let Ok(resp) = http_client.get(threats_url)
-                .header(USER_AGENT, BROWSER_UA)
-                .header(reqwest::header::REFERER, "https://neptun.in.ua/")
-                .header(reqwest::header::ACCEPT, "application/json")
-                .timeout(Duration::from_secs(8))
-                .send()
-                .await
-            {
-                if resp.status().is_success() {
-                    if let Ok(val) = resp.json::<Value>().await {
-                        parse_neptun_threats_list(&val)
-                    } else { Vec::new() }
-                } else { Vec::new() }
-            } else { Vec::new() }
+            debug!("Neptun targets: WebSocket buffer silent (>25s). Pure WebSocket mode — no REST fallback.");
+            Vec::new()
         };
 
         let extracted_count = extracted.len();
