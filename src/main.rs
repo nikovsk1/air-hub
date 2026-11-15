@@ -18,6 +18,7 @@ mod storage;
 mod history;
 mod collectors;
 mod api;
+mod diia_relay;
 
 use api::admin_routes::AppState;
 use config::Config;
@@ -129,18 +130,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let client = http_client.clone();
         tokio::spawn(async move {
             collectors::ukrainealarm_ws::run_ukrainealarm_collector(t_state, det, hist, exch, stor, client).await;
-        });
-    }
-
-    {
-        let t_state = threat_state.clone();
-        let det = detector.clone();
-        let hist = history_mgr.clone();
-        let exch = exchange_mgr.clone();
-        let stor = storage.clone();
-        let client = http_client.clone();
-        tokio::spawn(async move {
-            collectors::ukrainealarm_ws::run_ukrainealarm_http_fallback(t_state, det, hist, exch, stor, client).await;
         });
     }
 
@@ -310,6 +299,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         threat_state,
         threat_watch_tx,
         threat_watch_rx,
+        diia_bridge: Arc::new(parking_lot::RwLock::new(diia_relay::DiiaBridgeState::default())),
     };
 
     let app = api::create_router(app_state);

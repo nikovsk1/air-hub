@@ -103,6 +103,8 @@ pub struct ServiceKeysConfig {
     #[serde(default)]
     pub ukrainealarm_api_token: Option<String>,
     #[serde(default)]
+    pub ukrainealarm_diia_cookie: Option<String>,
+    #[serde(default)]
     pub cartodb_global_api_key: Option<String>,
     #[serde(default)]
     pub cartodb_user_keys: HashMap<String, String>,
@@ -728,7 +730,9 @@ impl StorageManager {
         {
             let mut guard = self.data.write();
             let s_lower = service.to_lowercase();
-            if s_lower.contains("ukrainealarm") {
+            if s_lower.contains("diia") || s_lower.contains("cookie") {
+                guard.service_keys.ukrainealarm_diia_cookie = clean_key;
+            } else if s_lower.contains("ukrainealarm") {
                 guard.service_keys.ukrainealarm_api_token = clean_key;
             } else if s_lower.contains("cartodb") {
                 let rel = relation.trim();

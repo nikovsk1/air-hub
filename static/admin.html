@@ -6,6 +6,7 @@
   <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
   <title>Air Alert Radar Hub — Центр керування</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/static/qrcode.min.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -1005,25 +1006,47 @@
         const aProv = (hData.alarms_provider || (hData.sources && hData.sources.alarms) || "").toLowerCase();
         const aStat = (hData.alarms_status || (hData.sources && hData.sources.alarms_status) || "").toLowerCase();
 
-        if (aProv.includes("ukrainealarm") || aStat === "primary") {
+        const uaAlertStream = (currentStreamsData || []).find(s => s.id === "ukrainealarm_alerts");
+        const nepAlertStream = (currentStreamsData || []).find(s => s.id === "neptun_alerts");
+        const uaAlertsEnabled = uaAlertStream ? uaAlertStream.enabled : true;
+        const nepAlertsEnabled = nepAlertStream ? nepAlertStream.enabled : true;
+
+        if (aProv.includes("neptun") || (!uaAlertsEnabled && nepAlertsEnabled)) {
+          const isPrimary = aStat === "primary" || aProv.includes("primary") || aProv.includes("основн") || !uaAlertsEnabled;
+          if (alarmsTitle) alarmsTitle.innerText = isPrimary ? "Neptun Alerts (Основний)" : "Neptun Alerts (Резервний)";
+          if (alarmsSub) {
+            alarmsSub.innerText = isPrimary
+              ? "wss://neptun.in.ua/api/v1/stream (Чистий WebSocket)"
+              : ((hData.ukrainealarm_configured === false)
+                  ? "neptun.in.ua/api/v1/alerts (API v3 токен не налаштовано)"
+                  : "wss://neptun.in.ua/api/v1/stream (Чистий WebSocket Failover)");
+          }
+          if (alarmsDot) alarmsDot.className = "w-3.5 h-3.5 rounded-full " + (isPrimary ? "bg-emerald-500" : "bg-amber-500") + " animate-pulse shrink-0";
+          if (alarmsBadge) {
+            if (isPrimary) {
+              alarmsBadge.innerText = "ОСНОВНИЙ (NEPTUN)";
+              alarmsBadge.className = "bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+            } else {
+              alarmsBadge.innerText = (hData.ukrainealarm_configured === false) ? "РЕЗЕРВ (НЕМАЄ ТОКЕНА)" : "FAILOVER (NEPTUN)";
+              alarmsBadge.className = "bg-amber-950 text-amber-400 border border-amber-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+            }
+          }
+        } else if (aProv.includes("ukrainealarm") && uaAlertsEnabled) {
+          const isPrimary = aStat === "primary" || aProv.includes("primary") || aProv.includes("основн");
           if (alarmsTitle) alarmsTitle.innerText = "UkraineAlarm (API v3)";
           if (alarmsSub) alarmsSub.innerText = "api.ukrainealarm.com (REST Smart Polling)";
           if (alarmsDot) alarmsDot.className = "w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse shrink-0";
           if (alarmsBadge) {
-            alarmsBadge.innerText = "ОСНОВНИЙ (API v3)";
+            alarmsBadge.innerText = isPrimary ? "ОСНОВНИЙ (API v3)" : "РЕЗЕРВ (API v3)";
             alarmsBadge.className = "bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
           }
-        } else if (aProv.includes("neptun") || aStat === "failover" || aStat === "fallback") {
-          if (alarmsTitle) alarmsTitle.innerText = "Neptun Alerts (Резервний)";
-          if (alarmsSub) {
-            alarmsSub.innerText = (hData.ukrainealarm_configured === false)
-              ? "neptun.in.ua/api/v1/alerts (API v3 токен не налаштовано)"
-              : "wss://neptun.in.ua/api/v1/stream (Чистий WebSocket Failover)";
-          }
-          if (alarmsDot) alarmsDot.className = "w-3.5 h-3.5 rounded-full bg-amber-500 animate-pulse shrink-0";
+        } else if (!uaAlertsEnabled && !nepAlertsEnabled) {
+          if (alarmsTitle) alarmsTitle.innerText = "Потоки тривог вимкнено";
+          if (alarmsSub) alarmsSub.innerText = "Всі джерела сирен вимкнено в налаштуваннях";
+          if (alarmsDot) alarmsDot.className = "w-3.5 h-3.5 rounded-full bg-gray-600 shrink-0";
           if (alarmsBadge) {
-            alarmsBadge.innerText = (hData.ukrainealarm_configured === false) ? "РЕЗЕРВ (НЕМАЄ ТОКЕНА)" : "FAILOVER (NEPTUN)";
-            alarmsBadge.className = "bg-amber-950 text-amber-400 border border-amber-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+            alarmsBadge.innerText = "ВИМКНЕНО";
+            alarmsBadge.className = "bg-gray-900 text-gray-500 border border-gray-700 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
           }
         } else if (hData.alarms_provider && hData.alarms_provider !== "none" && hData.alarms_provider !== "") {
           if (alarmsTitle) alarmsTitle.innerText = hData.alarms_provider;
@@ -1043,7 +1066,7 @@
           }
         }
 
-        // 2. Потік цілей (Радарні загрози / WS UkraineAlarm vs Neptun)
+        // 2. Потік цілей (Радарні загрози / Neptun vs WS UkraineAlarm vs MAPA)
         const targetsTitle = document.getElementById("targetsSourceTitle");
         const targetsDot = document.getElementById("targetsDot");
         const targetsBadge = document.getElementById("targetsBadge");
@@ -1052,29 +1075,58 @@
         const tProv = (hData.targets_provider || (hData.sources && hData.sources.targets) || "").toLowerCase();
         const tStat = (hData.targets_status || (hData.sources && hData.sources.targets_status) || "").toLowerCase();
 
-        if (tProv.includes("ukrainealarm") || tProv.includes("centrifugo") || tStat === "primary") {
-          if (targetsTitle) targetsTitle.innerText = "WS UkraineAlarm";
+        const uaTargetStream = (currentStreamsData || []).find(s => s.id === "ukrainealarm_ws");
+        const nepTargetStream = (currentStreamsData || []).find(s => s.id === "neptun_targets");
+        const mapaTargetStream = (currentStreamsData || []).find(s => s.id === "mapa_targets");
+        const uaTargetsEnabled = uaTargetStream ? uaTargetStream.enabled : true;
+        const nepTargetsEnabled = nepTargetStream ? nepTargetStream.enabled : true;
+        const mapaTargetsEnabled = mapaTargetStream ? mapaTargetStream.enabled : true;
+
+        if (tProv.includes("neptun") || (!uaTargetsEnabled && nepTargetsEnabled && (nepTargetStream?.priority <= (mapaTargetStream?.priority ?? 99)))) {
+          const isPrimary = tStat === "primary" || tProv.includes("primary") || tProv.includes("основн") || !uaTargetsEnabled;
+          if (targetsTitle) targetsTitle.innerText = isPrimary ? "Neptun Hub API (Основний)" : "Neptun Threats (Резервний)";
+          if (targetsSub) {
+            targetsSub.innerText = isPrimary
+              ? "wss://neptun.in.ua/api/v1/stream (Чистий WebSocket)"
+              : "neptun.in.ua/api/v1/threats (Failover: тиша WS >14с)";
+          }
+          if (targetsDot) targetsDot.className = "w-3.5 h-3.5 rounded-full " + (isPrimary ? "bg-emerald-500" : "bg-amber-500") + " animate-pulse shrink-0";
+          if (targetsBadge) {
+            targetsBadge.innerText = isPrimary ? "ОСНОВНИЙ (NEPTUN)" : "FAILOVER (NEPTUN)";
+            targetsBadge.className = isPrimary
+              ? "bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0"
+              : "bg-amber-950 text-amber-400 border border-amber-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          }
+        } else if (tProv.includes("mapa") || (!uaTargetsEnabled && mapaTargetsEnabled && (!nepTargetsEnabled || ((mapaTargetStream?.priority ?? 99) < (nepTargetStream?.priority ?? 99))))) {
+          const isPrimary = tStat === "primary" || tProv.includes("primary") || tProv.includes("основн") || (!uaTargetsEnabled && !nepTargetsEnabled);
+          if (targetsTitle) targetsTitle.innerText = isPrimary ? "MAPA.UA API (Основний)" : "MAPA.UA (Резервний)";
+          if (targetsSub) targetsSub.innerText = "mapa.ua/api/v1/current (OpenData API)";
+          if (targetsDot) targetsDot.className = "w-3.5 h-3.5 rounded-full " + (isPrimary ? "bg-emerald-500" : "bg-sky-500") + " animate-pulse shrink-0";
+          if (targetsBadge) {
+            targetsBadge.innerText = isPrimary ? "ОСНОВНИЙ (MAPA)" : "MAPA.UA";
+            targetsBadge.className = "bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+          }
+        } else if ((tProv.includes("ukrainealarm") || tProv.includes("centrifugo")) && uaTargetsEnabled) {
+          const isPrimary = tStat === "primary" || tProv.includes("primary") || tProv.includes("основн");
+          if (targetsTitle) targetsTitle.innerText = isPrimary ? "WS UkraineAlarm" : "WS UkraineAlarm (Резервний)";
           if (targetsSub) targetsSub.innerText = "map.ukrainealarm.com (WebSocket)";
           if (targetsDot) targetsDot.className = "w-3.5 h-3.5 rounded-full bg-sky-500 animate-pulse shrink-0";
           if (targetsBadge) {
-            targetsBadge.innerText = "ОСНОВНИЙ (WS)";
-            targetsBadge.className = "bg-sky-950 text-sky-400 border border-sky-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+            if (tStat === "unauthorized") {
+              targetsBadge.innerText = "ПОТРІБНА ДІЯ (401)";
+              targetsBadge.className = "bg-red-950 text-red-400 border border-red-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0 animate-pulse";
+            } else {
+              targetsBadge.innerText = isPrimary ? "ОСНОВНИЙ (WS)" : "РЕЗЕРВ (WS)";
+              targetsBadge.className = "bg-sky-950 text-sky-400 border border-sky-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+            }
           }
-        } else if (tProv.includes("neptun") || tStat === "failover" || tStat === "fallback") {
-          if (targetsTitle) targetsTitle.innerText = "Neptun Threats (Резервний)";
-          if (targetsSub) targetsSub.innerText = "neptun.in.ua/api/v1/threats (Failover: тиша WS >14с)";
-          if (targetsDot) targetsDot.className = "w-3.5 h-3.5 rounded-full bg-amber-500 animate-pulse shrink-0";
+        } else if (!uaTargetsEnabled && !nepTargetsEnabled && !mapaTargetsEnabled) {
+          if (targetsTitle) targetsTitle.innerText = "Радарні потоки вимкнено";
+          if (targetsSub) targetsSub.innerText = "Всі джерела радарних цілей вимкнено";
+          if (targetsDot) targetsDot.className = "w-3.5 h-3.5 rounded-full bg-gray-600 shrink-0";
           if (targetsBadge) {
-            targetsBadge.innerText = "FAILOVER (NEPTUN)";
-            targetsBadge.className = "bg-amber-950 text-amber-400 border border-amber-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
-          }
-        } else if (tProv.includes("mapa")) {
-          if (targetsTitle) targetsTitle.innerText = "MAPA.UA (Резервний)";
-          if (targetsSub) targetsSub.innerText = "mapa.ua/api/v1/current (OpenData API)";
-          if (targetsDot) targetsDot.className = "w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse shrink-0";
-          if (targetsBadge) {
-            targetsBadge.innerText = "MAPA.UA";
-            targetsBadge.className = "bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
+            targetsBadge.innerText = "ВИМКНЕНО";
+            targetsBadge.className = "bg-gray-900 text-gray-500 border border-gray-700 text-xs px-2.5 py-1 rounded font-mono font-bold shrink-0";
           }
         } else if (hData.targets_provider && hData.targets_provider !== "none" && hData.targets_provider !== "") {
           if (targetsTitle) targetsTitle.innerText = hData.targets_provider;
@@ -1174,6 +1226,10 @@
 
     let currentServiceKeysData = null;
     let currentStreamsData = null;
+    let currentDiiaSession = null;
+    let diiaPollTimer = null;
+    let diiaCountdownTimer = null;
+    let diiaCountdownSec = 120;
     let serviceKeyVisibility = {
       ukrainealarm: false,
       cartodb: false
@@ -1191,6 +1247,7 @@
         if (data.status === "ok") {
           if (data.service_keys) currentServiceKeysData = data.service_keys;
           if (data.streams) currentStreamsData = data.streams;
+          if (data.diia_session) currentDiiaSession = data.diia_session;
           renderServiceKeysTable();
         }
       } catch(e) {
@@ -1551,15 +1608,34 @@
 
         if (isUa) {
           tagHtml = `<span class="bg-sky-950 text-sky-400 border border-sky-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🎯 ПОТІК ЦІЛЕЙ</span><span class="text-[11px] text-gray-400">map.ukrainealarm.com (WebSocket)</span>`;
+
+          let diiaBadgeHtml = '';
+          const dStatus = currentDiiaSession ? currentDiiaSession.status : 'not_configured';
+          if (dStatus === 'active') {
+            diiaBadgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800" title="Авторизація активна">🛡️ Дія: Активна</span>`;
+          } else if (dStatus === 'expired') {
+            diiaBadgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-red-950/80 text-red-400 border border-red-800 animate-pulse" title="Сесію Дії вичерпано або відхилено">⚠️ Дія: Застаріла</span>`;
+          } else {
+            diiaBadgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-gray-800 text-gray-400 border border-gray-700" title="Немає активної куки Дії">❌ Дія: Не авторизовано</span>`;
+          }
+
           midHtml = `
             <div class="bg-gray-950 border border-gray-800 px-3 py-1.5 rounded-lg flex items-center justify-between text-xs max-w-md">
               <span class="text-sky-300 font-mono">map.ukrainealarm.com</span>
               <span class="text-[10px] text-gray-400 font-mono">Centrifugo WebSocket</span>
             </div>
-            <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
-              <span>Таймаут тиші WS:</span>
-              <input type="number" id="streamTimeout_${s.id}" min="5" max="120" value="${s.failover_timeout_sec}" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
-              <span>сек</span>
+            <div class="flex items-center justify-between max-w-md mt-2">
+              <div class="flex items-center gap-2">
+                ${diiaBadgeHtml}
+                <button type="button" onclick="openDiiaModal()" class="px-2 py-0.5 bg-sky-900/60 hover:bg-sky-800 text-sky-200 border border-sky-600/50 rounded text-[11px] font-semibold inline-flex items-center gap-1 transition cursor-pointer shadow-sm" title="Оновити авторизацію через Дію без переходу на сайт">
+                  <span>📲</span><span>Авторизуватись</span>
+                </button>
+              </div>
+              <div class="flex items-center gap-1 text-xs text-gray-400">
+                <span>Тиша WS:</span>
+                <input type="number" id="streamTimeout_${s.id}" min="5" max="120" value="${s.failover_timeout_sec}" class="w-12 bg-gray-950 border border-gray-700 px-1 py-0.5 rounded text-center text-white text-xs font-mono">
+                <span>сек</span>
+              </div>
             </div>
           `;
           purposeText = "Радарні онлайн загрози";
@@ -2984,6 +3060,141 @@ ${resp.api_key}
       if (modal) modal.classList.add("hidden");
     }
 
+    async function openDiiaModal() {
+      if (!currentAdminKey) return showLoginScreen();
+      const modal = document.getElementById("diiaAuthModal");
+      const qrContainer = document.getElementById("diiaQrContainer");
+      const statusMsg = document.getElementById("diiaStatusMsg");
+      const countdownElem = document.getElementById("diiaCountdown");
+      const deepLinkBtn = document.getElementById("diiaDeepLinkBtn");
+
+      if (!modal || !qrContainer) return;
+
+      clearInterval(diiaPollTimer);
+      clearInterval(diiaCountdownTimer);
+      qrContainer.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-gray-500 text-xs font-mono"><span class="animate-pulse">⏳ Запит сесії Дії...</span></div>';
+      if (statusMsg) statusMsg.innerHTML = 'Ініціалізація захищеної сесії...';
+      if (countdownElem) countdownElem.innerText = '02:00';
+      if (deepLinkBtn) deepLinkBtn.classList.add("hidden");
+
+      modal.classList.remove("hidden");
+
+      try {
+        const res = await fetch("/api/v1/admin/diia/start?admin_key=" + encodeURIComponent(currentAdminKey), {
+          method: "POST"
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === "pending" && data.deepLink) {
+          qrContainer.innerHTML = "";
+          new QRCode(qrContainer, {
+            text: data.deepLink,
+            width: 200,
+            height: 200,
+            colorDark: "#0f172a",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.M
+          });
+
+          if (statusMsg) {
+            statusMsg.innerHTML = 'Відскануйте QR-код сканером у застосунку <strong class="text-sky-400">Дія</strong>';
+          }
+
+          if (deepLinkBtn) {
+            deepLinkBtn.href = data.deepLink;
+            deepLinkBtn.classList.remove("hidden");
+          }
+
+          diiaCountdownSec = 120;
+          if (data.remainingMs) {
+            diiaCountdownSec = Math.max(10, Math.floor(data.remainingMs / 1000));
+          }
+          updateDiiaCountdownDisplay();
+
+          diiaCountdownTimer = setInterval(() => {
+            diiaCountdownSec--;
+            updateDiiaCountdownDisplay();
+            if (diiaCountdownSec <= 0) {
+              clearInterval(diiaCountdownTimer);
+              clearInterval(diiaPollTimer);
+              if (statusMsg) statusMsg.innerHTML = '<span class="text-red-400 font-bold">⏱️ Час очікування вичерпано. Закрийте та спробуйте знову.</span>';
+            }
+          }, 1000);
+
+          diiaPollTimer = setInterval(pollDiiaStatus, 3000);
+        } else {
+          qrContainer.innerHTML = `<div class="p-3 text-red-500 text-xs font-mono text-center">❌ Помилка: ${escapeHtml(data.error || data.status || "Невідомо")}</div>`;
+          if (statusMsg) statusMsg.innerHTML = '<span class="text-red-400">Не вдалося зв\'язатися з сервером UkraineAlarm.</span>';
+        }
+      } catch (e) {
+        qrContainer.innerHTML = `<div class="p-3 text-red-500 text-xs font-mono text-center">❌ Мережева помилка: ${escapeHtml(String(e))}</div>`;
+        if (statusMsg) statusMsg.innerHTML = '<span class="text-red-400">Помилка мережі.</span>';
+      }
+    }
+
+    function updateDiiaCountdownDisplay() {
+      const countdownElem = document.getElementById("diiaCountdown");
+      if (!countdownElem) return;
+      const m = Math.floor(diiaCountdownSec / 60);
+      const s = diiaCountdownSec % 60;
+      countdownElem.innerText = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    async function pollDiiaStatus() {
+      if (!currentAdminKey) return;
+      const modal = document.getElementById("diiaAuthModal");
+      if (!modal || modal.classList.contains("hidden")) {
+        clearInterval(diiaPollTimer);
+        clearInterval(diiaCountdownTimer);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/v1/admin/diia/status?admin_key=" + encodeURIComponent(currentAdminKey));
+        const data = await res.json();
+
+        if (data.status === "authorized") {
+          clearInterval(diiaPollTimer);
+          clearInterval(diiaCountdownTimer);
+
+          const statusMsg = document.getElementById("diiaStatusMsg");
+          const qrContainer = document.getElementById("diiaQrContainer");
+          const deepLinkBtn = document.getElementById("diiaDeepLinkBtn");
+
+          if (qrContainer) {
+            qrContainer.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-emerald-600 text-3xl font-bold"><span>✅</span><span class="text-xs text-gray-800 mt-2 font-semibold">Успішно авторизовано!</span></div>';
+          }
+          if (statusMsg) {
+            statusMsg.innerHTML = '<span class="text-emerald-400 font-bold">🎉 Авторизацію успішно пройдено! Оновлені сесійні ключі збережено.</span>';
+          }
+          if (deepLinkBtn) deepLinkBtn.classList.add("hidden");
+
+          await loadServiceKeys();
+          updateTelemetry();
+
+          setTimeout(() => {
+            closeDiiaModal();
+          }, 1800);
+        } else if (data.status === "expired" || data.status === "failed") {
+          clearInterval(diiaPollTimer);
+          clearInterval(diiaCountdownTimer);
+          const statusMsg = document.getElementById("diiaStatusMsg");
+          if (statusMsg) {
+            statusMsg.innerHTML = `<span class="text-red-400 font-bold">❌ ${escapeHtml(data.last_error || "Авторизацію відхилено або час вичерпано.")}</span>`;
+          }
+        }
+      } catch (e) {
+        console.warn("Diia poll status error:", e);
+      }
+    }
+
+    function closeDiiaModal() {
+      const modal = document.getElementById("diiaAuthModal");
+      if (modal) modal.classList.add("hidden");
+      clearInterval(diiaPollTimer);
+      clearInterval(diiaCountdownTimer);
+    }
+
     function updateRadarModalUserPreview() {
       const sel = document.getElementById("radarModalUserSelect");
       const prev = document.getElementById("radarModalSlotsPreview");
@@ -3346,6 +3557,50 @@ ${resp.api_key}
         <button onclick="closeApiDocsModal()" class="px-4 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-semibold transition">
           Закрити
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНЕ ВІКНО: АВТОРИЗАЦІЯ ЧЕРЕЗ ДІЮ ДЛЯ РАДАРНИХ ЦІЛЕЙ -->
+  <div id="diiaAuthModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-gray-900 border border-sky-600/40 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 text-center">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">🛡️</span>
+          <div class="text-left">
+            <h3 class="font-bold text-white text-base">Авторизація через Дію</h3>
+            <p class="text-[11px] text-gray-400">Отримання сесії доступу до радарних цілей UkraineAlarm</p>
+          </div>
+        </div>
+        <button onclick="closeDiiaModal()" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition">✕</button>
+      </div>
+
+      <div class="py-2 flex flex-col items-center justify-center">
+        <!-- QR Code Container -->
+        <div id="diiaQrBox" class="p-4 bg-white rounded-xl shadow-lg inline-block border-2 border-sky-500/30">
+          <div id="diiaQrContainer" class="w-[200px] h-[200px] flex items-center justify-center text-gray-800 text-xs font-mono">
+            <span class="animate-pulse">Генерація QR-коду...</span>
+          </div>
+        </div>
+
+        <div id="diiaStatusMsg" class="mt-4 text-xs font-medium text-gray-300">
+          Відскануйте QR-код сканером у застосунку <strong class="text-sky-400">Дія</strong>
+        </div>
+
+        <div id="diiaTimer" class="mt-1 text-[11px] font-mono text-amber-400">
+          Дійсний ще: <span id="diiaCountdown">02:00</span>
+        </div>
+
+        <div class="mt-4 w-full">
+          <a id="diiaDeepLinkBtn" href="#" target="_blank" class="hidden w-full py-2.5 px-4 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white rounded-xl text-xs font-bold transition shadow-md flex items-center justify-center gap-2">
+            <span>📲</span><span>Відкрити в додатку Дія</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="border-t border-gray-800 pt-3 flex items-center justify-between text-xs text-gray-400">
+        <span class="text-[11px]">🔐 Захищене з'єднання з map.ukrainealarm.com</span>
+        <button onclick="closeDiiaModal()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition font-medium">Закрити</button>
       </div>
     </div>
   </div>

@@ -21,6 +21,7 @@ pub const TARGETS_PRIMARY_FAILOVER_TIMEOUT_SEC: f64 = 15.0;     // Поріг т
 pub const NEPTUN_THREATS_POLL_INTERVAL_SEC: u64 = 5;            // Резервне опитування цілей Neptun REST (кожні 5с)
 #[allow(dead_code)]
 pub const WS_SILENCE_TRIGGER_FALLBACK_SEC: f64 = 8.0;           // Тиша WS для активації Fallback HTTP
+#[allow(dead_code)]
 pub const UKRAINEALARM_FALLBACK_503_COOLDOWN_SEC: u64 = 60;     // Пауза опитування Fallback HTTP при отриманні 503 (WS активний)
 
 #[derive(Clone, Debug)]

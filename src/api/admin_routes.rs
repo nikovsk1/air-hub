@@ -47,6 +47,7 @@ pub struct AppState {
     #[allow(dead_code)]
     pub threat_watch_tx: tokio::sync::watch::Sender<u64>,
     pub threat_watch_rx: tokio::sync::watch::Receiver<u64>,
+    pub diia_bridge: Arc<parking_lot::RwLock<crate::diia_relay::DiiaBridgeState>>,
 }
 
 #[derive(Deserialize)]
@@ -80,6 +81,9 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/api/v1/admin/history/upload", post(handle_upload_history_json))
         .route("/api/v1/admin/service_keys", get(handle_get_service_keys).post(handle_save_service_key).delete(handle_delete_service_key))
         .route("/api/v1/admin/streams", get(handle_get_streams).post(handle_save_streams))
+        .route("/api/v1/admin/diia/start", post(handle_diia_start))
+        .route("/api/v1/admin/diia/status", get(handle_diia_status))
+        .route("/api/v1/admin/diia/session", get(handle_diia_session))
         .route("/api/v1/admin/poi", get(handle_admin_list_poi).post(handle_admin_save_poi))
         .route("/api/v1/admin/poi/:id", put(handle_admin_save_poi).delete(handle_admin_delete_poi))
         .route("/api/v1/admin/backup", get(handle_download_backup))
@@ -99,19 +103,21 @@ async fn handle_admin_ui(
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    static CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    let content = CACHE.get_or_init(|| {
-        let admin_file = state.config.static_dir.join("admin.html");
-        fs::read_to_string(&admin_file).unwrap_or_else(|_| "<h1>admin.html not found</h1>".to_string())
-    });
+    let admin_file = state.config.static_dir.join("admin.html");
+    let content = tokio::fs::read_to_string(&admin_file)
+        .await
+        .unwrap_or_else(|_| "<h1>admin.html not found</h1>".to_string());
 
     (
         [
             (header::CONTENT_TYPE, "text/html; charset=utf-8"),
-            (header::CACHE_CONTROL, "public, max-age=3600"),
+            (header::CACHE_CONTROL, "no-cache, no-store, must-revalidate"),
+            (header::PRAGMA, "no-cache"),
+            (header::EXPIRES, "0"),
         ],
-        content.as_str()
-    ).into_response()
+        content,
+    )
+        .into_response()
 }
 
 async fn handle_verify(
@@ -486,9 +492,16 @@ async fn handle_get_service_keys(
         }
     }
 
+    let last_tgt_st = {
+        let ts = state.threat_state.read().await;
+        ts.last_targets_provider_status.clone()
+    };
+    let diia_session = crate::diia_relay::get_diia_session_info(&state.storage, &state.diia_bridge, &last_tgt_st);
+
     Json(json!({
         "status": "ok",
         "streams": streams,
+        "diia_session": diia_session,
         "service_keys": {
             "ukrainealarm": {
                 "id": "ukrainealarm",
@@ -505,7 +518,8 @@ async fn handle_get_service_keys(
                 "name": "WS UkraineAlarm (Парсер цілей)",
                 "category": "🎯 Потік цілей (Радарні загрози)",
                 "stream": "targets",
-                "usage": "map.ukrainealarm.com (Centrifugo WebSocket)",
+                "usage": "map.ukrainealarm.com (Centrifugo WebSocket / Дія)",
+                "key": sk.ukrainealarm_diia_cookie.unwrap_or_default(),
                 "is_autonomous": true
             },
             "neptun": {
@@ -622,12 +636,102 @@ async fn handle_save_streams(
         return (StatusCode::BAD_REQUEST, Json(json!({"status": "error", "message": "Missing streams array or stream id"}))).into_response();
     }
 
+    // Миттєва синхронізація активних провайдерів у ThreatState відповідно до оновлених пріоритетів
+    {
+        let all_streams = state.storage.get_streams();
+        let mut st = state.threat_state.write().await;
+
+        let mut alerts_streams: Vec<_> = all_streams.iter().filter(|s| s.stream_type == "alerts" && s.enabled).collect();
+        alerts_streams.sort_by_key(|s| s.priority);
+        if let Some(top_alert) = alerts_streams.first() {
+            if top_alert.id == "neptun_alerts" {
+                st.alarms_provider = "Neptun Alerts (Primary)".to_string();
+                st.last_alarms_provider_status = "primary".to_string();
+            } else if top_alert.id == "ukrainealarm_alerts" {
+                st.alarms_provider = "UkraineAlarm (API v3)".to_string();
+                st.last_alarms_provider_status = "primary".to_string();
+            }
+        } else {
+            st.alarms_provider = "none".to_string();
+            st.last_alarms_provider_status = "disabled".to_string();
+        }
+
+        let mut targets_streams: Vec<_> = all_streams.iter().filter(|s| s.stream_type == "targets" && s.enabled).collect();
+        targets_streams.sort_by_key(|s| s.priority);
+        if let Some(top_target) = targets_streams.first() {
+            if top_target.id == "neptun_targets" {
+                st.targets_provider = "Neptun (Основний)".to_string();
+                st.last_targets_provider_status = "primary".to_string();
+                st.upstream_provider = "Neptun (Основний)".to_string();
+            } else if top_target.id == "mapa_targets" {
+                st.targets_provider = "MAPA.UA (Основний)".to_string();
+                st.last_targets_provider_status = "primary".to_string();
+                st.upstream_provider = "MAPA.UA (Основний)".to_string();
+            } else if top_target.id == "ukrainealarm_ws" {
+                st.targets_provider = "WS UkraineAlarm".to_string();
+                st.last_targets_provider_status = "primary".to_string();
+                st.upstream_provider = "WS UkraineAlarm".to_string();
+            }
+        } else {
+            st.targets_provider = "none".to_string();
+            st.last_targets_provider_status = "disabled".to_string();
+            st.upstream_provider = "none".to_string();
+        }
+    }
+
     let streams = state.storage.get_streams();
     Json(json!({
         "status": "ok",
         "message": "saved",
         "streams": streams
     })).into_response()
+}
+
+async fn handle_diia_start(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Response {
+    if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
+        return status.into_response();
+    }
+    match crate::diia_relay::start_diia_session(&state.http_client, &state.diia_bridge).await {
+        Ok(val) => Json(val).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(json!({"status": "failed", "error": e}))).into_response(),
+    }
+}
+
+async fn handle_diia_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Response {
+    if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
+        return status.into_response();
+    }
+    match crate::diia_relay::poll_diia_status(&state.http_client, &state.diia_bridge, &state.storage).await {
+        Ok(val) => Json(val).into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(json!({"status": "failed", "error": e}))).into_response(),
+    }
+}
+
+async fn handle_diia_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Response {
+    if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
+        return status.into_response();
+    }
+    let last_st = {
+        let ts = state.threat_state.read().await;
+        ts.last_targets_provider_status.clone()
+    };
+    let val = crate::diia_relay::get_diia_session_info(&state.storage, &state.diia_bridge, &last_st);
+    Json(val).into_response()
 }
 
 async fn handle_download_backup(

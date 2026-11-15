@@ -12,16 +12,13 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, info, warn};
 
 use crate::canonical_registry::ExchangeLogManager;
-use crate::config::UKRAINEALARM_FALLBACK_503_COOLDOWN_SEC;
-use crate::crypto_decoder::{decode_payload_native, decode_surface_v2_payload, extract_snapshot_meta, extract_targets, extract_taxonomy, RawExtractedTarget};
+use crate::crypto_decoder::{decode_payload_native, decode_surface_v2_payload, extract_targets, extract_taxonomy, RawExtractedTarget};
 use crate::history::HistoryManager;
 use crate::oblast_detector::OblastDetector;
 use crate::storage::StorageManager;
 use crate::tracker::{now_sec, ThreatState};
 
 const PAGE_URL: &str = "https://map.ukrainealarm.com/onlyMap";
-const FALLBACK_URL: &str = "https://map.ukrainealarm.com/api/centrifuge/map/fallback";
-const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36";
 
 /// Уніфікована обробка корисного навантаження (як з Centrifugo WebSocket, так і з REST Fallback)
 pub async fn process_ukrainealarm_payload(
@@ -46,6 +43,7 @@ pub async fn process_ukrainealarm_payload(
 }
 
 /// Варіант із підтримкою попередньо розкодованого AST для уникнення повторного ChaCha20-розкодування
+#[allow(dead_code)]
 pub async fn process_ukrainealarm_payload_decoded(
     payload: &str,
     pre_decoded: Option<Value>,
@@ -279,13 +277,31 @@ pub async fn run_ukrainealarm_collector(
     let re_sub_ep = Regex::new(r#"data-target-subscribe-endpoint=["']([^"']+)["']"#).unwrap();
 
     loop {
+        let ua_stream = storage.get_stream("ukrainealarm_ws");
+        if !ua_stream.as_ref().map(|s| s.enabled).unwrap_or(true) {
+            sleep(Duration::from_secs(5)).await;
+            continue;
+        }
+
         info!("Connecting to UkraineAlarm Centrifugo WebSocket upstream...");
 
         let page_resp = match http_client
             .get(PAGE_URL)
-            .header(USER_AGENT, BROWSER_UA)
+            .header(USER_AGENT, crate::diia_relay::BROWSER_UA)
             .header(ORIGIN, "https://map.ukrainealarm.com")
             .header(REFERER, "https://map.ukrainealarm.com/")
+            .header("sec-ch-ua", crate::diia_relay::SEC_CH_UA)
+            .header("sec-ch-ua-mobile", crate::diia_relay::SEC_CH_UA_MOBILE)
+            .header("sec-ch-ua-platform", crate::diia_relay::SEC_CH_UA_PLATFORM)
+            .header("sec-ch-ua-arch", crate::diia_relay::SEC_CH_UA_ARCH)
+            .header("sec-ch-ua-bitness", crate::diia_relay::SEC_CH_UA_BITNESS)
+            .header("sec-ch-ua-full-version", crate::diia_relay::SEC_CH_UA_FULL_VERSION)
+            .header("sec-ch-ua-platform-version", crate::diia_relay::SEC_CH_UA_PLATFORM_VERSION)
+            .header("sec-fetch-dest", "document")
+            .header("sec-fetch-mode", "navigate")
+            .header("sec-fetch-site", "none")
+            .header("sec-fetch-user", "?1")
+            .header("upgrade-insecure-requests", "1")
             .timeout(Duration::from_secs(12))
             .send()
             .await
@@ -298,13 +314,21 @@ pub async fn run_ukrainealarm_collector(
             }
         };
 
-        // Витяг сесійних кук (зокрема MapTargetSession) для авторизованої підписки на Centrifugo
+        // Витяг сесійних кук та комбінування з авторизаційною кукою Дії (DiiaMapAccess)
+        let configured_diia_cookie = storage.get_service_keys().ukrainealarm_diia_cookie
+            .or_else(|| std::env::var("UKRAINEALARM_DIIA_COOKIE").ok())
+            .filter(|s| !s.trim().is_empty());
+
         let mut session_cookies = Vec::new();
+        if let Some(ref diia) = configured_diia_cookie {
+            session_cookies.push(diia.clone());
+        }
         for cookie_header in page_resp.headers().get_all(reqwest::header::SET_COOKIE) {
             if let Ok(s) = cookie_header.to_str() {
                 if let Some(c) = s.split(';').next() {
                     let trimmed = c.trim();
-                    if !trimmed.is_empty() {
+                    let prefix = trimmed.split('=').next().unwrap_or("");
+                    if !trimmed.is_empty() && !session_cookies.iter().any(|existing| existing.contains(prefix)) {
                         session_cookies.push(trimmed.to_string());
                     }
                 }
@@ -350,7 +374,7 @@ pub async fn run_ukrainealarm_collector(
             .captures(&html)
             .and_then(|c| c.get(1))
             .map(|m| format!("https://map.ukrainealarm.com{}", m.as_str()))
-            .unwrap_or_else(|| "https://map.ukrainealarm.com/api/centrifuge/map/subscribe".to_string());
+            .unwrap_or_else(|| "https://map.ukrainealarm.com/api/centrifuge/map/diia/subscribe".to_string());
 
         let mut req = match ws_url.into_client_request() {
             Ok(r) => r,
@@ -399,6 +423,12 @@ pub async fn run_ukrainealarm_collector(
         }
 
         while let Some(msg_res) = read.next().await {
+            let ua_stream = storage.get_stream("ukrainealarm_ws");
+            if !ua_stream.as_ref().map(|s| s.enabled).unwrap_or(true) {
+                info!("UkraineAlarm WS disabled in admin config. Disconnecting WebSocket.");
+                break;
+            }
+
             let msg = match msg_res {
                 Ok(m) => m,
                 Err(e) => {
@@ -440,13 +470,9 @@ pub async fn run_ukrainealarm_collector(
                         .unwrap_or("");
 
                     if !client_id.is_empty() {
-                        let mut sub_builder = http_client
-                            .post(&sub_ep)
+                        let mut sub_builder = crate::diia_relay::apply_browser_headers(http_client.post(&sub_ep))
                             .timeout(Duration::from_secs(6))
-                            .header(USER_AGENT, BROWSER_UA)
-                            .header(ORIGIN, "https://map.ukrainealarm.com")
-                            .header(REFERER, "https://map.ukrainealarm.com/onlyMap")
-                            .header("X-Requested-With", "XMLHttpRequest");
+                            .header(REFERER, "https://map.ukrainealarm.com/onlyMap");
 
                         if let Some(ref c_val) = cookie_header_val {
                             sub_builder = sub_builder.header(reqwest::header::COOKIE, c_val.clone());
@@ -465,6 +491,14 @@ pub async fn run_ukrainealarm_collector(
                                 let status = resp.status();
                                 if !status.is_success() {
                                     warn!("Centrifugo subscription rejected on {}: HTTP {}", sub_ep, status);
+                                    if status.as_u16() == 401 || status.as_u16() == 403 {
+                                        warn!("Diia authorization session expired or rejected on {}. Please re-authorize via Admin Panel.", sub_ep);
+                                        {
+                                            let mut state = threat_state.write().await;
+                                            state.last_targets_provider_status = "unauthorized".to_string();
+                                        }
+                                        sleep(Duration::from_secs(60)).await;
+                                    }
                                 } else if let Ok(sub_data) = resp.json::<Value>().await {
                                     let mut stoken = None;
                                     if let Some(chs) = sub_data.get("channels").and_then(|c| c.as_array()) {
@@ -552,188 +586,5 @@ pub async fn run_ukrainealarm_collector(
         }
 
         sleep(Duration::from_secs(5)).await;
-    }
-}
-
-/// Фоновий збирач Tier 2 REST Fallback для UkraineAlarm:
-/// Активується, якщо Centrifugo WebSocket мовчить понад 8 секунд.
-/// Опитує https://map.ukrainealarm.com/api/centrifuge/map/fallback кожні 8-10 секунд
-/// та декодує знімок цілей без повторних ChaCha20 операцій.
-pub async fn run_ukrainealarm_http_fallback(
-    threat_state: Arc<RwLock<ThreatState>>,
-    detector: Arc<OblastDetector>,
-    history_mgr: Arc<HistoryManager>,
-    exchange_mgr: Arc<ExchangeLogManager>,
-    storage: Arc<StorageManager>,
-    http_client: reqwest::Client,
-) {
-    info!("Starting Cold Start bootstrap from UkraineAlarm Fallback...");
-    let mut last_hash: Option<String> = None;
-    let mut last_raw_payload: Option<String> = None;
-    let mut last_fetch_instant = std::time::Instant::now() - Duration::from_secs(20);
-
-    // 1. Cold Start Bootstrap: негайно отримуємо повний знімок активних цілей та їхніх хвостів
-    {
-        let req = http_client
-            .get(FALLBACK_URL)
-            .header(USER_AGENT, BROWSER_UA)
-            .header(ORIGIN, "https://map.ukrainealarm.com")
-            .header(REFERER, "https://map.ukrainealarm.com/")
-            .header("X-Requested-With", "XMLHttpRequest")
-            .timeout(Duration::from_secs(8));
-
-        if let Ok(resp) = req.send().await {
-            let status = resp.status();
-            if status.is_success() {
-                if let Ok(data) = resp.json::<Value>().await {
-                    if let Some(payload) = data.get("n").and_then(|v| v.as_str()) {
-                        if !payload.is_empty() {
-                            last_raw_payload = Some(payload.to_string());
-                            let mut pre_decoded = None;
-                            if payload.starts_with('~') && !payload.starts_with("~s") {
-                                if let Ok(decoded) = decode_payload_native(payload) {
-                                    let meta = extract_snapshot_meta(&decoded);
-                                    last_hash = meta.revision_hash;
-                                    pre_decoded = Some(decoded);
-                                }
-                            }
-                            let ok = process_ukrainealarm_payload_decoded(
-                                payload,
-                                pre_decoded,
-                                "UkraineAlarm Fallback (Cold Start)",
-                                &threat_state,
-                                &detector,
-                                &history_mgr,
-                                &exchange_mgr,
-                                &storage,
-                            ).await;
-                            if ok {
-                                info!("Cold Start bootstrap successfully initialized active radar targets and historical trails");
-                            }
-                        }
-                    }
-                }
-            } else if status.as_u16() == 503 {
-                debug!("Cold Start bootstrap: Fallback returned 503 (WebSocket is active upstream), WS will supply initial radar targets");
-            }
-            last_fetch_instant = std::time::Instant::now();
-        }
-    }
-
-    // 2. Dual-Stack Smart Fusion Engine
-    loop {
-        let ua_stream = storage.get_stream("ukrainealarm_ws");
-        if !ua_stream.as_ref().map(|s| s.enabled).unwrap_or(true) {
-            sleep(Duration::from_secs(5)).await;
-            continue;
-        }
-
-        let ws_silence_sec = {
-            let state = threat_state.read().await;
-            now_sec() - state.last_ws_targets_ts
-        };
-
-        // Якщо WebSocket стабільно постачає дані (мовчання <= 8.0 сек), Fallback не втручається
-        if ws_silence_sec <= 8.0 {
-            sleep(Duration::from_millis(2000)).await;
-            continue;
-        }
-
-        // Якщо WebSocket мовчить > 8.0 сек: Fallback стає основним джерелом і опитує кожні 8.0 сек
-        let elapsed = last_fetch_instant.elapsed();
-        if elapsed < Duration::from_millis(8000) {
-            sleep(Duration::from_millis(8000) - elapsed).await;
-        }
-
-        debug!(
-            "Polling UkraineAlarm Fallback (WS silence: {:.1}s, last_hash: {:?})...",
-            ws_silence_sec, last_hash
-        );
-
-        let req = http_client
-            .get(FALLBACK_URL)
-            .header(USER_AGENT, BROWSER_UA)
-            .header(ORIGIN, "https://map.ukrainealarm.com")
-            .header(REFERER, "https://map.ukrainealarm.com/")
-            .header("X-Requested-With", "XMLHttpRequest")
-            .timeout(Duration::from_secs(8));
-
-        last_fetch_instant = std::time::Instant::now();
-
-        match req.send().await {
-            Ok(resp) => {
-                let status = resp.status();
-                if status.is_success() {
-                    match resp.json::<Value>().await {
-                        Ok(data) => {
-                            let payload = data.get("n").and_then(|v| v.as_str()).unwrap_or("");
-                            if !payload.is_empty() {
-                                // 1. Швидка перевірка сирого тексту: якщо payload ідентичний, пропускаємо розбір (0% CPU)
-                                if last_raw_payload.as_deref() == Some(payload) {
-                                    debug!("Fallback snapshot raw payload identical, skipping redundant update");
-                                    sleep(Duration::from_millis(1000)).await;
-                                    continue;
-                                }
-
-                                // 2. Якщо це AST потік, декодуємо один раз і перевіряємо revision_hash
-                                let mut skip_reprocessing = false;
-                                let mut pre_decoded = None;
-                                if payload.starts_with('~') && !payload.starts_with("~s") {
-                                    if let Ok(decoded) = decode_payload_native(payload) {
-                                        let meta = extract_snapshot_meta(&decoded);
-                                        if let Some(ref h) = meta.revision_hash {
-                                            if last_hash.as_ref() == Some(h) {
-                                                debug!("Fallback snapshot hash {:?} unchanged, skipping redundant update", h);
-                                                skip_reprocessing = true;
-                                            } else {
-                                                last_hash = Some(h.clone());
-                                            }
-                                        }
-                                        pre_decoded = Some(decoded);
-                                    }
-                                }
-
-                                last_raw_payload = Some(payload.to_string());
-
-                                if !skip_reprocessing {
-                                    let _success = process_ukrainealarm_payload_decoded(
-                                        payload,
-                                        pre_decoded,
-                                        "UkraineAlarm HTTP Fallback",
-                                        &threat_state,
-                                        &detector,
-                                        &history_mgr,
-                                        &exchange_mgr,
-                                        &storage,
-                                    ).await;
-                                }
-                            } else {
-                                warn!("HTTP fallback response has empty 'n' payload field");
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Failed to parse HTTP fallback JSON: {}", e);
-                        }
-                    }
-                } else if status.as_u16() == 429 {
-                    warn!("HTTP 429 Too Many Requests from Fallback endpoint. Backing off for 20s...");
-                    sleep(Duration::from_secs(20)).await;
-                } else if status.as_u16() == 503 {
-                    // map.ukrainealarm.com fallback endpoint returns 503 Service Unavailable when WebSocket is online
-                    debug!(
-                        "UkraineAlarm Fallback HTTP endpoint returned 503 (WebSocket is primary stream), pausing requests for {}s without log spam...",
-                        UKRAINEALARM_FALLBACK_503_COOLDOWN_SEC
-                    );
-                    sleep(Duration::from_secs(UKRAINEALARM_FALLBACK_503_COOLDOWN_SEC)).await;
-                } else {
-                    warn!("HTTP fallback endpoint returned HTTP {}", status);
-                }
-            }
-            Err(e) => {
-                debug!("HTTP fallback request error: {}", e);
-            }
-        }
-
-        sleep(Duration::from_millis(1000)).await;
     }
 }

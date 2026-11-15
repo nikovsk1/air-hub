@@ -298,6 +298,7 @@ fn default_active_status() -> String {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[allow(dead_code)]
 pub struct SnapshotMeta {
     pub revision_hash: Option<String>,
     pub sequence_num: Option<String>,
@@ -316,6 +317,7 @@ pub struct TaxonomyItem {
 }
 
 /// Витяг метаданих знімка кадру з decoded[0..3]
+#[allow(dead_code)]
 pub fn extract_snapshot_meta(decoded: &Value) -> SnapshotMeta {
     let mut meta = SnapshotMeta {
         revision_hash: None,

@@ -95,7 +95,7 @@ pub async fn run_alerts_collector(
                 (alive, to)
             };
 
-            if neptun_active {
+            if neptun_active || !ua_enabled {
                 if last_provider_log != "Neptun Alerts (Primary)" {
                     info!("Alerts collector: Neptun Alerts is PRIMARY engine (pure WebSocket). UkraineAlarm API v3 in standby.");
                     last_provider_log = "Neptun Alerts (Primary)".to_string();
