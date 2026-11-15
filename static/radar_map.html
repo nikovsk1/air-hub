@@ -915,10 +915,29 @@
       transform: translateY(-1px);
     }
 
-    #pillClosestThreat .hud-dropdown-panel,
-    #pill3DTelemetry .hud-dropdown-panel {
+    .lost-target-popup .maplibregl-popup-content {
+      border: 1px solid rgba(239, 68, 68, 0.6) !important;
+      box-shadow: 0 12px 32px rgba(239, 68, 68, 0.25), 0 4px 16px rgba(0, 0, 0, 0.8) !important;
+    }
+    .lost-target-popup .maplibregl-popup-tip {
+      border-top-color: rgba(239, 68, 68, 0.6) !important;
+    }
+
+    #pillClosestThreat .hud-dropdown-panel {
       left: auto;
       right: 0;
+    }
+
+    #pill3DTelemetry {
+      position: relative;
+    }
+    #pill3DTelemetry .hud-dropdown-panel {
+      left: 0 !important;
+      right: 0 !important;
+      width: 100% !important;
+      min-width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
     }
 
     html, body, input, select, button {
@@ -1236,35 +1255,23 @@
         </svg>
       </div>
       <div class="hud-mini-view">
-        <span id="telemetry3DMiniText" style="font-weight:600; color:#38BDF8; font-size:11px;">🎯 3D Ціль</span>
+        <span id="telemetry3DMiniText" style="font-weight:600; color:#38BDF8; font-size:11px; white-space:nowrap;">🎯 3D ціль - спостереження</span>
       </div>
       <div class="hud-full-view" id="pill3DTelemetryFull" style="display:flex; align-items:center; gap:6px;">
-        <span style="font-size:11px; color:var(--text-muted);">3D Ціль:</span>
-        <strong id="telemetry3DId" style="color:#38BDF8;">#--</strong>
-        <span class="badge-count" id="telemetry3DAlt" style="background:rgba(56,189,248,0.2); color:#38bdf8; font-size:10px;">-- м</span>
-        <span class="badge-count" id="telemetry3DSpeed" style="background:rgba(245,158,11,0.2); color:#f59e0b; font-size:10px;">-- км/г</span>
-        <button type="button" class="btn-micro" style="padding:2px 6px; font-size:9.5px; background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.35); border-radius:4px; color:#38BDF8; cursor:pointer;" onclick="event.stopPropagation(); resetChaseCameraBehind();" title="Камера за хвостом">↺ Хвіст</button>
-        <button type="button" class="btn-micro" style="padding:2px 6px; font-size:9.5px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.35); border-radius:4px; color:#F87171; cursor:pointer;" onclick="event.stopPropagation(); exit3DFocus();" title="Вийти з 3D режиму">✖</button>
-        <span style="font-size:8px; margin-left:2px;">▼</span>
+        <span class="badge-count" id="telemetry3DAlt" style="background:rgba(56,189,248,0.2); color:#38bdf8; font-size:10px; font-weight:600;">-- м</span>
+        <span class="badge-count" id="telemetry3DSpeed" style="background:rgba(245,158,11,0.2); color:#f59e0b; font-size:10px; font-weight:600;">-- км/г</span>
+        <button type="button" class="btn-micro" style="padding:2px 7px; font-size:9.5px; background:rgba(56,189,248,0.18); border:1px solid rgba(56,189,248,0.4); border-radius:4px; color:#38BDF8; cursor:pointer;" onclick="event.stopPropagation(); resetChaseCameraBehind(event);" title="Камера за хвостом">↺ Хвіст</button>
+        <button type="button" class="btn-micro" style="padding:2px 7px; font-size:9.5px; background:rgba(239,68,68,0.18); border:1px solid rgba(239,68,68,0.4); border-radius:4px; color:#F87171; cursor:pointer;" onclick="event.stopPropagation(); exit3DFocus(event);" title="Вийти з 3D режиму">✖</button>
+        <span class="hud-dropdown-arrow" style="font-size:9px; color:var(--text-muted); margin-left:2px;">▼</span>
+        <span id="telemetry3DId" style="display:none;"></span>
       </div>
       <div class="hud-dropdown-panel" id="panel3DTelemetryDetails" onclick="event.stopPropagation()">
-        <div style="font-weight:700; font-size:11px; margin-bottom:5px; color:#38BDF8;">Параметри цілі у 3D</div>
+        <div style="font-weight:700; font-size:11px; margin-bottom:6px; color:#38BDF8; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:4px;">3D ціль - спостереження</div>
         <div id="telemetry3DBreakdown" style="font-size:10.5px; display:flex; flex-direction:column; gap:4px; font-family:monospace;">
-          <div style="display:flex; justify-content:space-between;"><span>Категорія:</span><b id="t3dCat" style="color:#F8FAFC;">--</b></div>
-          <div style="display:flex; justify-content:space-between;"><span>Висота:</span><b id="t3dAlt" style="color:#38BDF8;">--</b></div>
-          <div style="display:flex; justify-content:space-between;"><span>Швидкість:</span><b id="t3dSpd" style="color:#F59E0B;">--</b></div>
-          <div style="display:flex; justify-content:space-between;"><span>Курс / Азимут:</span><b id="t3dHdg" style="color:#34D399;">--</b></div>
-          <div style="display:flex; justify-content:space-between;"><span>Найближча точка:</span><b id="t3dDist" style="color:#EF4444;">--</b></div>
-        </div>
-        <div style="margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.08); display:flex; gap:6px;">
-          <button type="button" class="hud-btn" style="flex:1; height:24px; padding:0 6px; font-size:10px;" onclick="resetChaseCameraBehind()" title="Камера за хвостом">↺ За хвостом</button>
-          <button type="button" class="orbit-exit-btn" style="flex:1; height:24px; padding:0 6px; font-size:10px;" onclick="exit3DFocus()" title="Вийти з 3D супроводу">✖ Вийти з 3D</button>
-        </div>
-        <div style="margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-size:10px; color:var(--text-muted);">Освітлення 3D:</span>
-          <button type="button" class="btn-micro" onclick="cycleDayNightMode()" style="padding:2px 8px; font-size:10px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:4px; color:#F8FAFC; cursor:pointer;" id="btnDayNightInPill" title="Перемкнути День / Ніч / Авто">
-            🌓 Авто
-          </button>
+          <div style="display:flex; justify-content:space-between; gap:8px;"><span>Кодова назва:</span><b id="t3dCodeName" style="color:#38BDF8; font-weight:700; word-break:break-all; text-align:right;">--</b></div>
+          <div style="display:flex; justify-content:space-between; gap:8px;"><span>Категорія:</span><b id="t3dCat" style="color:#F8FAFC; text-align:right;">--</b></div>
+          <div style="display:flex; justify-content:space-between; gap:8px;"><span>Курс:</span><b id="t3dHdg" style="color:#34D399; text-align:right;">--</b></div>
+          <div style="display:flex; justify-content:space-between; gap:8px;"><span>Відстань до точки:</span><b id="t3dDist" style="color:#EF4444; text-align:right;">--</b></div>
         </div>
       </div>
     </div>
@@ -1755,7 +1762,81 @@
     let map = null;
     let isMapLoaded = false;
     let activeThreats = {};
+    let recentLostThreats = {};
     let recordedLostIds = new Set();
+    let allReceivedLostThreats = {};
+
+    function getLostHoldSeconds() {
+      const saved = localStorage.getItem('radar_retention_timer');
+      if (saved && !isNaN(Number(saved)) && Number(saved) > 0) {
+        return Number(saved);
+      }
+      const sel = document.getElementById('selHoldTimer') || document.getElementById('cfgLostHoldSeconds');
+      if (sel && sel.value && !isNaN(Number(sel.value)) && Number(sel.value) > 0) {
+        return Number(sel.value);
+      }
+      return 120;
+    }
+
+    function formatLostHoldDurationText(sec) {
+      const s = Number(sec !== undefined && sec !== null ? sec : getLostHoldSeconds());
+      if (s < 60) {
+        return `${s} сек`;
+      }
+      const mins = Math.round(s / 60);
+      return `${mins} хв`;
+    }
+
+    function syncLostThreatsToSource() {
+      const holdSeconds = getLostHoldSeconds();
+      const nowSec = Date.now() / 1000;
+      recentLostThreats = {};
+
+      Object.values(allReceivedLostThreats).forEach(l => {
+        if (!l || !l.id) return;
+        const lostTs = Number(l.lost_ts || 0);
+        // If lost_ts is present and older than user configured holdSeconds, skip
+        if (lostTs > 0 && (nowSec - lostTs) > holdSeconds) {
+          return;
+        }
+        recentLostThreats[l.id] = l;
+      });
+
+      if (map && map.getSource('threats-lost-source')) {
+        const lostFeatures = Object.values(recentLostThreats).map(l => {
+          const lon = Number(l.lon || (l.coords && l.coords[1]));
+          const lat = Number(l.lat || (l.coords && l.coords[0]));
+          return {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [lon, lat] },
+            properties: {
+              tid: l.id,
+              id: l.id,
+              cat: l.category || l.cat || 'unknown',
+              type_ua: l.type_ua || '',
+              status: l.status || 'lost',
+              outcome: l.outcome || 'eliminated',
+              heading: l.heading || 0,
+              lost_ts: l.lost_ts || 0,
+              is_lost: true
+            }
+          };
+        }).filter(f => !isNaN(f.geometry.coordinates[0]) && !isNaN(f.geometry.coordinates[1]));
+
+        map.getSource('threats-lost-source').setData({ type: 'FeatureCollection', features: lostFeatures });
+      }
+    }
+
+    function computeDistanceKm(lat1, lon1, lat2, lon2) {
+      const R = 6371.0;
+      const dLat = (lat2 - lat1) * Math.PI / 180.0;
+      const dLon = (lon2 - lon1) * Math.PI / 180.0;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180.0) * Math.cos(lat2 * Math.PI / 180.0) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
     let currentSlots = {};
     let userSlots = currentSlots;
     let selectedSlotId = "1";
@@ -2494,6 +2575,25 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
             });
           }
         });
+
+        // Pointer and click handlers for downed / lost targets (red impact cross)
+        if (map.getLayer('threats-lost-layer')) {
+          map.on('mouseenter', 'threats-lost-layer', () => {
+            if (!isPickingLocationOnMap) map.getCanvas().style.cursor = 'pointer';
+          });
+          map.on('mouseleave', 'threats-lost-layer', () => {
+            if (!isPickingLocationOnMap) map.getCanvas().style.cursor = '';
+          });
+          map.on('click', 'threats-lost-layer', (e) => {
+            if (isPickingLocationOnMap) return;
+            if (!e.features || !e.features.length) return;
+            if (e.originalEvent) e.originalEvent.cancelBubble = true;
+            e._targetClicked = true;
+            const feat = e.features[0];
+            const tid = feat.properties.tid || feat.properties.id;
+            openTargetContextMenu(tid, e.lngLat, feat.properties);
+          });
+        }
       });
 
       map.on('rotate', () => {
@@ -2524,7 +2624,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           finishPickingLocation(e.lngLat.lat, e.lngLat.lng);
           return;
         }
-        if (e._targetClicked || (e.originalEvent && e.originalEvent.cancelBubble)) return;
+        if (e._regionClicked || e._targetClicked || (e.originalEvent && e.originalEvent.cancelBubble)) return;
 
         const is3D = map.getPitch() > 15;
 
@@ -2578,6 +2678,32 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           }
         }
 
+        // 2b. Downed / Lost Targets Hit Testing (for 3D and 2D clicks near the red cross)
+        if (recentLostThreats) {
+          let clickedLostId = null;
+          let clickedLostCoord = null;
+          for (const lid in recentLostThreats) {
+            const l = recentLostThreats[lid];
+            const lLon = Number(l.lon || (l.coords && l.coords[1]));
+            const lLat = Number(l.lat || (l.coords && l.coords[0]));
+            if (!Number.isFinite(lLon) || !Number.isFinite(lLat)) continue;
+            const pt = map.project([lLon, lLat]);
+            const dx = Math.abs(pt.x - e.point.x);
+            const dy = Math.abs(pt.y - e.point.y);
+            const hitRadius = is3D ? 32 : 24;
+            if (dx <= hitRadius && dy <= hitRadius) {
+              clickedLostId = lid;
+              clickedLostCoord = [lLon, lLat];
+              break;
+            }
+          }
+          if (clickedLostId) {
+            e._targetClicked = true;
+            openTargetContextMenu(clickedLostId, clickedLostCoord, recentLostThreats[clickedLostId]);
+            return;
+          }
+        }
+
         // 3. Map region deselect if click landed on empty space
         const bbox = [[e.point.x - 4, e.point.y - 4], [e.point.x + 4, e.point.y + 4]];
         const features = map.queryRenderedFeatures(bbox, { layers: ['alerts-fill'] });
@@ -2588,9 +2714,13 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
       map.on('click', 'alerts-fill', (e) => {
         if (isPickingLocationOnMap || e._targetClicked || (e.originalEvent && e.originalEvent.cancelBubble)) return;
-        const hitTargets = map.queryRenderedFeatures(e.point, { layers: ['threats-aircraft-layer', 'poi-layer'] });
+        const hitTargets = map.queryRenderedFeatures(e.point, { layers: ['threats-aircraft-layer', 'threats-lost-layer', 'poi-layer'] });
         if (hitTargets && hitTargets.length > 0) return;
         if (!e.features || !e.features.length) return;
+
+        e._regionClicked = true;
+        if (e.originalEvent) e.originalEvent.cancelBubble = true;
+
         let feat = e.features[0];
         if (e.features.length > 1) {
           feat = e.features.reduce((best, f) => {
@@ -2611,14 +2741,25 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         currentlySelectedRegionId = regId;
 
         // Look up unclipped authentic feature geometry from rawRegionsGeoJson
-        let featureToRender = feat;
+        let featureToRender = null;
         if (rawRegionsGeoJson && Array.isArray(rawRegionsGeoJson.features)) {
-          const match = rawRegionsGeoJson.features.find(f => {
+          featureToRender = rawRegionsGeoJson.features.find(f => {
             const fid = String(f.properties?.regionId || f.id || '');
-            return fid === regId;
+            const fname = f.properties?.name;
+            return fid === regId || (name && fname === name);
           });
-          if (match) featureToRender = match;
         }
+        if (!featureToRender) {
+          featureToRender = feat;
+        }
+
+        // Clean deep clone of feature geometry to ensure flawless Web Worker transfer
+        const safeFeature = {
+          type: 'Feature',
+          id: featureToRender.id !== undefined ? featureToRender.id : regId,
+          properties: { ...(featureToRender.properties || {}) },
+          geometry: JSON.parse(JSON.stringify(featureToRender.geometry))
+        };
 
         let alertInfo = null;
         const directAlert = activeRegionAlertMap.get(regId);
@@ -2661,7 +2802,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         if (map.getSource('selected-region-source')) {
           map.getSource('selected-region-source').setData({
             type: 'FeatureCollection',
-            features: [featureToRender]
+            features: [safeFeature]
           });
         }
 
@@ -3317,8 +3458,23 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         type: 'fill',
         source: 'selected-region-source',
         paint: {
-          'fill-color': '#FBBF24',
-          'fill-opacity': 0.08
+          'fill-color': '#FFFFFF',
+          'fill-opacity': 0.12
+        }
+      });
+
+      map.addLayer({
+        id: 'selected-region-line-casing',
+        type: 'line',
+        source: 'selected-region-source',
+        paint: {
+          'line-color': '#0B0E14',
+          'line-width': 6.5,
+          'line-opacity': 0.75
+        },
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
         }
       });
 
@@ -3327,8 +3483,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         type: 'line',
         source: 'selected-region-source',
         paint: {
-          'line-color': '#FBBF24',
-          'line-width': 3.5,
+          'line-color': '#FFFFFF',
+          'line-width': 4.5,
           'line-opacity': 1.0
         },
         layout: {
@@ -3585,15 +3741,32 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     function toggle3DPitch() {
       if (!map) return;
       const curPitch = map.getPitch();
-      if (curPitch > 10) {
-        map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
-        is3DModeActive = false;
+      const btn3d = document.getElementById('btnToggle3D');
+
+      if (curPitch > 10 || is3DModeActive || focusedTargetId) {
+        if (focusedTargetId) {
+          exit3DFocus();
+        } else {
+          map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+          is3DModeActive = false;
+          update2DClutterVisibility(false);
+          if (btn3d) btn3d.classList.remove('active');
+          const pill3d = document.getElementById('pill3DTelemetry');
+          if (pill3d) {
+            pill3d.style.display = 'none';
+            pill3d.classList.remove('hud-expanded');
+            pill3d.classList.add('hud-collapsed');
+          }
+          const panel3d = document.getElementById('panel3DTelemetryDetails');
+          if (panel3d) panel3d.classList.remove('open');
+        }
       } else {
         map.easeTo({ pitch: 55, duration: 800 });
         is3DModeActive = true;
         applyDayNightSettings();
+        update2DClutterVisibility(true);
+        if (btn3d) btn3d.classList.add('active');
       }
-      update2DClutterVisibility(is3DModeActive);
     }
 
     function resetNorthBearing() {
@@ -3610,19 +3783,19 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       if (map.getLayer('alerts-fill')) map.setLayoutProperty('alerts-fill', 'visibility', 'visible');
       if (map.getLayer('alerts-boundaries')) map.setLayoutProperty('alerts-boundaries', 'visibility', 'visible');
       if (map.getLayer('selected-region-fill')) map.setLayoutProperty('selected-region-fill', 'visibility', 'visible');
+      if (map.getLayer('selected-region-line-casing')) map.setLayoutProperty('selected-region-line-casing', 'visibility', 'visible');
       if (map.getLayer('selected-region-line')) map.setLayoutProperty('selected-region-line', 'visibility', 'visible');
       
       const pill3d = document.getElementById('pill3DTelemetry');
-      if (pill3d) pill3d.style.display = is3D ? 'flex' : 'none';
+      if (pill3d) pill3d.style.display = (is3D && focusedTargetId) ? 'flex' : 'none';
     }
 
     function update3DTelemetryUI(t, tid, sim, altMeters) {
       const elId = document.getElementById('telemetry3DId');
       const elAlt = document.getElementById('telemetry3DAlt');
       const elSpd = document.getElementById('telemetry3DSpeed');
+      const t3dCodeName = document.getElementById('t3dCodeName');
       const t3dCat = document.getElementById('t3dCat');
-      const t3dAlt = document.getElementById('t3dAlt');
-      const t3dSpd = document.getElementById('t3dSpd');
       const t3dHdg = document.getElementById('t3dHdg');
       const t3dDist = document.getElementById('t3dDist');
 
@@ -3630,12 +3803,11 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const heading = Math.round(sim ? ((((sim.curHeading % 360) + 360) % 360)) : 0);
       const catMeta = (t && THREAT_CATEGORIES[t.cat]) ? THREAT_CATEGORIES[t.cat] : THREAT_CATEGORIES.unknown;
 
-      if (elId) elId.innerText = `#${tid}`;
+      if (elId) elId.innerText = tid ? `#${tid}` : '--';
+      if (t3dCodeName) t3dCodeName.innerText = tid ? `#${tid}` : '--';
       if (elAlt) elAlt.innerText = `${Math.round(altMeters)} м`;
       if (elSpd) elSpd.innerText = `${speed} км/г`;
       if (t3dCat) t3dCat.innerText = catMeta.name;
-      if (t3dAlt) t3dAlt.innerText = `${Math.round(altMeters)} м`;
-      if (t3dSpd) t3dSpd.innerText = `${speed} км/г`;
       if (t3dHdg) t3dHdg.innerText = `${heading}°`;
       if (t3dDist) {
         t3dDist.innerText = (t && t.closest_distance_km !== undefined) ? `${t.closest_distance_km} км` : '-- км';
@@ -4447,14 +4619,87 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     let activeTargetPopup = null;
 
-    function openTargetContextMenu(tid, lngLat) {
+    function openTargetContextMenu(tid, lngLat, extraProps) {
       const t = activeThreats[tid];
-      if (!t) return;
+      const lost = (extraProps && (extraProps.is_lost || extraProps.status === 'lost' || extraProps.status === 'eliminated' || extraProps.downed)) ? extraProps : (recentLostThreats ? recentLostThreats[tid] : null);
+      if (!t && !lost) return;
+
       if (activeTargetPopup) {
         activeTargetPopup.remove();
         activeTargetPopup = null;
       }
 
+      // 1. Handling for DOWNED / LOST TARGET (Збита / Втрачена ціль)
+      if (!t && lost) {
+        const catKey = lost.category || lost.cat || 'unknown';
+        const catMeta = THREAT_CATEGORIES[catKey] || THREAT_CATEGORIES.unknown;
+        const typeName = lost.type_ua || catMeta.name || 'Повітряна ціль';
+        const coords = lngLat || [Number(lost.lon || (lost.coords && lost.coords[1])), Number(lost.lat || (lost.coords && lost.coords[0]))];
+        const heading = Math.round(Number(lost.heading || 0));
+
+        let statusBadge = '<span class="badge-count danger" style="font-size:10px;">💥 Збито (ППО)</span>';
+        const outcome = String(lost.outcome || lost.status || '').toLowerCase();
+        if (outcome.includes('elim') || outcome.includes('down') || outcome.includes('збит')) {
+          statusBadge = '<span class="badge-count" style="background:rgba(34,197,94,0.22); color:#4ADE80; border:1px solid rgba(34,197,94,0.45); font-size:10px;">💥 Збито / Знешкоджено</span>';
+        } else if (outcome.includes('hit') || outcome.includes('влуч')) {
+          statusBadge = '<span class="badge-count danger" style="font-size:10px;">⚠️ Влучання / Падіння</span>';
+        } else if (outcome.includes('lost') || outcome.includes('disapp') || outcome.includes('втрач') || outcome.includes('зник')) {
+          statusBadge = '<span class="badge-count" style="background:rgba(245,158,11,0.22); color:#FBBF24; border:1px solid rgba(245,158,11,0.45); font-size:10px;">📡 Втрачено з радарів</span>';
+        }
+
+        let timeStr = '--:--:--';
+        if (lost.lost_ts) {
+          const d = new Date(Number(lost.lost_ts) * 1000);
+          timeStr = d.toLocaleTimeString('uk-UA');
+        }
+
+        let distStr = '-- км';
+        const activeSlot = currentSlots[selectedSlotId] || Object.values(currentSlots)[0];
+        if (activeSlot && Number.isFinite(Number(activeSlot.lat)) && Number.isFinite(Number(activeSlot.lon)) && coords && coords.length >= 2) {
+          const dKm = computeDistanceKm(Number(activeSlot.lat), Number(activeSlot.lon), coords[1], coords[0]);
+          distStr = `${dKm.toFixed(1)} км`;
+        }
+
+        const holdSec = getLostHoldSeconds();
+        const holdText = formatLostHoldDurationText(holdSec);
+
+        const html = `
+          <div class="target-popup-header" style="border-bottom: 1px solid rgba(239,68,68,0.35);">
+            <span style="color:#EF4444; font-weight:800; display:flex; align-items:center; gap:5px;">
+              ✖ ${typeName}
+            </span>
+            <span class="badge-count danger" style="font-size:9.5px;">#${tid}</span>
+          </div>
+          <div style="margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:10px; color:var(--text-muted);">Результат:</span>
+            ${statusBadge}
+          </div>
+          <div class="target-popup-grid" style="margin-bottom:6px;">
+            <span class="lbl">Категорія:</span><span class="val" style="color:${catMeta.color};">${catMeta.name}</span>
+            <span class="lbl">Час збиття / фіксації:</span><span class="val">${timeStr}</span>
+            <span class="lbl">Останній курс:</span><span class="val">${heading}°</span>
+            <span class="lbl">До точки спостереження:</span><span class="val" style="color:#EF4444;">${distStr}</span>
+            <span class="lbl">Координати:</span><span class="val" style="font-size:9.5px; font-family:monospace;">${coords[1].toFixed(3)}, ${coords[0].toFixed(3)}</span>
+          </div>
+          <div id="lostTargetFooterNote" style="font-size:9.5px; color:var(--text-muted); text-align:center; padding-top:4px; border-top:1px solid rgba(255,255,255,0.08);">
+            Мітка точки ураження (фіксується до ${holdText})
+          </div>
+        `;
+
+        activeTargetPopup = new maplibregl.Popup({
+          closeButton: true,
+          closeOnClick: true,
+          className: 'target-context-popup lost-target-popup',
+          maxWidth: '260px',
+          offset: 14
+        })
+          .setLngLat(coords)
+          .setHTML(html)
+          .addTo(map);
+        return;
+      }
+
+      // 2. Handling for ACTIVE IN-FLIGHT TARGET (Активна ціль)
       const catMeta = THREAT_CATEGORIES[t.cat] || THREAT_CATEGORIES.unknown;
       const speed = Math.round(t.sim ? (t.sim.speedKmh || 0) : 0);
       const heading = Math.round(((((t.sim ? t.sim.curHeading : 0) % 360) + 360) % 360));
@@ -4546,9 +4791,12 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       });
       collapseAllHudPanels();
 
-      // Automatically open 3D telemetry details dropdown panel
+      // Ensure 3D telemetry details dropdown panel is closed initially until clicked
       const panel3d = document.getElementById('panel3DTelemetryDetails');
-      if (panel3d) panel3d.classList.add('open');
+      if (panel3d) panel3d.classList.remove('open');
+
+      const btn3d = document.getElementById('btnToggle3D');
+      if (btn3d) btn3d.classList.add('active');
 
       // Populate 3D pill telemetry
       const sim = t.sim;
@@ -4582,24 +4830,42 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     }
 
     function resetChaseCameraBehind() {
-      if (!chaseCam.active || !focusedTargetId || !activeThreats[focusedTargetId]) return;
+      const event = arguments[0] || (typeof window !== 'undefined' ? window.event : null);
+      if (event) {
+        if (event.stopPropagation) event.stopPropagation();
+        if (event.preventDefault) event.preventDefault();
+      }
+      if (!focusedTargetId) return;
+      const t = activeThreats[focusedTargetId];
+      if (!t || !t.sim) return;
+
+      chaseCam.active = true;
+      chaseCam.targetId = focusedTargetId;
       chaseCam.yawOffsetDeg = 0;
       chaseCam.pitchDeg = 60;
       chaseCam.zoomLevel = 14.5;
       chaseCam.isTransitioning = true;
       chaseCamPanPauseUntil = 0;
-      const t = activeThreats[focusedTargetId];
+      is3DModeActive = true;
+
+      const heading = (t.sim.curHeading !== undefined) ? t.sim.curHeading : 0;
       map.easeTo({
-        center: getChaseLookAheadCenter(t.sim.curLon, t.sim.curLat, t.sim.curHeading, chaseCam.zoomLevel),
+        center: getChaseLookAheadCenter(t.sim.curLon, t.sim.curLat, heading, chaseCam.zoomLevel),
         zoom: chaseCam.zoomLevel,
         pitch: chaseCam.pitchDeg,
-        bearing: t.sim.curHeading || 0,
-        duration: 600
+        bearing: heading,
+        duration: 600,
+        essential: true
       });
       setTimeout(() => { chaseCam.isTransitioning = false; }, 620);
     }
 
     function exit3DFocus() {
+      const event = arguments[0] || (typeof window !== 'undefined' ? window.event : null);
+      if (event) {
+        if (event.stopPropagation) event.stopPropagation();
+        if (event.preventDefault) event.preventDefault();
+      }
       focusedTargetId = null;
       chaseCam.active = false;
       chaseCam.targetId = null;
@@ -4613,10 +4879,12 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
       const pill3d = document.getElementById('pill3DTelemetry');
       if (pill3d) {
-        pill3d.style.display = is3D ? 'flex' : 'none';
+        pill3d.style.display = 'none';
         pill3d.classList.remove('hud-expanded');
         pill3d.classList.add('hud-collapsed');
       }
+      const panel3d = document.getElementById('panel3DTelemetryDetails');
+      if (panel3d) panel3d.classList.remove('open');
       collapseAllHudPanels();
 
       // Restore closestCard to expanded
@@ -4625,6 +4893,11 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         closest.classList.remove('hud-collapsed');
         closest.classList.add('hud-expanded');
       }
+
+      is3DModeActive = false;
+      update2DClutterVisibility(false);
+      const btn3d = document.getElementById('btnToggle3D');
+      if (btn3d) btn3d.classList.remove('active');
 
       if (map) {
         map.easeTo({ pitch: 0, bearing: 0, zoom: Math.min(map.getZoom(), 9.5), duration: 800 });
@@ -5334,14 +5607,12 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
       // Handle lost targets if provided
       const lostList = data.recent_lost || data.lost_threats || [];
-      if (map && map.getSource('threats-lost-source')) {
-        const lostFeatures = lostList.map(l => ({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [Number(l.lon || (l.coords && l.coords[1])), Number(l.lat || (l.coords && l.coords[0]))] },
-          properties: { id: l.id, cat: l.category || 'unknown' }
-        })).filter(f => !isNaN(f.geometry.coordinates[0]) && !isNaN(f.geometry.coordinates[1]));
-        map.getSource('threats-lost-source').setData({ type: 'FeatureCollection', features: lostFeatures });
-      }
+      lostList.forEach(l => {
+        if (l && l.id) {
+          allReceivedLostThreats[l.id] = l;
+        }
+      });
+      syncLostThreatsToSource();
 
       // Trigger immediate GeoJSON sync
       lastGeoJsonSyncTs = 0;
@@ -5430,7 +5701,10 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     }
 
     function toggleHudCard(cardType, event) {
-      if (event) event.stopPropagation();
+      if (event) {
+        event.stopPropagation();
+        if (event.preventDefault) event.preventDefault();
+      }
       const card = document.getElementById(
         cardType === 'threats' ? 'threatsCard' :
         (cardType === 'slot' ? 'slotSelectorCard' :
@@ -5444,12 +5718,19 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       } else {
         card.classList.remove('hud-expanded');
         card.classList.add('hud-collapsed');
+        if (cardType === 'telemetry3d') {
+          const panel = document.getElementById('panel3DTelemetryDetails');
+          if (panel) panel.classList.remove('open');
+        }
       }
     }
 
     function handleCardClick(cardType, event) {
-      if (event && event.target && event.target.closest && event.target.closest('.hud-dropdown-panel')) return;
-      if (event && event.target && event.target.closest && event.target.closest('.hud-subframe')) return;
+      if (event && event.target && event.target.closest) {
+        if (event.target.closest('.hud-dropdown-panel')) return;
+        if (event.target.closest('.hud-subframe')) return;
+        if (event.target.closest('.btn-micro') || event.target.closest('button')) return;
+      }
       const card = document.getElementById(
         cardType === 'threats' ? 'threatsCard' :
         (cardType === 'slot' ? 'slotSelectorCard' :
@@ -5464,8 +5745,6 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         if (card.classList.contains('hud-collapsed')) {
           card.classList.remove('hud-collapsed');
           card.classList.add('hud-expanded');
-          const panel = document.getElementById('panel3DTelemetryDetails');
-          if (panel) panel.classList.add('open');
         } else {
           toggleHudPanel('panel3DTelemetryDetails');
         }
@@ -6216,6 +6495,14 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const radio = document.querySelector(`input[name="mapProvider"][value="${normProvider}"]`);
       if (radio) radio.checked = true;
       handleProviderChange(normProvider);
+
+      const savedHold = localStorage.getItem('radar_retention_timer');
+      if (savedHold) {
+        const sel1 = document.getElementById('selHoldTimer');
+        const sel2 = document.getElementById('cfgLostHoldSeconds');
+        if (sel1) sel1.value = savedHold;
+        if (sel2) sel2.value = savedHold;
+      }
     }
 
 
@@ -6343,7 +6630,24 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     }
 
     function setRetentionTimer(val) {
-      localStorage.setItem('radar_retention_timer', val);
+      const s = String(val);
+      localStorage.setItem('radar_retention_timer', s);
+
+      const sel1 = document.getElementById('selHoldTimer');
+      const sel2 = document.getElementById('cfgLostHoldSeconds');
+      if (sel1 && sel1.value !== s) sel1.value = s;
+      if (sel2 && sel2.value !== s) sel2.value = s;
+
+      // Real-time update of footer text in open lost-target popup if visible
+      const elNote = document.getElementById('lostTargetFooterNote');
+      if (elNote && typeof formatLostHoldDurationText === 'function') {
+        elNote.innerText = `Мітка точки ураження (фіксується до ${formatLostHoldDurationText(s)})`;
+      }
+
+      // Re-filter lost targets according to new retention timer
+      if (typeof syncLostThreatsToSource === 'function') {
+        syncLostThreatsToSource();
+      }
     }
 
     function toggleHistoryTrails(isChecked) {
@@ -6600,9 +6904,29 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           });
         }
         if (t.lost_point) {
+          recentLostThreats[t.id] = {
+            id: t.id,
+            cat: t.cat,
+            type_ua: t.name,
+            downed: t.downed,
+            status: t.downed ? 'eliminated' : 'lost',
+            outcome: t.downed ? 'eliminated' : 'lost',
+            lat: t.lost_point[0],
+            lon: t.lost_point[1],
+            lost_ts: t.lost_time
+          };
           lostFeatures.push({
             type: 'Feature',
-            properties: { id: t.id, cat: t.cat, downed: t.downed },
+            properties: {
+              tid: t.id,
+              id: t.id,
+              cat: t.cat,
+              type_ua: t.name,
+              downed: t.downed,
+              status: t.downed ? 'eliminated' : 'lost',
+              outcome: t.downed ? 'eliminated' : 'lost',
+              is_lost: true
+            },
             geometry: { type: 'Point', coordinates: [t.lost_point[1], t.lost_point[0]] }
           });
         }

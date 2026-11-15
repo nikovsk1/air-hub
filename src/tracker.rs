@@ -533,15 +533,15 @@ impl TargetTracker {
             }
         }
 
-        // Автоматичне очищення міток втрачених цілей, старших за 120 секунд (2 хв)
-        self.recent_lost.retain(|_, v| (now - v.lost_ts) <= 120.0);
+        // Автоматичне очищення міток втрачених цілей, старших за 600 секунд (10 хв - максимальний ліміт клієнтських налаштувань)
+        self.recent_lost.retain(|_, v| (now - v.lost_ts) <= 600.0);
         lost_tracks
     }
 
     /// Періодичне очищення застарілих цілей без оновлення від upstream
     pub fn has_stale_or_expired(&self, now: f64) -> bool {
         self.tracks.values().any(|trk| (now - trk.last_seen) > 180.0)
-            || self.recent_lost.values().any(|v| (now - v.lost_ts) > 120.0)
+            || self.recent_lost.values().any(|v| (now - v.lost_ts) > 600.0)
     }
 
     pub fn cleanup_stale(&mut self, now: f64) -> Vec<TargetTrack> {
@@ -573,7 +573,7 @@ impl TargetTracker {
                 expired_tracks.push(trk);
             }
         }
-        self.recent_lost.retain(|_, v| (now - v.lost_ts) <= 120.0);
+        self.recent_lost.retain(|_, v| (now - v.lost_ts) <= 600.0);
         expired_tracks
     }
 }

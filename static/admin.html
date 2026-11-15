@@ -609,7 +609,7 @@
         <table class="w-full text-left text-xs text-gray-400">
           <thead class="bg-gray-950 text-gray-400 uppercase tracking-wider sticky top-0 border-b border-gray-800">
             <tr>
-              <th class="p-2.5 w-32">Час</th>
+              <th class="p-2.5 w-44">Дата / Час</th>
               <th class="p-2.5 w-28">Джерело</th>
               <th class="p-2.5 w-32">Категорія</th>
               <th class="p-2.5 w-48">Сире значення від першоджерела</th>
@@ -2966,9 +2966,21 @@ ${resp.api_key}
         protocol: '<span class="px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 font-semibold">Протокол потоку</span>'
       };
 
+      function formatLogDateTime(ts) {
+        if (!ts) return '--';
+        const d = new Date(ts * 1000);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        const hours = String(d.getHours()).padStart(2, '0');
+        const mins = String(d.getMinutes()).padStart(2, '0');
+        const secs = String(d.getSeconds()).padStart(2, '0');
+        return `${day}.${month}.${year} ${hours}:${mins}:${secs}`;
+      }
+
       tbody.innerHTML = entries.map(e => `
         <tr class="hover:bg-gray-800/40 transition border-b border-gray-800">
-          <td class="p-2.5 text-gray-400 whitespace-nowrap">${e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString() : '--'}</td>
+          <td class="p-2.5 text-gray-400 whitespace-nowrap">${formatLogDateTime(e.timestamp)}</td>
           <td class="p-2.5 text-gray-300 font-semibold">${escapeHtml(e.source || 'upstream')}</td>
           <td class="p-2.5">${catBadges[e.category] || `<span class="text-amber-400 font-semibold">${escapeHtml(e.category || '--')}</span>`}</td>
           <td class="p-2.5"><code class="text-sky-300 bg-gray-950/90 border border-gray-800 rounded px-2 py-1 select-all font-mono text-[11px]">${escapeHtml(e.raw_value || 'None')}</code></td>
