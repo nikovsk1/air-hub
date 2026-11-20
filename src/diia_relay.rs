@@ -235,7 +235,9 @@ pub fn get_diia_session_info(
     let bridge_state = state.read().clone();
 
     let is_configured = cookie_opt.as_ref().map(|c| c.contains("DiiaMapAccess")).unwrap_or(false);
-    let is_unauth = last_provider_status == "unauthorized";
+    let is_unauth = last_provider_status == "unauthorized"
+        || bridge_state.status == "expired"
+        || bridge_state.status == "failed";
 
     let display_status = if !is_configured {
         "not_configured"
@@ -249,6 +251,7 @@ pub fn get_diia_session_info(
         "configured": is_configured,
         "status": display_status,
         "bridge_status": bridge_state.status,
+        "last_error": bridge_state.last_error,
         "session_expires_at": bridge_state.session_expires_at,
         "has_active_qr": bridge_state.status == "pending",
         "deep_link": if bridge_state.status == "pending" { bridge_state.deep_link } else { None },

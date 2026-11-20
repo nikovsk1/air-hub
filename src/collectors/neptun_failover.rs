@@ -135,6 +135,8 @@ pub fn parse_single_neptun_threat(t: &Value) -> Option<RawExtractedTarget> {
 
 pub fn parse_neptun_threats_list(val: &Value) -> Vec<RawExtractedTarget> {
     let threats_opt = val.get("threats").and_then(|t| t.as_array())
+        .or_else(|| val.pointer("/data/threats").and_then(|t| t.as_array()))
+        .or_else(|| val.get("data").and_then(|d| d.get("threats")).and_then(|t| t.as_array()))
         .or_else(|| val.get("data").and_then(|t| t.as_array()))
         .or_else(|| val.get("targets").and_then(|t| t.as_array()))
         .or_else(|| val.as_array());
@@ -185,7 +187,19 @@ async fn run_neptun_ws_dispatcher(
 
         let (mut write, mut read) = ws_stream.split();
 
-        while let Some(msg_res) = read.next().await {
+        loop {
+            let msg_res = match tokio::time::timeout(Duration::from_secs(35), read.next()).await {
+                Ok(Some(m)) => m,
+                Ok(None) => {
+                    warn!("Neptun WS connection closed by remote. Reconnecting in 5s...");
+                    break;
+                }
+                Err(_) => {
+                    warn!("Neptun WS silent >35s (heartbeat timeout). Reconnecting...");
+                    break;
+                }
+            };
+
             let msg = match msg_res {
                 Ok(m) => m,
                 Err(e) => {
@@ -215,6 +229,22 @@ async fn run_neptun_ws_dispatcher(
 
             let env_type = val.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
+            // Heartbeat: оновлюємо таймстемп живості з'єднання в буферах
+            if env_type == "heartbeat" || trimmed == "{}" {
+                let now = now_sec();
+                {
+                    let mut ab = alerts_buf.write().await;
+                    if ab.raw_data.is_some() {
+                        ab.last_received_ts = now;
+                    }
+                }
+                {
+                    let mut tb = targets_buf.write().await;
+                    tb.last_received_ts = now;
+                }
+                continue;
+            }
+
             // 1. Потік тривог (neptun_alerts): type == "alerts" або наявні поля raions/oblasts
             if env_type == "alerts" || val.get("raions").is_some() || val.get("oblasts").is_some()
                 || val.get("data").and_then(|d| d.get("raions").or_else(|| d.get("oblasts"))).is_some()
@@ -227,7 +257,7 @@ async fn run_neptun_ws_dispatcher(
             }
 
             // 2. Потік цілей (neptun_targets): snapshot / threats / upsert / remove
-            if env_type == "snapshot" || env_type == "threats" || val.get("threats").is_some() || val.is_array() {
+            if env_type == "snapshot" || env_type == "threats" || val.get("threats").is_some() || val.pointer("/data/threats").is_some() || val.is_array() {
                 let threats = parse_neptun_threats_list(&val);
                 let mut tb = targets_buf.write().await;
                 tb.targets.clear();
@@ -275,7 +305,7 @@ async fn run_neptun_alerts_arbiter(
     detector: Arc<OblastDetector>,
     exchange_mgr: Arc<ExchangeLogManager>,
     storage: Arc<StorageManager>,
-    _http_client: reqwest::Client,
+    http_client: reqwest::Client,
     alerts_buf: Arc<RwLock<NeptunAlertsBuffer>>,
 ) {
     let mut was_active = false;
@@ -355,7 +385,23 @@ async fn run_neptun_alerts_arbiter(
         if let Some(val) = ws_alerts_opt {
             process_neptun_alerts(&val, &threat_state, &detector, &exchange_mgr, provider_name, status_str).await;
         } else {
-            debug!("Neptun alerts: WebSocket buffer silent (>25s). Pure WebSocket mode — no REST fallback.");
+            // REST Fallback: якщо WebSocket мовчить > 25с
+            if let Ok(resp) = http_client.get("https://neptun.in.ua/api/v1/alerts")
+                .header(USER_AGENT, BROWSER_UA)
+                .header(REFERER, "https://neptun.in.ua/")
+                .timeout(Duration::from_secs(6))
+                .send().await
+            {
+                if resp.status().is_success() {
+                    if let Ok(val) = resp.json::<Value>().await {
+                        debug!("Neptun alerts: WebSocket buffer silent, REST fallback succeeded");
+                        let mut ab = alerts_buf.write().await;
+                        ab.raw_data = Some(val.get("data").unwrap_or(&val).clone());
+                        ab.last_received_ts = now_sec();
+                        process_neptun_alerts(&val, &threat_state, &detector, &exchange_mgr, provider_name, status_str).await;
+                    }
+                }
+            }
         }
     }
 }
@@ -367,7 +413,7 @@ async fn run_neptun_targets_arbiter(
     history_mgr: Arc<HistoryManager>,
     exchange_mgr: Arc<ExchangeLogManager>,
     storage: Arc<StorageManager>,
-    _http_client: reqwest::Client,
+    http_client: reqwest::Client,
     targets_buf: Arc<RwLock<NeptunTargetsBuffer>>,
 ) {
     let mut was_active = false;
@@ -458,12 +504,44 @@ async fn run_neptun_targets_arbiter(
             (targets_vec, removals)
         };
 
-        let extracted = if let Some(ws_targets) = ws_extracted_opt {
-            ws_targets
+        let (extracted, is_healthy) = if let Some(ws_targets) = ws_extracted_opt {
+            (ws_targets, true)
         } else {
-            debug!("Neptun targets: WebSocket buffer silent (>25s). Pure WebSocket mode — no REST fallback.");
-            Vec::new()
+            // REST Fallback: якщо WebSocket буфер мовчить > 25с, опитуємо REST API https://neptun.in.ua/api/v1/threats
+            match http_client
+                .get("https://neptun.in.ua/api/v1/threats")
+                .header(USER_AGENT, BROWSER_UA)
+                .header(REFERER, "https://neptun.in.ua/")
+                .timeout(Duration::from_secs(6))
+                .send()
+                .await
+            {
+                Ok(resp) if resp.status().is_success() => {
+                    if let Ok(v) = resp.json::<Value>().await {
+                        let parsed = parse_neptun_threats_list(&v);
+                        debug!("Neptun targets: WebSocket silent, REST fallback fetched {} threats", parsed.len());
+                        let mut tb = targets_buf.write().await;
+                        tb.targets.clear();
+                        for t in &parsed {
+                            tb.targets.insert(t.id.clone(), t.clone());
+                        }
+                        tb.last_received_ts = now_sec();
+                        (parsed, true)
+                    } else {
+                        (Vec::new(), false)
+                    }
+                }
+                _ => {
+                    debug!("Neptun targets: WebSocket buffer silent (>25s) and REST fallback failed.");
+                    (Vec::new(), false)
+                }
+            }
         };
+
+        if !is_healthy {
+            // Обидва канали (WS і REST) мовчать — дозволяємо арбітру наступного рівня перехопити ініціативу
+            continue;
+        }
 
         let extracted_count = extracted.len();
         let mut state = threat_state.write().await;

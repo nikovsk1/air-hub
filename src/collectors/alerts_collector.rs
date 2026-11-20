@@ -57,12 +57,11 @@ pub async fn run_alerts_collector(
         let ua_priority = ua_stream.as_ref().map(|s| s.priority).unwrap_or(1);
         let neptun_priority = neptun_stream.as_ref().map(|s| s.priority).unwrap_or(2);
 
-        let configured_ua_interval = ua_stream.as_ref().map(|s| s.poll_interval_sec).unwrap_or(15).max(10);
+        let configured_ua_interval = ua_stream.as_ref().map(|s| s.poll_interval_sec).unwrap_or(60).max(10);
         let neptun_poll_interval = neptun_stream.as_ref().map(|s| s.poll_interval_sec).unwrap_or(6).max(3);
 
-        if poll_interval_secs < configured_ua_interval && poll_interval_secs < 60 {
-            poll_interval_secs = configured_ua_interval;
-        }
+        // Синхронізуємо фактичний інтервал опитування з налаштуваннями адміністратора
+        poll_interval_secs = configured_ua_interval;
 
         if !ua_enabled && !neptun_enabled {
             debug!("Alerts collector: all alert streams are disabled by admin configuration");
@@ -171,13 +170,15 @@ pub async fn run_alerts_collector(
                             let total_cooldown = retry_after + 2;
                             if poll_interval_secs < 60 {
                                 warn!(
-                                    "UkraineAlarm API v3 returned HTTP 429 (token quota is 1 req/60s). Auto-adjusting poll interval from {}s to 60s to prevent lockouts. Cooling down for {}s",
-                                    poll_interval_secs, total_cooldown
+                                    "UkraineAlarm API v3 returned HTTP 429 (token quota is 1 req/60s). Auto-adjusting poll interval from {}s to 60s to prevent lockouts. Cooling down for {}s (failures={})",
+                                    poll_interval_secs, total_cooldown, consecutive_ua_failures + 1
                                 );
                                 poll_interval_secs = 60;
+                                let _ = storage.update_stream("ukrainealarm_alerts", None, None, Some(60), None);
                             } else {
                                 warn!(
-                                    "UkraineAlarm API v3 returned HTTP 429 Too Many Requests. Cooling down for {}s (failures={})",
+                                    "UkraineAlarm API v3 returned HTTP 429 Too Many Requests (upstream Retry-After: {}s). Token/IP sliding window active. Cooling down for {}s (failures={})",
+                                    retry_after,
                                     total_cooldown,
                                     consecutive_ua_failures + 1
                                 );

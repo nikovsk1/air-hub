@@ -270,6 +270,7 @@ pub async fn run_ukrainealarm_collector(
     exchange_mgr: Arc<ExchangeLogManager>,
     storage: Arc<StorageManager>,
     http_client: reqwest::Client,
+    diia_bridge: Arc<parking_lot::RwLock<crate::diia_relay::DiiaBridgeState>>,
 ) {
     let re_token = Regex::new(r#"id=["']centrifugo-token["'][^>]*value=["']([^"']+)["']"#).unwrap();
     let re_channel = Regex::new(r#"data-target-centrifugo-channel=["']([^"']+)["']"#).unwrap();
@@ -318,6 +319,7 @@ pub async fn run_ukrainealarm_collector(
         let configured_diia_cookie = storage.get_service_keys().ukrainealarm_diia_cookie
             .or_else(|| std::env::var("UKRAINEALARM_DIIA_COOKIE").ok())
             .filter(|s| !s.trim().is_empty());
+        let initial_diia_cookie = configured_diia_cookie.clone();
 
         let mut session_cookies = Vec::new();
         if let Some(ref diia) = configured_diia_cookie {
@@ -422,12 +424,33 @@ pub async fn run_ukrainealarm_collector(
             state.last_ws_targets_ts = now_sec();
         }
 
-        while let Some(msg_res) = read.next().await {
+        loop {
             let ua_stream = storage.get_stream("ukrainealarm_ws");
             if !ua_stream.as_ref().map(|s| s.enabled).unwrap_or(true) {
                 info!("UkraineAlarm WS disabled in admin config. Disconnecting WebSocket.");
                 break;
             }
+
+            // Миттєве виявлення оновлення сесії Дії через адмінку
+            let current_diia_cookie = storage.get_service_keys().ukrainealarm_diia_cookie
+                .or_else(|| std::env::var("UKRAINEALARM_DIIA_COOKIE").ok())
+                .filter(|s| !s.trim().is_empty());
+            if current_diia_cookie != initial_diia_cookie {
+                info!("UkraineAlarm WS: detected updated Diia session cookie in configuration. Reconnecting to Centrifugo...");
+                break;
+            }
+
+            let msg_res = match tokio::time::timeout(Duration::from_secs(45), read.next()).await {
+                Ok(Some(m)) => m,
+                Ok(None) => {
+                    warn!("UkraineAlarm Centrifugo WS connection closed by server. Reconnecting in 5s...");
+                    break;
+                }
+                Err(_) => {
+                    warn!("UkraineAlarm Centrifugo WS silent >45s (ping/heartbeat timeout). Reconnecting...");
+                    break;
+                }
+            };
 
             let msg = match msg_res {
                 Ok(m) => m,
@@ -494,12 +517,22 @@ pub async fn run_ukrainealarm_collector(
                                     if status.as_u16() == 401 || status.as_u16() == 403 {
                                         warn!("Diia authorization session expired or rejected on {}. Please re-authorize via Admin Panel.", sub_ep);
                                         {
+                                            let mut d_guard = diia_bridge.write();
+                                            d_guard.status = "expired".to_string();
+                                            d_guard.last_error = Some(format!("Сесію Дії вичерпано або відхилено сервером (HTTP {})", status));
+                                        }
+                                        {
                                             let mut state = threat_state.write().await;
                                             state.last_targets_provider_status = "unauthorized".to_string();
                                         }
-                                        sleep(Duration::from_secs(60)).await;
+                                        sleep(Duration::from_secs(30)).await;
                                     }
                                 } else if let Ok(sub_data) = resp.json::<Value>().await {
+                                    {
+                                        let mut d_guard = diia_bridge.write();
+                                        d_guard.status = "authorized".to_string();
+                                        d_guard.last_error = None;
+                                    }
                                     let mut stoken = None;
                                     if let Some(chs) = sub_data.get("channels").and_then(|c| c.as_array()) {
                                         for ch in chs {

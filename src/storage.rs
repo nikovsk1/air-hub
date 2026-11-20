@@ -143,7 +143,7 @@ pub fn default_stream_sources() -> Vec<StreamSourceConfig> {
             stream_type: "alerts".to_string(),
             enabled: true,
             priority: 1,
-            poll_interval_sec: 15,
+            poll_interval_sec: 60,
             failover_timeout_sec: 15.0,
             endpoint_url: "api.ukrainealarm.com/api/v3/alerts".to_string(),
             autonomous: false,

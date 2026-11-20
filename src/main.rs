@@ -119,6 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let http_client = client_builder.build()?;
+    let diia_bridge = Arc::new(parking_lot::RwLock::new(diia_relay::DiiaBridgeState::default()));
 
     // 8. Запуск фонових сервісів (збирачів телеметрії та сирен)
     {
@@ -128,8 +129,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let exch = exchange_mgr.clone();
         let stor = storage.clone();
         let client = http_client.clone();
+        let d_bridge = diia_bridge.clone();
         tokio::spawn(async move {
-            collectors::ukrainealarm_ws::run_ukrainealarm_collector(t_state, det, hist, exch, stor, client).await;
+            collectors::ukrainealarm_ws::run_ukrainealarm_collector(t_state, det, hist, exch, stor, client, d_bridge).await;
         });
     }
 
@@ -299,7 +301,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         threat_state,
         threat_watch_tx,
         threat_watch_rx,
-        diia_bridge: Arc::new(parking_lot::RwLock::new(diia_relay::DiiaBridgeState::default())),
+        diia_bridge,
     };
 
     let app = api::create_router(app_state);

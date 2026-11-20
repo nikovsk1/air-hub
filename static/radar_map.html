@@ -2468,12 +2468,28 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     let activeRegionPopup = null;
     let currentlySelectedRegionId = null;
+    let activeTargetPopup = null;
+
+    function closeTargetPopup() {
+      if (activeTargetPopup) {
+        const p = activeTargetPopup;
+        activeTargetPopup = null;
+        try {
+          if (p.off) p.off('close');
+          p.remove();
+        } catch (_) {}
+      }
+    }
 
     function deselectRegion() {
       currentlySelectedRegionId = null;
       if (activeRegionPopup) {
-        try { activeRegionPopup.remove(); } catch (_) {}
+        const p = activeRegionPopup;
         activeRegionPopup = null;
+        try {
+          if (p.off) p.off('close');
+          p.remove();
+        } catch (_) {}
       }
       if (map && map.getSource('selected-region-source')) {
         map.getSource('selected-region-source').setData({
@@ -2481,6 +2497,11 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           features: []
         });
       }
+    }
+
+    function closeAllPopupsAndSelections() {
+      deselectRegion();
+      closeTargetPopup();
     }
 
     // =========================================================================
@@ -2709,6 +2730,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         const features = map.queryRenderedFeatures(bbox, { layers: ['alerts-fill'] });
         if (!features || !features.length) {
           deselectRegion();
+          closeTargetPopup();
         }
       });
 
@@ -2738,6 +2760,20 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           deselectRegion();
           return;
         }
+
+        // Mutual exclusivity: close any active target context popup
+        closeTargetPopup();
+
+        // Safely dismiss previous region/POI popup without wiping the incoming selection
+        if (activeRegionPopup) {
+          const oldPopup = activeRegionPopup;
+          activeRegionPopup = null;
+          try {
+            if (oldPopup.off) oldPopup.off('close');
+            oldPopup.remove();
+          } catch (_) {}
+        }
+
         currentlySelectedRegionId = regId;
 
         // Look up unclipped authentic feature geometry from rawRegionsGeoJson
@@ -2806,11 +2842,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           });
         }
 
-        if (activeRegionPopup) {
-          activeRegionPopup.remove();
-        }
-
-        activeRegionPopup = new maplibregl.Popup({
+        const newPopup = new maplibregl.Popup({
           closeButton: false,
           closeOnClick: false, // Prevents premature close event on repeat click to ensure toggle deselect works reliably
           className: 'tactical-region-popup',
@@ -2820,7 +2852,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         .setHTML(html)
         .addTo(map);
 
-        const popupEl = activeRegionPopup.getElement();
+        activeRegionPopup = newPopup;
+
+        const popupEl = newPopup.getElement();
         if (popupEl) {
           popupEl.style.cursor = 'pointer';
           const dismiss = (ev) => {
@@ -2834,8 +2868,10 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           popupEl.addEventListener('touchend', dismiss);
         }
 
-        activeRegionPopup.on('close', () => {
-          deselectRegion();
+        newPopup.on('close', () => {
+          if (activeRegionPopup === newPopup) {
+            deselectRegion();
+          }
         });
       });
 
@@ -2853,6 +2889,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         if (!isPickingLocationOnMap) map.getCanvas().style.cursor = '';
       });
       function showPoiPopup(props, coord) {
+        closeTargetPopup();
+        deselectRegion();
+
         const catMeta = (typeof POI_CATEGORIES_META !== 'undefined' && POI_CATEGORIES_META[props.category])
           ? POI_CATEGORIES_META[props.category]
           : { name: props.category || 'Об\'єкт', icon: '📍', color: '#38BDF8' };
@@ -2873,10 +2912,15 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         `;
 
         if (activeRegionPopup) {
-          activeRegionPopup.remove();
+          const oldPopup = activeRegionPopup;
+          activeRegionPopup = null;
+          try {
+            if (oldPopup.off) oldPopup.off('close');
+            oldPopup.remove();
+          } catch (_) {}
         }
 
-        activeRegionPopup = new maplibregl.Popup({
+        const newPoiPopup = new maplibregl.Popup({
           closeButton: false,
           closeOnClick: true,
           className: 'tactical-region-popup',
@@ -2886,7 +2930,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         .setHTML(html)
         .addTo(map);
 
-        const popupEl = activeRegionPopup.getElement();
+        activeRegionPopup = newPoiPopup;
+
+        const popupEl = newPoiPopup.getElement();
         if (popupEl) {
           popupEl.style.cursor = 'pointer';
           popupEl.addEventListener('click', (ev) => {
@@ -2894,6 +2940,12 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
             deselectRegion();
           });
         }
+
+        newPoiPopup.on('close', () => {
+          if (activeRegionPopup === newPoiPopup) {
+            deselectRegion();
+          }
+        });
       }
 
       map.on('click', 'poi-layer', (e) => {
@@ -4617,17 +4669,18 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       lastPinchDist: null
     };
 
-    let activeTargetPopup = null;
+    // activeTargetPopup is declared and managed centrally in map scope
 
     function openTargetContextMenu(tid, lngLat, extraProps) {
       const t = activeThreats[tid];
       const lost = (extraProps && (extraProps.is_lost || extraProps.status === 'lost' || extraProps.status === 'eliminated' || extraProps.downed)) ? extraProps : (recentLostThreats ? recentLostThreats[tid] : null);
       if (!t && !lost) return;
 
-      if (activeTargetPopup) {
-        activeTargetPopup.remove();
-        activeTargetPopup = null;
-      }
+      // Mutual exclusivity: selecting any target dismisses active region selection and outline!
+      deselectRegion();
+
+      // Close previous target popup if open (ensuring direct click on another target smoothly replaces it)
+      closeTargetPopup();
 
       // 1. Handling for DOWNED / LOST TARGET (Збита / Втрачена ціль)
       if (!t && lost) {
@@ -4748,10 +4801,8 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const t = activeThreats[tid];
       if (!t || !map) return;
 
-      if (activeTargetPopup) {
-        activeTargetPopup.remove();
-        activeTargetPopup = null;
-      }
+      closeTargetPopup();
+      deselectRegion();
       collapseAllHudPanels();
 
       // Collapse all other HUD cards so the 3D focus view is clean

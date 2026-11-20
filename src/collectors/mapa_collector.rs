@@ -25,9 +25,30 @@ pub fn parse_mapa_objects(val: &Value) -> Vec<RawExtractedTarget> {
         return extracted;
     };
 
+    let now_sec_val = now_sec() as i64;
+
     for obj in objects {
+        // Фільтрація за часом спостереження (last_seen):
+        // Якщо об'єкт не оновлювався > 20 хв (1200с) — ігноруємо його як застарілий
+        let last_seen_opt = obj.get("last_seen").and_then(|v| v.as_i64());
+        if let Some(ls) = last_seen_opt {
+            if now_sec_val > ls && (now_sec_val - ls) > 1200 {
+                continue;
+            }
+        }
+
         // 1. Парсимо та нормалізуємо статус цілі за канонічною матрицею хаба
         let raw_status = obj.get("status").and_then(|s| s.as_str()).unwrap_or("active");
+
+        // Ігноруємо історичні "lost" (зниклі цілі), які сталися > 5 хв тому, щоб не засмічувати мапу
+        if raw_status == "lost" || raw_status == "disappeared" {
+            if let Some(ls) = last_seen_opt {
+                if now_sec_val > ls && (now_sec_val - ls) > 300 {
+                    continue;
+                }
+            }
+        }
+
         let upstream_status = match raw_status {
             "active" => "active",
             "lost" | "disappeared" => "lost",
@@ -40,6 +61,11 @@ pub fn parse_mapa_objects(val: &Value) -> Vec<RawExtractedTarget> {
         let lat = obj.get("lat").and_then(|v| v.as_f64()).unwrap_or(0.0);
         let lon = obj.get("lon").and_then(|v| v.as_f64()).unwrap_or(0.0);
         if lat == 0.0 && lon == 0.0 {
+            continue;
+        }
+
+        // Географічні межі території України з буфером для прикордонних зон
+        if lat < 43.5 || lat > 53.5 || lon < 21.0 || lon > 41.5 {
             continue;
         }
 
@@ -210,7 +236,11 @@ pub async fn run_mapa_targets_collector(
         {
             Ok(resp) if resp.status().is_success() => {
                 if let Ok(val) = resp.json::<Value>().await {
-                    let extracted = parse_mapa_objects(&val);
+                    let mut extracted = parse_mapa_objects(&val);
+                    // Захист від аномальних OSINT-дампів: обмежуємо максимум 60 найсвіжіших цілей
+                    if extracted.len() > 60 {
+                        extracted.truncate(60);
+                    }
                     let extracted_count = extracted.len();
 
                     let mut state = threat_state.write().await;
