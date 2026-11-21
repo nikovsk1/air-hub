@@ -10,12 +10,26 @@ use crate::storage::{now_ts, StorageManager};
 pub const DIIA_START_URL: &str = "https://map.ukrainealarm.com/api/diia/auth/start";
 pub const DIIA_STATUS_URL: &str = "https://map.ukrainealarm.com/api/diia/auth/status";
 
-// Еталонні заголовки вашого браузера (Chrome 157 на Windows 64-bit)
-pub const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36";
-pub const SEC_CH_UA: &str = "\"Not-A.Brand\";v=\"99\", \"Google Chrome\";v=\"157\", \"Chromium\";v=\"157\"";
+pub const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+/// Динамічний або налаштовуваний через DIIA_BROWSER_UA заголовок User-Agent
+pub fn get_browser_ua() -> String {
+    std::env::var("DIIA_BROWSER_UA").unwrap_or_else(|_| BROWSER_UA.to_string())
+}
+
+/// Нормалізація часових міток: якщо мітка в мілісекундах (> 10^10), конвертуємо в секунди
+pub fn normalize_timestamp_secs(ts: i64) -> i64 {
+    if ts > 10_000_000_000 {
+        ts / 1000
+    } else {
+        ts
+    }
+}
+
+pub const SEC_CH_UA: &str = "\"Not-A.Brand\";v=\"99\", \"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\"";
 pub const SEC_CH_UA_MOBILE: &str = "?0";
 pub const SEC_CH_UA_PLATFORM: &str = "\"Windows\"";
-pub const SEC_CH_UA_FULL_VERSION: &str = "\"157.0.8103.51\"";
+pub const SEC_CH_UA_FULL_VERSION: &str = "\"131.0.6778.86\"";
 pub const SEC_CH_UA_ARCH: &str = "\"x86\"";
 pub const SEC_CH_UA_BITNESS: &str = "\"64\"";
 pub const SEC_CH_UA_PLATFORM_VERSION: &str = "\"19.0.0\"";
@@ -48,8 +62,9 @@ impl Default for DiiaBridgeState {
 }
 
 pub fn apply_browser_headers(builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    let ua = get_browser_ua();
     builder
-        .header(USER_AGENT, BROWSER_UA)
+        .header(USER_AGENT, ua)
         .header(ORIGIN, "https://map.ukrainealarm.com")
         .header(REFERER, "https://map.ukrainealarm.com/")
         .header("sec-ch-ua", SEC_CH_UA)
@@ -102,7 +117,7 @@ pub async fn start_diia_session(
     let body_json: Value = resp.json().await.map_err(|e| format!("Invalid JSON from Diia start: {}", e))?;
     let deep_link = body_json.get("deepLink").and_then(|v| v.as_str()).map(|s| s.to_string());
     let request_id = body_json.get("requestId").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let expires_at = body_json.get("expiresAt").and_then(|v| v.as_i64());
+    let expires_at = body_json.get("expiresAt").and_then(|v| v.as_i64()).map(normalize_timestamp_secs);
 
     if deep_link.is_none() || flow_cookie_opt.is_none() {
         let msg = "Diia start response missing deepLink or DiiaAuthFlow cookie".to_string();
@@ -158,7 +173,8 @@ pub async fn poll_diia_status(
 
     // Перевірка таймауту на стороні клієнта
     if let Some(exp) = expires_at {
-        if now_ts() >= exp {
+        let exp_sec = normalize_timestamp_secs(exp);
+        if now_ts() >= exp_sec {
             let mut guard = state.write();
             guard.status = "expired".to_string();
             guard.last_error = Some("Час очікування сканування QR-коду вичерпано".to_string());
@@ -196,7 +212,7 @@ pub async fn poll_diia_status(
         }
 
         let cookie_full = issued_cookies.join("; ");
-        let session_expires = body_json.get("expiresAt").and_then(|v| v.as_i64());
+        let session_expires = body_json.get("expiresAt").and_then(|v| v.as_i64()).map(normalize_timestamp_secs);
 
         if !cookie_full.is_empty() && cookie_full.contains("DiiaMapAccess") {
             let _ = storage.set_service_key("diia", "Загальна мапа", Some(cookie_full.clone()));

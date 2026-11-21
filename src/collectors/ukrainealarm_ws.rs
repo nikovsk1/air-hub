@@ -127,14 +127,22 @@ async fn process_ukrainealarm_payload_inner(
                     if is_new_code {
                         let mut w = tax_set.write();
                         if w.insert(item.code) {
-                            exchange_mgr.record_unmapped(
-                                "taxonomy",
-                                &item.name_ua,
-                                Some(item.code),
-                                &item.name_en,
-                                "UkraineAlarm Taxonomy",
-                                Some(&format!("Dynamic taxonomy: code={}, icon={}", item.code, item.icon)),
-                            );
+                            let (cat, _) = crate::canonical_registry::classify_target(&item.name_ua, item.code);
+                            if cat == "unknown" {
+                                exchange_mgr.record_unmapped(
+                                    "taxonomy",
+                                    &item.name_ua,
+                                    Some(item.code),
+                                    &item.name_en,
+                                    "UkraineAlarm Taxonomy",
+                                    Some(&format!("Dynamic taxonomy: code={}, icon={}", item.code, item.icon)),
+                                );
+                            } else {
+                                info!(
+                                    "Discovered dynamic taxonomy: code={}, name_ua='{}', icon='{}' -> mapped to '{}'",
+                                    item.code, item.name_ua, item.icon, cat
+                                );
+                            }
                         }
                     }
                 }
@@ -202,7 +210,7 @@ async fn process_ukrainealarm_payload_inner(
         if source_label.contains("WS") {
             state.last_ws_targets_ts = now;
         }
-        state.update_seq += 1;
+        state.bump_seq();
         state.upstream_provider = format!("{} ({})", source_label, stream_type);
         state.targets_provider = "WS UkraineAlarm".to_string();
         state.last_targets_provider_status = "primary".to_string();
@@ -224,6 +232,7 @@ async fn process_ukrainealarm_payload_inner(
                 let hist_status = match trk.status.as_str() {
                     "eliminated" => "eliminated",
                     "hit_target" => "hit_target",
+                    "superseded" => "superseded",
                     _ => "lost",
                 };
                 history_mgr.record_track(trk, hist_status);

@@ -940,3 +940,51 @@ pub fn decode_surface_v2_payload(payload_str: &str) -> Result<Vec<RawExtractedTa
 
     extract_targets_from_svg(&xml_str)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_svg_xy_to_lon_lat_ukraine_bounds() {
+        // Тестування проекції для центру SVG viewBox 0 0 260 175 (центр України)
+        let (lon_mid, lat_mid) = svg_xy_to_lon_lat(130.0, 87.5);
+        assert!(lat_mid >= 44.0 && lat_mid <= 53.0, "Latitude {} must be within Ukraine bounds", lat_mid);
+        assert!(lon_mid >= 22.0 && lon_mid <= 41.0, "Longitude {} must be within Ukraine bounds", lon_mid);
+
+        // Тестування крайніх меж SVG проекції
+        let (lon_min, lat_max) = svg_xy_to_lon_lat(0.0, 0.0);
+        assert!(lat_max > lat_mid, "Top coordinate must have higher latitude");
+        assert!(lon_min < lon_mid, "Left coordinate must have lower longitude");
+    }
+
+    #[test]
+    fn test_classify_raw_surface_target_semantics() {
+        let (code_shahed, name_shahed) = classify_raw_surface_target("Shahed-136");
+        assert_eq!(code_shahed, 1);
+        assert_eq!(name_shahed, "Шахед");
+
+        let (code_ballistic, name_ballistic) = classify_raw_surface_target("Іскандер-М балістика");
+        assert_eq!(code_ballistic, 12);
+        assert_eq!(name_ballistic, "Балістика");
+
+        let (code_kab, name_kab) = classify_raw_surface_target("Керована авіабомба (КАБ)");
+        assert_eq!(code_kab, 5);
+        assert_eq!(name_kab, "КАБ");
+    }
+
+    #[test]
+    fn test_quarter_round_invariance() {
+        let mut st = [0u32; 16];
+        st[0] = 0x11111111;
+        st[1] = 0x22222222;
+        st[2] = 0x33333333;
+        st[3] = 0x44444444;
+
+        quarter_round(&mut st, 0, 1, 2, 3);
+        assert_ne!(st[0], 0x11111111);
+        assert_ne!(st[1], 0x22222222);
+        assert_ne!(st[2], 0x33333333);
+        assert_ne!(st[3], 0x44444444);
+    }
+}

@@ -32,6 +32,7 @@ pub struct NeptunAlertsBuffer {
 #[derive(Default, Debug)]
 pub struct NeptunTargetsBuffer {
     pub targets: HashMap<String, RawExtractedTarget>,
+    pub targets_seen: HashMap<String, f64>,
     pub pending_removals: Vec<String>,
     pub last_received_ts: f64,
 }
@@ -260,24 +261,31 @@ async fn run_neptun_ws_dispatcher(
             if env_type == "snapshot" || env_type == "threats" || val.get("threats").is_some() || val.pointer("/data/threats").is_some() || val.is_array() {
                 let threats = parse_neptun_threats_list(&val);
                 let mut tb = targets_buf.write().await;
+                let now = now_sec();
                 tb.targets.clear();
+                tb.targets_seen.clear();
                 for t in threats {
+                    tb.targets_seen.insert(t.id.clone(), now);
                     tb.targets.insert(t.id.clone(), t);
                 }
-                tb.last_received_ts = now_sec();
+                tb.last_received_ts = now;
                 debug!("Neptun WS: dispatched snapshot to targets buffer ({} threats)", tb.targets.len());
             } else if env_type == "upsert" {
                 let threat_val = val.get("threat").or_else(|| val.get("data")).unwrap_or(&val);
                 if let Some(t) = parse_single_neptun_threat(threat_val) {
                     let mut tb = targets_buf.write().await;
+                    let now = now_sec();
+                    tb.targets_seen.insert(t.id.clone(), now);
                     tb.targets.insert(t.id.clone(), t);
-                    tb.last_received_ts = now_sec();
-                    // Захист оперативної пам'яті: якщо буфер розростається понад 500 цілей — залишаємо останні 300
+                    tb.last_received_ts = now;
+                    // Захист оперативної пам'яті: якщо буфер розростається понад 500 цілей — залишаємо останні 300 найновіших (true LRU)
                     if tb.targets.len() > 500 {
                         let excess = tb.targets.len() - 300;
-                        let keys_to_remove: Vec<String> = tb.targets.keys().take(excess).cloned().collect();
-                        for k in keys_to_remove {
+                        let mut entries: Vec<(String, f64)> = tb.targets_seen.iter().map(|(k, v)| (k.clone(), *v)).collect();
+                        entries.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                        for (k, _) in entries.into_iter().take(excess) {
                             tb.targets.remove(&k);
+                            tb.targets_seen.remove(&k);
                         }
                     }
                 }
@@ -287,6 +295,7 @@ async fn run_neptun_ws_dispatcher(
                 if let Some(id) = id_opt {
                     let mut tb = targets_buf.write().await;
                     tb.targets.remove(id);
+                    tb.targets_seen.remove(id);
                     tb.pending_removals.push(id.to_string());
                     tb.last_received_ts = now_sec();
                 }
@@ -555,7 +564,7 @@ async fn run_neptun_targets_arbiter(
         state.recompute_oblast_alerts(&detector);
         state.last_targets_update_ts = now_sec();
         state.last_update_ts = now_sec();
-        state.update_seq += 1;
+        state.bump_seq();
         state.upstream_provider = provider_name.to_string();
         state.targets_provider = provider_name.to_string();
         state.last_targets_provider_status = status_str.to_string();
@@ -573,6 +582,7 @@ async fn run_neptun_targets_arbiter(
                 let hist_status = match trk.status.as_str() {
                     "eliminated" => "eliminated",
                     "hit_target" => "hit_target",
+                    "superseded" => "superseded",
                     _ => "lost",
                 };
                 history_mgr.record_track(trk, hist_status);

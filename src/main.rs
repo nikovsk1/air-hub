@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use std::fs;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -55,18 +57,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Static directory: {:?}", config.static_dir);
     info!("Server port: {}", config.port);
 
-    // 3. Завантаження географічного детектора областей та районів
-    let geojson_path = config.data_dir.join("regions.geojson");
-    if !geojson_path.exists() {
-        let default_geojson = config.data_defaults_dir.join("regions.geojson");
-        if default_geojson.exists() {
-            info!("Initializing regions.geojson from defaults: {:?}", default_geojson);
+    // 3. Завантаження географічного детектора областей та районів (пріоритет швидкого regions_core.geojson)
+    let core_geojson = config.data_dir.join("regions_core.geojson");
+    let full_geojson = config.data_dir.join("regions.geojson");
+    let default_core = config.data_defaults_dir.join("regions_core.geojson");
+    let default_full = config.data_defaults_dir.join("regions.geojson");
+
+    let geojson_path = if core_geojson.exists() {
+        core_geojson
+    } else if default_core.exists() {
+        info!("Initializing regions_core.geojson from defaults: {:?}", default_core);
+        let _ = fs::create_dir_all(&config.data_dir);
+        let _ = fs::copy(&default_core, &core_geojson);
+        core_geojson
+    } else if full_geojson.exists() {
+        full_geojson
+    } else {
+        if default_full.exists() {
+            info!("Initializing regions.geojson from defaults: {:?}", default_full);
             let _ = fs::create_dir_all(&config.data_dir);
-            if let Err(e) = fs::copy(&default_geojson, &geojson_path) {
-                warn!("Failed to copy default regions.geojson: {}", e);
-            }
+            let _ = fs::copy(&default_full, &full_geojson);
         }
-    }
+        full_geojson
+    };
 
     let detector = match OblastDetector::load(&geojson_path) {
         Ok(d) => Arc::new(d),
@@ -83,8 +96,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let history_mgr = Arc::new(HistoryManager::new(&config.data_dir));
     let exchange_mgr = Arc::new(ExchangeLogManager::new(&config.data_dir));
 
-    // 6. Ініціалізація глобального стану загроз
-    let threat_state = Arc::new(RwLock::new(ThreatState::default()));
+    // 6. Ініціалізація глобального стану загроз та реактивного watch-каналу сповіщень
+    let (threat_watch_tx, threat_watch_rx) = tokio::sync::watch::channel(1u64);
+    let mut initial_threat_state = ThreatState::default();
+    initial_threat_state.notifier = Some(threat_watch_tx.clone());
+    let threat_state = Arc::new(RwLock::new(initial_threat_state));
 
     // 7. Створення HTTP-клієнта (з cookie store, HTTP/2 та повним пулом браузерних заголовків)
     let mut default_headers = reqwest::header::HeaderMap::new();
@@ -197,6 +213,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if needs_cleanup {
                     let mut st = t_state.write().await;
                     let expired = st.tracker.cleanup_stale(now);
+                    if !expired.is_empty() {
+                        st.bump_seq();
+                    }
                     if stor.is_history_recording_enabled() {
                         for trk in &expired {
                             let hist_status = match trk.status.as_str() {
@@ -263,28 +282,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                     }
-                }
-            }
-        });
-    }
-
-    let (threat_watch_tx, threat_watch_rx) = tokio::sync::watch::channel(0u64);
-
-    // 10.1 Реактивний нотифікатор оновлення стану для WebSocket
-    {
-        let t_state = threat_state.clone();
-        let watch_tx = threat_watch_tx.clone();
-        tokio::spawn(async move {
-            let mut last_seq = 0u64;
-            loop {
-                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-                let cur_seq = {
-                    let st = t_state.read().await;
-                    st.update_seq
-                };
-                if cur_seq != last_seq {
-                    last_seq = cur_seq;
-                    let _ = watch_tx.send_replace(cur_seq);
                 }
             }
         });

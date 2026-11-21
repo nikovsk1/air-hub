@@ -110,13 +110,14 @@ pub fn parse_mapa_objects(val: &Value) -> Vec<RawExtractedTarget> {
         let title = obj.get("title").and_then(|v| v.as_str()).unwrap_or("");
         let raw_combined = format!("{} {} {}", kind, subkind, title);
 
+        use crate::canonical_registry::threat_codes;
         let raw_code = match kind {
-            "drone_piston" => 8,
-            "drone_jet" => 9,
-            "drone_fpv" => 7,
-            "missile_cruise" => 3,
-            "missile_ballistic" => 4,
-            "bomb" => 5,
+            "drone_piston" => threat_codes::SHAHED,
+            "drone_jet" => threat_codes::SHAHED_JET,
+            "drone_fpv" => threat_codes::FPV,
+            "missile_cruise" => threat_codes::MISSILE,
+            "missile_ballistic" => threat_codes::BALLISTIC,
+            "bomb" => threat_codes::KAB,
             _ => 0,
         };
 
@@ -254,7 +255,7 @@ pub async fn run_mapa_targets_collector(
                     state.targets_provider = provider_name.to_string();
                     state.last_targets_provider_status = status_str.to_string();
                     state.last_targets_update_ts = now_sec();
-                    state.update_seq += 1;
+                    state.bump_seq();
 
                     let lost = state.tracker.update_batch(
                         &extracted,
@@ -276,6 +277,7 @@ pub async fn run_mapa_targets_collector(
                             let hist_status = match trk.status.as_str() {
                                 "eliminated" => "eliminated",
                                 "hit_target" => "hit_target",
+                                "superseded" => "superseded",
                                 _ => "lost",
                             };
                             history_mgr.record_track(trk, hist_status);
@@ -353,7 +355,7 @@ mod tests {
         assert_eq!(t0.lon, 36.25);
         assert_eq!(t0.heading_deg, 180.0);
         assert_eq!(t0.speed_kmh, Some(450.0));
-        assert_eq!(t0.raw_type_code, 9);
+        assert_eq!(t0.raw_type_code, 2);
         assert!(t0.raw_name.contains("drone_jet"));
         assert!(t0.raw_name.contains("Реактивний"));
         assert_eq!(t0.trail_points.len(), 2);
@@ -364,6 +366,6 @@ mod tests {
         let t1 = &targets[1];
         assert_eq!(t1.id, "mapa_1002");
         assert_eq!(t1.upstream_status, "eliminated");
-        assert_eq!(t1.raw_type_code, 8);
+        assert_eq!(t1.raw_type_code, 1);
     }
 }

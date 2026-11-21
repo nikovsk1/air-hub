@@ -59,6 +59,7 @@ FROM debian:bookworm-slim AS runner
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Create unprivileged runtime user and group (UID/GID 10001) for container security
@@ -73,13 +74,15 @@ COPY --from=builder /usr/local/bin/air-alert-hub-rs /app/air-alert-hub-rs
 # Copy static web assets and default geographic contours
 COPY --from=builder /usr/src/app/static /app/static
 COPY --from=builder /usr/src/app/data_defaults /app/data_defaults
+COPY entrypoint.sh /app/entrypoint.sh
 
 RUN mkdir -p /app/data && \
-    chmod 777 /app/data
+    chmod +x /app/entrypoint.sh && \
+    chown -R appuser:appgroup /app
 
-# Run as root by default for native IoT appliance / SONOFF iHost volume compatibility
-# (Prevents "os error 13 Permission Denied" when host mounts /app/data as root:root)
-# USER appuser:appgroup
+# SEC-05: Non-root startup via entrypoint.sh with gosu privilege drop.
+# Container starts as root to chown bind-mounted volumes on SONOFF iHost/Docker,
+# then drops privileges to unprivileged appuser (UID 10001).
 
 VOLUME ["/app/data"]
 
@@ -91,4 +94,5 @@ ENV PORT=8088 \
 
 EXPOSE 8088
 
-ENTRYPOINT ["/app/air-alert-hub-rs"]
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["/app/air-alert-hub-rs"]

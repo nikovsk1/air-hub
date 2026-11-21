@@ -657,10 +657,48 @@
       });
     }
 
+    function adminFetch(url, options = {}) {
+      options.headers = options.headers || {};
+      const key = currentAdminKey || localStorage.getItem("hub_admin_key") || sessionStorage.getItem("hub_admin_key") || "";
+      if (key) {
+        if (options.headers instanceof Headers) {
+          options.headers.set("X-Admin-Key", key);
+        } else {
+          options.headers["X-Admin-Key"] = key;
+        }
+      }
+      return fetch(url, options);
+    }
+
+    async function downloadWithAdminAuth(url, filename) {
+      const key = currentAdminKey || localStorage.getItem("hub_admin_key") || sessionStorage.getItem("hub_admin_key") || "";
+      if (!key) return showLoginScreen();
+      try {
+        const res = await fetch(url, { headers: { "X-Admin-Key": key } });
+        if (!res.ok) {
+          alert("❌ Помилка завантаження файлу: " + res.status);
+          return;
+        }
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = filename || "download.json";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      } catch (e) {
+        alert("Помилка мережі при завантаженні: " + e);
+      }
+    }
+
     async function verifyKeyOnServer(key) {
       if (!key) return false;
       try {
-        const res = await fetch("/api/v1/admin/verify?admin_key=" + encodeURIComponent(key));
+        const res = await adminFetch("/api/v1/admin/verify", {
+          headers: { "X-Admin-Key": key }
+        });
         return res.ok;
       } catch (e) {
         return false;
@@ -770,7 +808,7 @@
 
     async function loadAdminPois() {
       try {
-        const res = await fetch("/api/v1/admin/poi?admin_key=" + encodeURIComponent(currentAdminKey));
+        const res = await adminFetch("/api/v1/admin/poi");
         if (res.ok) {
           adminPoiList = await res.json();
         } else {
@@ -842,15 +880,15 @@
             <td class="p-3">
               <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold" style="background:rgba(255,255,255,0.05);color:${cat.color};">
                 <span>${cat.icon}</span>
-                <span>${cat.name}</span>
+                <span>${escapeHtml(cat.name)}</span>
               </span>
             </td>
-            <td class="p-3 font-medium text-white">${p.name}</td>
-            <td class="p-3 text-gray-300 text-xs">${p.oblast ? p.oblast + ' обл.' : '—'}</td>
-            <td class="p-3 font-mono text-xs text-gray-400">${typeof p.lat === 'number' ? p.lat.toFixed(4) : p.lat}, ${typeof p.lon === 'number' ? p.lon.toFixed(4) : p.lon}</td>
+            <td class="p-3 font-medium text-white">${escapeHtml(p.name)}</td>
+            <td class="p-3 text-gray-300 text-xs">${p.oblast ? escapeHtml(p.oblast) + ' обл.' : '—'}</td>
+            <td class="p-3 font-mono text-xs text-gray-400">${typeof p.lat === 'number' ? p.lat.toFixed(4) : escapeHtml(p.lat)}, ${typeof p.lon === 'number' ? p.lon.toFixed(4) : escapeHtml(p.lon)}</td>
             <td class="p-3 text-xs text-gray-300">
-              <div class="line-clamp-1">${p.significance || '—'}</div>
-              <div class="text-[10px] text-emerald-400 font-mono mt-0.5">${p.status || 'Активний'}</div>
+              <div class="line-clamp-1">${escapeHtml(p.significance || '—')}</div>
+              <div class="text-[10px] text-emerald-400 font-mono mt-0.5">${escapeHtml(p.status || 'Активний')}</div>
             </td>
             <td class="p-3 text-right whitespace-nowrap">
               <button onclick="editPoiItem('${p.id}')" class="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-sky-400 hover:text-sky-300 rounded text-xs font-semibold mr-1 transition cursor-pointer" title="Редагувати">
@@ -894,19 +932,17 @@
     async function deletePoiItem(id) {
       if (!confirm("Ви дійсно бажаєте видалити цей стратегічний об'єкт?")) return;
       try {
-        const res = await fetch("/api/v1/admin/poi/" + encodeURIComponent(id) + "?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/poi/" + encodeURIComponent(id), {
           method: "DELETE"
         });
         if (res.ok) {
           adminPoiList = adminPoiList.filter(p => p.id !== id);
           renderAdminPoiTable();
         } else {
-          adminPoiList = adminPoiList.filter(p => p.id !== id);
-          renderAdminPoiTable();
+          alert("❌ Не вдалося видалити POI (HTTP " + res.status + ")");
         }
       } catch (err) {
-        adminPoiList = adminPoiList.filter(p => p.id !== id);
-        renderAdminPoiTable();
+        alert("❌ Помилка мережі при видаленні POI: " + err);
       }
     }
 
@@ -925,7 +961,7 @@
       };
 
       try {
-        await fetch("/api/v1/admin/poi?admin_key=" + encodeURIComponent(currentAdminKey), {
+        await adminFetch("/api/v1/admin/poi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(poiData)
@@ -1208,7 +1244,7 @@
       updateTelemetry();
 
       try {
-        const res = await fetch("/api/v1/admin/keys?admin_key=" + encodeURIComponent(currentAdminKey));
+        const res = await adminFetch("/api/v1/admin/keys");
         if (res.status === 403) {
           alert("Сесія адміністратора завершена або невірний майстер-ключ!");
           return handleLogout();
@@ -1241,7 +1277,7 @@
       if (!tbody) return;
 
       try {
-        const res = await fetch("/api/v1/admin/service_keys?admin_key=" + encodeURIComponent(currentAdminKey));
+        const res = await adminFetch("/api/v1/admin/service_keys");
         if (res.status === 403) return;
         const data = await res.json();
         if (data.status === "ok") {
@@ -1258,7 +1294,7 @@
     async function toggleStreamEnabled(id, enabled) {
       if (!currentAdminKey) return showLoginScreen();
       try {
-        const res = await fetch("/api/v1/admin/streams?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/streams", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id, enabled })
@@ -1280,7 +1316,7 @@
       if (isNaN(newLevel) || newLevel < 1) return;
 
       try {
-        const res = await fetch("/api/v1/admin/streams?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/streams", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id, priority: newLevel })
@@ -1322,7 +1358,7 @@
       if (field === 'timeout') payload.failover_timeout_sec = valNum;
 
       try {
-        const res = await fetch("/api/v1/admin/streams?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/streams", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
@@ -1345,7 +1381,7 @@
         if (keyInput) {
           const tokenVal = keyInput.value.trim();
           try {
-            await fetch("/api/v1/admin/service_keys?admin_key=" + encodeURIComponent(currentAdminKey), {
+            await adminFetch("/api/v1/admin/service_keys", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -1388,7 +1424,7 @@
       }
 
       try {
-        const res = await fetch("/api/v1/admin/streams?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/streams", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
@@ -1508,7 +1544,7 @@
         const isUa = s.id === "ukrainealarm_alerts";
         const displayName = isUa
           ? "UkraineAlarm Офіційний API v3"
-          : "Neptun API <!-- Neptun API (Резерв тривог) -->";
+          : "Neptun API (Резерв тривог)";
 
         return `
           <tr class="hover:bg-gray-900/60 transition ${!s.enabled ? 'opacity-60 bg-red-950/10' : ''}">
@@ -1597,10 +1633,10 @@
         const isMapa = s.id === "mapa_targets";
 
         const displayName = isUa
-          ? "WS UkraineAlarm <!-- WS UkraineAlarm (Парсер цілей) -->"
+          ? "WS UkraineAlarm"
           : (isNeptun
-              ? "Neptun Hub API <!-- Neptun Hub API (Failover) -->"
-              : "MAPA.UA API <!-- MAPA.UA API (Цілі/загрози) -->");
+              ? "Neptun Hub API (Failover)"
+              : "MAPA.UA API (Цілі/загрози)");
 
         let tagHtml = "";
         let midHtml = "";
@@ -1888,7 +1924,7 @@
       const keyVal = inp ? inp.value.trim() : "";
 
       try {
-        const res = await fetch("/api/v1/admin/service_keys?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/service_keys", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1916,7 +1952,7 @@
       }
 
       try {
-        const res = await fetch("/api/v1/admin/service_keys?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/service_keys", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1949,7 +1985,7 @@
       }
 
       try {
-        const res = await fetch("/api/v1/admin/service_keys?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/service_keys", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1982,7 +2018,7 @@
       }
 
       try {
-        const res = await fetch("/api/v1/admin/service_keys?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/service_keys", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -2031,7 +2067,7 @@
         return;
       }
       try {
-        const res = await fetch("/api/v1/admin/keys?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/keys", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ owner: owner })
@@ -2107,7 +2143,7 @@ ${resp.api_key}
         tr.innerHTML = `
           <td class="p-3 font-semibold text-white cursor-pointer hover:text-orange-400 select-none transition" onclick="toggleUserDrawer('${u.api_key}')" title="Клікніть, щоб переглянути список точок">
             <div class="flex items-center gap-1.5">
-              <span>${u.owner}</span>
+              <span>${escapeHtml(u.owner)}</span>
               <span id="chevron_owner_${u.api_key}" class="text-xs text-gray-500">▾</span>
             </div>
           </td>
@@ -2152,7 +2188,7 @@ ${resp.api_key}
           card.className = "liquid-glass-card rounded-xl p-4 space-y-3";
           card.innerHTML = `
             <div class="flex items-center justify-between">
-              <div class="font-bold text-white text-base">${u.owner}</div>
+              <div class="font-bold text-white text-base">${escapeHtml(u.owner)}</div>
               <span class="px-2.5 py-1 text-xs rounded-full font-semibold ${u.enabled ? 'bg-orange-950 text-orange-400 border border-orange-800' : 'bg-red-950 text-red-400 border border-red-800'}">
                 ${u.enabled ? 'Активний' : 'Вимкнено'}
               </span>
@@ -2203,7 +2239,7 @@ ${resp.api_key}
                   <div>
                     <h3 class="text-base font-bold text-white flex items-center gap-2">
                       <span>Точки об'єкта:</span>
-                      <span class="text-orange-400 font-mono">${u.owner}</span>
+                      <span class="text-orange-400 font-mono">${escapeHtml(u.owner)}</span>
                     </h3>
                     <p class="text-xs text-gray-400">Перелік точок спостереження, їх радіуси та обрані сповіщення</p>
                   </div>
@@ -2371,8 +2407,8 @@ ${resp.api_key}
               <div class="flex items-center gap-2">
                 <span class="w-5 h-5 rounded-full bg-orange-950 text-orange-400 border border-orange-800 flex items-center justify-center text-[10px] font-bold font-mono shrink-0">#${slotId}</span>
                 <div>
-                  <div class="font-bold text-white text-xs">${s.name || ('Точка #' + slotId)}</div>
-                  ${oblast ? `<div class="text-[10px] text-gray-400">📍 ${oblast}</div>` : ''}
+                  <div class="font-bold text-white text-xs">${escapeHtml(s.name || ('Точка #' + slotId))}</div>
+                  ${oblast ? `<div class="text-[10px] text-gray-400">📍 ${escapeHtml(oblast)}</div>` : ''}
                 </div>
               </div>
             </td>
@@ -2514,12 +2550,11 @@ ${resp.api_key}
       });
       const alert_threat = document.getElementById("newSlotAlertThreat_" + apiKey)?.checked ?? true;
       const alert_siren = document.getElementById("newSlotAlertSiren_" + apiKey)?.checked ?? true;
-      const alert_yellow = document.getElementById("newSlotAlertYellow_" + apiKey)?.checked ?? false;
       const alert_artillery = document.getElementById("newSlotAlertArtillery_" + apiKey)?.checked ?? false;
       const alert_mig = document.getElementById("newSlotAlertMig_" + apiKey)?.checked ?? false;
 
       try {
-        const res = await fetch("/api/v1/slots?token=" + encodeURIComponent(apiKey) + "&admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/slots?token=" + encodeURIComponent(apiKey), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -2531,7 +2566,6 @@ ${resp.api_key}
             react_threat_types: react_threat_types.length > 0 ? react_threat_types : undefined,
             alert_threat: alert_threat,
             alert_siren: alert_siren,
-            alert_yellow: alert_yellow,
             alert_artillery: alert_artillery,
             alert_mig: alert_mig
           })
@@ -2556,7 +2590,7 @@ ${resp.api_key}
       if (!confirm("Ви дійсно бажаєте видалити точку #" + slotId + " («" + slotName + "»)?")) return;
 
       try {
-        const res = await fetch("/api/v1/slots/" + encodeURIComponent(slotId) + "?token=" + encodeURIComponent(apiKey) + "&admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/slots/" + encodeURIComponent(slotId) + "?token=" + encodeURIComponent(apiKey), {
           method: "DELETE"
         });
         const resp = await res.json();
@@ -2573,7 +2607,7 @@ ${resp.api_key}
 
     async function toggleKey(key, enabled) {
       if (!currentAdminKey) return showLoginScreen();
-      await fetch("/api/v1/admin/keys/" + encodeURIComponent(key) + "?admin_key=" + encodeURIComponent(currentAdminKey), {
+      await adminFetch("/api/v1/admin/keys/" + encodeURIComponent(key), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled })
@@ -2584,7 +2618,7 @@ ${resp.api_key}
     async function deleteKey(key) {
       if (!currentAdminKey) return showLoginScreen();
       if (!confirm("Ви дійсно бажаєте відкликати та видалити цей API-ключ?")) return;
-      await fetch("/api/v1/admin/keys/" + encodeURIComponent(key) + "?admin_key=" + encodeURIComponent(currentAdminKey), {
+      await adminFetch("/api/v1/admin/keys/" + encodeURIComponent(key), {
         method: "DELETE"
       });
       if (currentOpenDrawerKey === key) currentOpenDrawerKey = "";
@@ -2594,7 +2628,7 @@ ${resp.api_key}
     // ==================== АРХІВ ІСТОРІЇ ПОЛЬОТІВ ====================
     async function loadHistoryConfig() {
       try {
-        const res = await fetch("/api/v1/admin/history/config?admin_key=" + encodeURIComponent(currentAdminKey));
+        const res = await adminFetch("/api/v1/admin/history/config");
         if (!res.ok) return;
         const data = await res.json();
         const cfg = data.config || {};
@@ -2628,7 +2662,7 @@ ${resp.api_key}
     async function toggleHistoryRecording(enabled) {
       if (!currentAdminKey) return showLoginScreen();
       try {
-        const res = await fetch("/api/v1/admin/history/config?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/history/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ enabled: enabled })
@@ -2652,7 +2686,7 @@ ${resp.api_key}
       if (!currentAdminKey) return showLoginScreen();
       const val = document.getElementById("histGdriveUrl").value.trim();
       try {
-        const res = await fetch("/api/v1/admin/history/config?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/history/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ gdrive_url: val })
@@ -2680,7 +2714,7 @@ ${resp.api_key}
       if (!currentAdminKey) return showLoginScreen();
       const val = document.getElementById("histGdriveWebhook").value.trim();
       try {
-        const res = await fetch("/api/v1/admin/history/config?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/history/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ gdrive_webhook: val })
@@ -2699,7 +2733,7 @@ ${resp.api_key}
       if (!currentAdminKey) return showLoginScreen();
       const val = parseInt(document.getElementById("histSyncHours").value) || 0;
       try {
-        const res = await fetch("/api/v1/admin/history/config?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/history/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ gdrive_sync_hours: val })
@@ -2729,7 +2763,7 @@ ${resp.api_key}
       }
 
       try {
-        const res = await fetch("/api/v1/admin/history/upload_gdrive/" + encodeURIComponent(month) + "?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/history/upload_gdrive/" + encodeURIComponent(month), {
           method: "POST"
         });
         const resp = await res.json();
@@ -2739,7 +2773,7 @@ ${resp.api_key}
           loadAdminHistory();
           loadHistoryConfig();
         } else {
-          alert("❌ Помилка завантаження на Google Drive: " + (resp.error || "Невідома помилка"));
+          alert("❌ Помилка завантаження на Google Drive: " + (resp.error || resp.message || "Невідома помилка"));
         }
       } catch (e) {
         alert("Помилка мережі: " + e);
@@ -2753,7 +2787,7 @@ ${resp.api_key}
 
     async function loadAdminHistory() {
       try {
-        const res = await fetch("/api/v1/admin/history?admin_key=" + encodeURIComponent(currentAdminKey));
+        const res = await adminFetch("/api/v1/admin/history");
         if (!res.ok) return;
         const data = await res.json();
         const tbody = document.getElementById("histTableBody");
@@ -2823,13 +2857,13 @@ ${resp.api_key}
     }
 
     function downloadHistoryFile(month) {
-      window.location.href = "/api/v1/admin/history/download/" + encodeURIComponent(month) + "?admin_key=" + encodeURIComponent(currentAdminKey);
+      downloadWithAdminAuth("/api/v1/admin/history/download/" + encodeURIComponent(month), `flight_history_${month}.json`);
     }
 
     async function deleteHistoryFile(month) {
       if (!confirm(`Ви дійсно бажаєте видалити файл історії за ${month}? Цю дію неможливо скасувати.`)) return;
       try {
-        const res = await fetch("/api/v1/admin/history/" + encodeURIComponent(month) + "?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/history/" + encodeURIComponent(month), {
           method: "DELETE"
         });
         if (res.ok) {
@@ -2849,7 +2883,7 @@ ${resp.api_key}
       try {
         const text = await file.text();
         const json = JSON.parse(text);
-        const res = await fetch("/api/v1/admin/history/upload?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/history/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(json)
@@ -2870,7 +2904,7 @@ ${resp.api_key}
     // ==================== БЕКАП ТА ВІДНОВЛЕННЯ ====================
     function downloadBackup() {
       if (!currentAdminKey) return showLoginScreen();
-      window.location.href = "/api/v1/admin/backup?admin_key=" + encodeURIComponent(currentAdminKey);
+      downloadWithAdminAuth("/api/v1/admin/backup", `hub_backup_${new Date().toISOString().slice(0,10)}.json`);
     }
 
     async function uploadBackup(event) {
@@ -2880,7 +2914,7 @@ ${resp.api_key}
       try {
         const text = await file.text();
         const json = JSON.parse(text);
-        const res = await fetch("/api/v1/admin/restore?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/restore", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(json)
@@ -2912,7 +2946,7 @@ ${resp.api_key}
     async function loadExchangeLog() {
       if (!currentAdminKey) return;
       try {
-        const res = await fetch("/api/v1/admin/exchange_log?admin_key=" + encodeURIComponent(currentAdminKey));
+        const res = await adminFetch("/api/v1/admin/exchange_log");
         if (!res.ok) return;
         const data = await res.json();
 
@@ -3006,14 +3040,14 @@ ${resp.api_key}
 
     function downloadExchangeLog() {
       if (!currentAdminKey) return showLoginScreen();
-      window.location.href = "/api/v1/admin/exchange_log/download?admin_key=" + encodeURIComponent(currentAdminKey);
+      downloadWithAdminAuth("/api/v1/admin/exchange_log/download", "unmapped_exchange.log");
     }
 
     async function clearExchangeLog() {
       if (!currentAdminKey) return showLoginScreen();
       if (!confirm("Ви дійсно бажаєте очистити журнал нерозпізнаних записів?")) return;
       try {
-        const res = await fetch("/api/v1/admin/exchange_log/clear?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/exchange_log/clear", {
           method: "POST"
         });
         if (res.ok) {
@@ -3092,7 +3126,7 @@ ${resp.api_key}
       modal.classList.remove("hidden");
 
       try {
-        const res = await fetch("/api/v1/admin/diia/start?admin_key=" + encodeURIComponent(currentAdminKey), {
+        const res = await adminFetch("/api/v1/admin/diia/start", {
           method: "POST"
         });
         const data = await res.json();
@@ -3162,7 +3196,7 @@ ${resp.api_key}
       }
 
       try {
-        const res = await fetch("/api/v1/admin/diia/status?admin_key=" + encodeURIComponent(currentAdminKey));
+        const res = await adminFetch("/api/v1/admin/diia/status");
         const data = await res.json();
 
         if (data.status === "authorized") {

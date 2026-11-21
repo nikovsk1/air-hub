@@ -1,0 +1,30 @@
+version: '3.8'
+
+# SEC-05 (Variant B): Hardened Cloud VPS deployment configuration
+# Enforces complete unprivileged execution (UID 10001), drops all Linux capabilities,
+# and prevents privilege escalation via no-new-privileges.
+services:
+  air-alert-hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: air-alert-hub-rs:hardened
+    container_name: air-alert-hub-rs-hardened
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: false
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "8088:8088"
+    environment:
+      - PORT=8088
+      - ADMIN_SECRET_KEY=${ADMIN_SECRET_KEY:-}
+      - DATA_DIR=/app/data
+      - DATA_DEFAULTS_DIR=/app/data_defaults
+      - DANGER_RADIUS_KM=35.0
+      - RUST_LOG=info
+    volumes:
+      - ./data:/app/data

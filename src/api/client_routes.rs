@@ -190,7 +190,12 @@ async fn handle_health(
 
 async fn handle_unknown_types(
     State(state): State<AppState>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> Response {
+    if !is_admin(&headers, None, Some(addr.ip()), &state.config.admin_secret_key) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
     let summary = state.exchange_mgr.get_summary();
     Json(summary).into_response()
 }
@@ -253,25 +258,47 @@ async fn handle_directory(
 
 async fn handle_regions_geojson(
     State(state): State<AppState>,
+    Query(query): Query<HashMap<String, String>>,
 ) -> Response {
-    static GEOJSON_CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    let content = GEOJSON_CACHE.get_or_init(|| {
-        let path = state.config.data_dir.join("regions.geojson");
-        if path.exists() {
-            fs::read_to_string(&path).unwrap_or_default()
+    let serve_hromadas = query.get("type").map(|s| s == "hromadas").unwrap_or(false);
+    let serve_full = query.get("full").map(|s| s == "true" || s == "1").unwrap_or(false);
+
+    let (filename, default_name) = if serve_hromadas {
+        ("hromadas.geojson", "hromadas.geojson")
+    } else if serve_full {
+        ("regions.geojson", "regions.geojson")
+    } else {
+        ("regions_core.geojson", "regions.geojson")
+    };
+
+    let path = state.config.data_dir.join(filename);
+    let content = if path.exists() {
+        fs::read_to_string(&path).unwrap_or_default()
+    } else {
+        let def_path = state.config.data_defaults_dir.join(filename);
+        if def_path.exists() {
+            fs::read_to_string(&def_path).unwrap_or_default()
         } else {
-            let default_path = state.config.data_defaults_dir.join("regions.geojson");
-            fs::read_to_string(&default_path).unwrap_or_default()
+            let fallback = state.config.data_defaults_dir.join(default_name);
+            fs::read_to_string(&fallback).unwrap_or_default()
         }
-    });
+    };
 
     if !content.is_empty() {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        content.len().hash(&mut hasher);
+        (content.as_bytes().first().copied().unwrap_or(0)).hash(&mut hasher);
+        (content.as_bytes().last().copied().unwrap_or(0)).hash(&mut hasher);
+        let etag = format!("\"geo_{:016x}\"", hasher.finish());
+
         (
             [
                 (header::CONTENT_TYPE, "application/geo+json"),
-                (header::CACHE_CONTROL, "public, max-age=86400")
+                (header::CACHE_CONTROL, "public, max-age=86400, immutable"),
+                (header::ETAG, etag.as_str()),
             ],
-            content.as_str()
+            content
         ).into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()
@@ -288,17 +315,13 @@ async fn handle_get_poi(
     let token_ref = query.token.as_deref().or_else(|| query.api_key.as_deref());
     let is_admin_req = is_admin(&headers, token_ref, Some(addr.ip()), &state.config.admin_secret_key);
 
-    if user_opt.is_none() && !is_admin_req {
-        // Guests receive empty list: military strategic POIs are protected from public exposure
-        let empty: Vec<crate::storage::PoiItem> = Vec::new();
-        return (
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, "application/json"), (header::CACHE_CONTROL, "private, no-cache")],
-            Json(empty)
-        ).into_response();
-    }
+    // SEC-06: Дворівневий RBAC-доступ до об'єктів інфраструктури:
+    // Гості та користувачі без can_view_military_poi отримують виключно цивільні POI
+    // (енергетика, підстанції, дамби, мости, порти).
+    // Авторизовані користувачі з can_view_military_poi або адміністратори отримують повний набір 95 об'єктів.
+    let can_view_military = is_admin_req || user_opt.as_ref().map(|u| u.can_view_military_poi).unwrap_or(false);
 
-    let pois = state.storage.get_pois();
+    let pois = state.storage.get_pois(can_view_military);
     (
         StatusCode::OK,
         [(header::CONTENT_TYPE, "application/json"), (header::CACHE_CONTROL, "private, max-age=60")],
@@ -579,7 +602,8 @@ async fn handle_get_map_settings(
         "relation": relation,
         "cartodb_key": user_custom_cartodb,
         "cartodb_api_key": user_custom_cartodb,
-        "has_global_cartodb_key": state.storage.get_service_keys().cartodb_global_api_key.is_some()
+        "has_global_cartodb_key": state.storage.get_service_keys().cartodb_global_api_key.is_some(),
+        "show_military_poi_default": state.storage.get_show_military_poi_default()
     })).into_response()
 }
 
@@ -641,7 +665,9 @@ async fn handle_get_settings(
         "react_threats": user.target_react_threats,
         "alert_siren": user.alert_siren,
         "alert_mig": user.alert_mig,
-        "alert_artillery": user.alert_artillery
+        "alert_artillery": user.alert_artillery,
+        "can_view_military_poi": user.can_view_military_poi,
+        "show_military_poi_default": state.storage.get_show_military_poi_default()
     })).into_response()
 }
 
@@ -770,6 +796,9 @@ pub fn build_user_snapshot(
     let mut closest_threat_slot_name: Option<String> = None;
 
     for trk in st.tracker.tracks.values() {
+        if trk.status == "superseded" {
+            continue;
+        }
         let mut min_trk_dist = f64::INFINITY;
         let mut best_bearing = 0.0;
         let mut best_app_angle = 180.0;
@@ -829,6 +858,7 @@ pub fn build_user_snapshot(
         };
 
         let corridor = trk.get_extrapolated_corridor();
+        let (_, meta) = classify_target(&trk.raw_type, trk.raw_code);
 
         let threat_val = json!({
             "id": trk.id,
@@ -842,9 +872,23 @@ pub fn build_user_snapshot(
             "raw_code": trk.raw_code,
             "lat": trk.lat,
             "lon": trk.lon,
+            "raw_lat": trk.raw_lat,
+            "raw_lon": trk.raw_lon,
+            "filt_lat": trk.filt_lat,
+            "filt_lon": trk.filt_lon,
             "heading": trk.heading,
             "heading_deg": trk.heading,
+            "raw_heading": trk.raw_heading,
             "speed_kmh": trk.speed_kmh,
+            "filtered_speed_kmh": trk.filtered_speed_kmh,
+            "raw_speed_kmh": trk.raw_speed_kmh,
+            "cruise_speed_kmh": meta.cruise_speed_kmh,
+            "min_speed_kmh": meta.min_speed_kmh,
+            "max_speed_kmh": meta.max_speed_kmh,
+            "max_turn_deg_s": meta.max_turn_deg_s,
+            "z_priority": meta.z_priority,
+            "last_moved_ts": trk.last_moved_ts,
+            "heading_confidence": (trk.heading_confidence * 100.0).round() / 100.0,
             "oblast": trk.oblast,
             "oblast_id": trk.oblast_id,
             "distance_km": (min_trk_dist * 10.0).round() / 10.0,
@@ -882,6 +926,9 @@ pub fn build_user_snapshot(
         let mut s_closest_trk = None;
 
         for trk in st.tracker.tracks.values() {
+        if trk.status == "superseded" {
+            continue;
+        }
             if s.react_threats.contains(&trk.category) {
                 let dist = calculate_haversine_distance(s.lat, s.lon, trk.lat, trk.lon);
                 if dist < s_min_dist {
@@ -1078,7 +1125,17 @@ async fn handle_get_threats(
         .unwrap_or_default();
 
     let st = state.threat_state.read().await;
-    let etag = format!("seq{}_u{}_s{}_{}", st.update_seq, user.api_key, selected_slot_id, user_slot_status);
+    let full_reg = query.full_regions.unwrap_or(false);
+
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    user.api_key.hash(&mut hasher);
+    selected_slot_id.hash(&mut hasher);
+    full_reg.hash(&mut hasher);
+    user_slot_status.hash(&mut hasher);
+    let key_hash = hasher.finish();
+
+    let etag = format!("\"seq{}_h{:016x}_s{}_{}\"", st.update_seq, key_hash, selected_slot_id, user_slot_status);
 
     if let Some(client_etag) = headers.get(header::IF_NONE_MATCH).and_then(|h| h.to_str().ok()) {
         let clean_client = client_etag.trim().trim_start_matches("W/").trim_matches('"');
@@ -1091,8 +1148,6 @@ async fn handle_get_threats(
             ).into_response();
         }
     }
-
-    let full_reg = query.full_regions.unwrap_or(false);
     let resp_payload = build_user_snapshot(&user, &st, &selected_slot_id, Some(&state.history_mgr), full_reg);
 
     (
@@ -1138,6 +1193,9 @@ async fn handle_get_radar(
     let mut closest_eta_f = "--".to_string();
 
     for trk in st.tracker.tracks.values() {
+        if trk.status == "superseded" {
+            continue;
+        }
         let (px_x, px_y, dist, bearing) = project_radar_point(
             center_x, center_y, max_px, radius_km, center_lat, center_lon, trk.lat, trk.lon
         );
@@ -1269,7 +1327,8 @@ async fn handle_ws_client(
     let mut selected_slot = query.slot.or(query.slot_id).unwrap_or_else(|| "1".to_string());
     let mut watch_rx = state.threat_watch_rx.clone();
     let timeout_duration = Duration::from_secs(15);
-    let mut fallback_tick = tokio::time::interval(Duration::from_millis(1000));
+    let mut heartbeat_tick = tokio::time::interval(Duration::from_secs(30));
+    heartbeat_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut last_sent_seq;
 
     // Первинний снапшот одразу при підключенні клієнта
@@ -1290,19 +1349,7 @@ async fn handle_ws_client(
             // Реактивне пробудження при надходженні нових засічок без поллінгу
             res = watch_rx.changed() => {
                 if res.is_err() { break; }
-                let current_user = state.storage.get_user_by_key(&user.api_key).unwrap_or_else(|| user.clone());
-                let snapshot = {
-                    let st = state.threat_state.read().await;
-                    last_sent_seq = st.update_seq;
-                    build_user_snapshot(&current_user, &st, &selected_slot, Some(&state.history_mgr), false)
-                };
-                if tokio::time::timeout(timeout_duration, socket.send(Message::Text(snapshot.to_string()))).await.is_err() {
-                    break;
-                }
-            }
-            // Резервний тікер: перевірка зміни update_seq для гарантованої доставки оновлень
-            _ = fallback_tick.tick() => {
-                let cur_seq = state.threat_state.read().await.update_seq;
+                let cur_seq = *watch_rx.borrow_and_update();
                 if cur_seq != last_sent_seq {
                     let current_user = state.storage.get_user_by_key(&user.api_key).unwrap_or_else(|| user.clone());
                     let snapshot = {
@@ -1315,8 +1362,17 @@ async fn handle_ws_client(
                     }
                 }
             }
+            // Heartbeat: надсилання WebSocket ping кожні 30 с для підтримки з'єднання без CPU-навантаження
+            _ = heartbeat_tick.tick() => {
+                if tokio::time::timeout(timeout_duration, socket.send(Message::Ping(Vec::new()))).await.is_err() {
+                    break;
+                }
+            }
             incoming = socket.recv() => {
                 match incoming {
+                    Some(Ok(Message::Ping(payload))) => {
+                        let _ = socket.send(Message::Pong(payload)).await;
+                    }
                     Some(Ok(Message::Text(text))) => {
                         let trimmed = text.trim();
                         if trimmed == "ping" || trimmed.contains("\"ping\"") {

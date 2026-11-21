@@ -43,15 +43,21 @@ impl Config {
             .and_then(|p| p.parse::<u16>().ok())
             .unwrap_or(8088);
 
-        let admin_secret_key = env::var("ADMIN_SECRET_KEY")
-            .ok()
-            .map(|k| k.trim().to_string())
-            .filter(|k| !k.is_empty())
-            .unwrap_or_else(|| "admin_super_secret_master_key_123".to_string());
-
         let data_dir = PathBuf::from(
             env::var("DATA_DIR").unwrap_or_else(|_| "./data".to_string())
         );
+
+        let secret_path = data_dir.join(".admin_secret");
+        let admin_secret_key = if let Ok(k) = env::var("ADMIN_SECRET_KEY") {
+            let trimmed = k.trim().to_string();
+            if !trimmed.is_empty() {
+                trimmed
+            } else {
+                Self::get_or_create_admin_secret(&secret_path)
+            }
+        } else {
+            Self::get_or_create_admin_secret(&secret_path)
+        };
 
         let data_defaults_dir = PathBuf::from(
             env::var("DATA_DEFAULTS_DIR").unwrap_or_else(|_| "./data_defaults".to_string())
@@ -95,6 +101,45 @@ impl Config {
             upstream_proxy,
             initial_users,
         }
+    }
+
+    fn get_or_create_admin_secret(secret_path: &std::path::Path) -> String {
+        if secret_path.exists() {
+            if let Ok(content) = fs::read_to_string(secret_path) {
+                let trimmed = content.trim().to_string();
+                if !trimmed.is_empty() {
+                    return trimmed;
+                }
+            }
+        }
+
+        use rand::RngCore;
+        let mut random_bytes = [0u8; 16];
+        rand::thread_rng().fill_bytes(&mut random_bytes);
+        let generated = hex::encode(random_bytes);
+
+        if let Some(parent) = secret_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        if let Ok(_) = fs::write(secret_path, &generated) {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(secret_path, fs::Permissions::from_mode(0o600));
+            }
+            warn!(
+                "⚠️ ADMIN_SECRET_KEY not provided! Generated persistent secret saved to {:?}: {}",
+                secret_path, generated
+            );
+        } else {
+            warn!(
+                "⚠️ ADMIN_SECRET_KEY not provided and failed to write to {:?}! Ephemeral secret: {}",
+                secret_path, generated
+            );
+        }
+
+        generated
     }
 
     pub fn ensure_directories(&self) {

@@ -92,10 +92,11 @@ impl DailySummary {
 }
 
 /// Легка структура статистики за поточну добу (живе в RAM, O(1) доступ)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct TodayStats {
     date: String,
     tracked_target_ids: HashSet<String>,
+    tracked_target_statuses: HashMap<String, String>,
     total: usize,
     by_category: HashMap<String, usize>,
     eliminated_count: usize,
@@ -125,8 +126,12 @@ impl HistoryManager {
 
         // Завантажуємо збережені daily_summaries та today_stats з диску під час старту
         let mut today_ids = HashSet::new();
+        let mut today_statuses = HashMap::new();
         let mut today_total = 0;
         let mut today_by_cat = HashMap::new();
+        let mut today_eliminated = 0;
+        let mut today_hit = 0;
+        let mut today_lost = 0;
         let mut initial_daily_summaries = HashMap::new();
 
         let month_file = history_dir.join(format!("flight_history_{}.json", current_month));
@@ -156,11 +161,31 @@ impl HistoryManager {
                                         .and_then(|v| v.as_str())
                                         .unwrap_or("unknown");
                                     *today_by_cat.entry(cat.to_string()).or_insert(0) += 1;
+
+                                    let status = t.get("status").and_then(|v| v.as_str()).unwrap_or("");
+                                    match status {
+                                        "eliminated" => today_eliminated += 1,
+                                        "hit_target" => today_hit += 1,
+                                        "lost" => today_lost += 1,
+                                        _ => {}
+                                    }
+                                    if !status.is_empty() {
+                                        today_statuses.insert(tid.clone(), status.to_string());
+                                    }
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+
+        // Перевірка узгодження лічильників з daily_summaries за сьогодні
+        if let Some(month_days) = initial_daily_summaries.get(&current_month) {
+            if let Some(ds) = month_days.get(&today_str) {
+                if ds.eliminated > today_eliminated { today_eliminated = ds.eliminated; }
+                if ds.hit_target > today_hit { today_hit = ds.hit_target; }
+                if ds.lost > today_lost { today_lost = ds.lost; }
             }
         }
 
@@ -172,11 +197,12 @@ impl HistoryManager {
             today_stats: RwLock::new(TodayStats {
                 date: today_str,
                 tracked_target_ids: today_ids,
+                tracked_target_statuses: today_statuses,
                 total: today_total,
                 by_category: today_by_cat,
-                eliminated_count: 0,
-                hit_target_count: 0,
-                lost_count: 0,
+                eliminated_count: today_eliminated,
+                hit_target_count: today_hit,
+                lost_count: today_lost,
             }),
             month_meta_cache: RwLock::new(HashMap::new()),
             daily_summaries: RwLock::new(initial_daily_summaries),
@@ -222,10 +248,59 @@ impl HistoryManager {
 
     /// Запис активного або завершеного треку в історію з накопичувальним оновленням DailySummary
     pub fn record_track(&self, trk: &TargetTrack, status: &str) {
+        if status == "superseded" {
+            return; // Superseded треки тихо завершуються без створення фальшивих цілей чи маркерів "Х"
+        }
+
         let kyiv = Self::now_kyiv();
         let date_str = kyiv.format("%Y-%m-%d").to_string();
         let month = kyiv.format("%Y-%m").to_string();
         let cur_hour = kyiv.hour() as usize;
+
+        // Визначаємо канонічний ключ цілі
+        let mut track_key = if !trk.canonical_id.is_empty() {
+            trk.canonical_id.clone()
+        } else {
+            trk.id.clone()
+        };
+
+        // Рівень 2 (Safety Net): якщо ціль ще не зареєстрована в TodayStats, перевіряємо, чи немає
+        // недавньої закритої або активної цілі тієї ж категорії в радіусі 10 км за останні 120 с
+        {
+            let ts = self.today_stats.read();
+            if !ts.tracked_target_ids.contains(&track_key) {
+                drop(ts);
+                let pending = self.pending_dirty.read();
+                if let Some(m_pending) = pending.get(&month) {
+                    for (cand_id, cand_item) in m_pending {
+                        if cand_item.get("date").and_then(|v| v.as_str()) != Some(&date_str) {
+                            continue;
+                        }
+                        let cand_cat = cand_item.get("cat").and_then(|v| v.as_str()).unwrap_or("");
+                        let cat_ok = cand_cat == trk.category || cand_cat == "unknown" || trk.category == "unknown";
+                        if !cat_ok {
+                            continue;
+                        }
+                        let cand_end = cand_item.get("end_time").and_then(|v| v.as_i64()).unwrap_or(0);
+                        if (trk.first_seen as i64 - cand_end).abs() <= 120 {
+                            if let Some(path) = cand_item.get("path").and_then(|p| p.as_array()) {
+                                if let Some(last_pt) = path.last().and_then(|pt| pt.as_array()) {
+                                    if last_pt.len() >= 3 {
+                                        let last_lat = last_pt[1].as_f64().unwrap_or(0.0);
+                                        let last_lon = last_pt[2].as_f64().unwrap_or(0.0);
+                                        let dist = crate::geo_math::calculate_haversine_distance(last_lat, last_lon, trk.lat, trk.lon);
+                                        if dist <= 10.0 {
+                                            track_key = cand_id.clone();
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         let mut is_new_target = false;
 
@@ -235,13 +310,14 @@ impl HistoryManager {
             if ts.date != date_str {
                 ts.date = date_str.clone();
                 ts.tracked_target_ids.clear();
+                ts.tracked_target_statuses.clear();
                 ts.total = 0;
                 ts.by_category.clear();
                 ts.eliminated_count = 0;
                 ts.hit_target_count = 0;
                 ts.lost_count = 0;
             }
-            if ts.tracked_target_ids.insert(trk.id.clone()) {
+            if ts.tracked_target_ids.insert(track_key.clone()) {
                 ts.total += 1;
                 *ts.by_category.entry(trk.category.clone()).or_insert(0) += 1;
                 is_new_target = true;
@@ -274,42 +350,61 @@ impl HistoryManager {
             day_summary.last_updated_at = Utc::now().to_rfc3339();
         }
 
-        // 2.1 Накопичувальний облік завершення цілей (збито / приліт / втрачено)
-        match status {
-            "eliminated" => {
-                let mut ts = self.today_stats.write();
-                if ts.date == date_str {
-                    ts.eliminated_count += 1;
-                }
-                let mut all_summaries = self.daily_summaries.write();
-                let month_map = all_summaries.entry(month.clone()).or_default();
-                let day_summary = month_map.entry(date_str.clone()).or_insert_with(|| DailySummary::new_empty(&date_str));
-                day_summary.eliminated += 1;
-                day_summary.last_updated_at = Utc::now().to_rfc3339();
+        // 2.1 Накопичувальний облік завершення цілей (збито / приліт / втрачено) без подвійного підрахунку
+        let status_transition = {
+            let mut ts = self.today_stats.write();
+            if ts.date != date_str {
+                ts.date = date_str.clone();
+                ts.tracked_target_ids.clear();
+                ts.tracked_target_statuses.clear();
+                ts.total = 0;
+                ts.by_category.clear();
+                ts.eliminated_count = 0;
+                ts.hit_target_count = 0;
+                ts.lost_count = 0;
             }
-            "hit_target" => {
-                let mut ts = self.today_stats.write();
-                if ts.date == date_str {
-                    ts.hit_target_count += 1;
+            let old_status = ts.tracked_target_statuses.get(&track_key).cloned();
+            if old_status.as_deref() != Some(status) {
+                ts.tracked_target_statuses.insert(track_key.clone(), status.to_string());
+                if let Some(ref prev) = old_status {
+                    match prev.as_str() {
+                        "eliminated" => ts.eliminated_count = ts.eliminated_count.saturating_sub(1),
+                        "hit_target" => ts.hit_target_count = ts.hit_target_count.saturating_sub(1),
+                        "lost" => ts.lost_count = ts.lost_count.saturating_sub(1),
+                        _ => {}
+                    }
                 }
-                let mut all_summaries = self.daily_summaries.write();
-                let month_map = all_summaries.entry(month.clone()).or_default();
-                let day_summary = month_map.entry(date_str.clone()).or_insert_with(|| DailySummary::new_empty(&date_str));
-                day_summary.hit_target += 1;
-                day_summary.last_updated_at = Utc::now().to_rfc3339();
-            }
-            "lost" => {
-                let mut ts = self.today_stats.write();
-                if ts.date == date_str {
-                    ts.lost_count += 1;
+                match status {
+                    "eliminated" => ts.eliminated_count += 1,
+                    "hit_target" => ts.hit_target_count += 1,
+                    "lost" => ts.lost_count += 1,
+                    _ => {}
                 }
-                let mut all_summaries = self.daily_summaries.write();
-                let month_map = all_summaries.entry(month.clone()).or_default();
-                let day_summary = month_map.entry(date_str.clone()).or_insert_with(|| DailySummary::new_empty(&date_str));
-                day_summary.lost += 1;
-                day_summary.last_updated_at = Utc::now().to_rfc3339();
+                Some(old_status)
+            } else {
+                None
             }
-            _ => {}
+        };
+
+        if let Some(prev_status_opt) = status_transition {
+            let mut all_summaries = self.daily_summaries.write();
+            let month_map = all_summaries.entry(month.clone()).or_default();
+            let day_summary = month_map.entry(date_str.clone()).or_insert_with(|| DailySummary::new_empty(&date_str));
+            if let Some(ref prev) = prev_status_opt {
+                match prev.as_str() {
+                    "eliminated" => day_summary.eliminated = day_summary.eliminated.saturating_sub(1),
+                    "hit_target" => day_summary.hit_target = day_summary.hit_target.saturating_sub(1),
+                    "lost" => day_summary.lost = day_summary.lost.saturating_sub(1),
+                    _ => {}
+                }
+            }
+            match status {
+                "eliminated" => day_summary.eliminated += 1,
+                "hit_target" => day_summary.hit_target += 1,
+                "lost" => day_summary.lost += 1,
+                _ => {}
+            }
+            day_summary.last_updated_at = Utc::now().to_rfc3339();
         }
 
         // 3. Формуємо запис траєкторії для збереження
@@ -324,7 +419,8 @@ impl HistoryManager {
         }).collect();
 
         let item = json!({
-            "id": trk.id,
+            "id": track_key,
+            "canonical_id": track_key,
             "cat": trk.category,
             "name_ua": trk.type_ua,
             "name_en": trk.type_en,
@@ -332,13 +428,14 @@ impl HistoryManager {
             "start_time": trk.first_seen as i64,
             "end_time": trk.last_seen as i64,
             "status": status,
+            "sources_seen": trk.sources_seen,
             "path": path_json
         });
 
         // 4. Додаємо виключно в буфер незбережених змін (не тримаємо повний місяць у RAM!)
         {
             let mut pending = self.pending_dirty.write();
-            pending.entry(month.clone()).or_default().insert(trk.id.clone(), item);
+            pending.entry(month.clone()).or_default().insert(track_key, item);
         }
         {
             let mut dirty = self.dirty_months.write();
@@ -358,21 +455,27 @@ impl HistoryManager {
 
     /// Періодичний скид накопичених "брудних" даних на диск (кожні 300 секунд)
     pub fn flush_dirty(&self) {
-        let dirty_batch: HashMap<String, HashMap<String, Value>> = {
+        let (dirty_batch, extra_dirty) = {
             let mut guard = self.pending_dirty.write();
             let mut dm = self.dirty_months.write();
-            dm.clear();
-            std::mem::take(&mut *guard)
+            let batch = std::mem::take(&mut *guard);
+            let extra = std::mem::take(&mut *dm);
+            (batch, extra)
         };
 
-        if dirty_batch.is_empty() {
+        let mut months_to_save: HashSet<String> = dirty_batch.keys().cloned().collect();
+        months_to_save.extend(extra_dirty);
+
+        if months_to_save.is_empty() {
             return;
         }
 
-        for (month, new_targets) in dirty_batch {
+        for month in months_to_save {
             let (mut targets, mut disk_summaries) = self.load_month_full_from_disk(&month);
-            for (tid, item) in new_targets {
-                targets.insert(tid, item);
+            if let Some(new_targets) = dirty_batch.get(&month) {
+                for (tid, item) in new_targets {
+                    targets.insert(tid.clone(), item.clone());
+                }
             }
 
             // Актуалізуємо daily_summaries з пам'яті
@@ -391,6 +494,7 @@ impl HistoryManager {
             }
 
             let file_path = self.history_dir.join(format!("flight_history_{}.json", month));
+            let meta_file_path = self.history_dir.join(format!("flight_history_{}.meta.json", month));
             let pid = std::process::id();
             let tmp_path = file_path.with_extension(format!("tmp.{}_{}", pid, now_ts()));
 
@@ -424,7 +528,7 @@ impl HistoryManager {
             if let Ok(json_str) = serde_json::to_string(&full_data) {
                 if let Ok(mut f) = File::create(&tmp_path) {
                     let _ = f.write_all(json_str.as_bytes());
-                    let _ = f.flush();
+                    let _ = f.sync_all();
                     drop(f);
                     let rename_res = fs::rename(&tmp_path, &file_path);
                     let success = if rename_res.is_ok() {
@@ -438,6 +542,66 @@ impl HistoryManager {
                     };
 
                     if success {
+                        // Збереження легкого .meta.json індексу поруч із основним файлом
+                        let meta_json = json!({
+                            "meta": {
+                                "month": &month,
+                                "updated_at": &now_rfc3339,
+                                "total_targets": total_t,
+                                "dates": &dates_vec
+                            }
+                        });
+                        if let Ok(meta_str) = serde_json::to_string(&meta_json) {
+                            let _ = fs::write(&meta_file_path, meta_str.as_bytes());
+                        }
+
+                        // Зберігаємо також окремий добовий файл у history/YYYY-MM/YYYY-MM-DD.json
+                        let month_dir = self.history_dir.join(&month);
+                        let _ = fs::create_dir_all(&month_dir);
+                        let mut days_to_update: HashMap<String, HashMap<String, Value>> = HashMap::new();
+                        if let Some(new_targets) = dirty_batch.get(&month) {
+                            for (tid, item) in new_targets {
+                                if let Some(d) = item.get("date").and_then(|v| v.as_str()) {
+                                    days_to_update.entry(d.to_string()).or_default().insert(tid.clone(), item.clone());
+                                }
+                            }
+                        }
+                        for (date_str, day_items) in days_to_update {
+                            let day_file_path = month_dir.join(format!("{}.json", date_str));
+                            let mut day_targets = HashMap::new();
+                            if day_file_path.exists() {
+                                if let Ok(c) = fs::read_to_string(&day_file_path) {
+                                    if let Ok(v) = serde_json::from_str::<Value>(&c) {
+                                        if let Some(t_obj) = v.get("targets").and_then(|t| t.as_object()) {
+                                            for (k, val) in t_obj {
+                                                day_targets.insert(k.clone(), val.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            for (tid, item) in day_items {
+                                day_targets.insert(tid, item);
+                            }
+                            let day_summary = disk_summaries.get(&date_str).cloned();
+                            let day_data = json!({
+                                "date": &date_str,
+                                "month": &month,
+                                "summary": day_summary,
+                                "total_targets": day_targets.len(),
+                                "targets": day_targets
+                            });
+                            if let Ok(d_str) = serde_json::to_string(&day_data) {
+                                let tmp_day = day_file_path.with_extension(format!("tmp.{}_{}", pid, now_ts()));
+                                if let Ok(mut df) = File::create(&tmp_day) {
+                                    let _ = df.write_all(d_str.as_bytes());
+                                    let _ = df.sync_all();
+                                    drop(df);
+                                    let _ = fs::rename(&tmp_day, &day_file_path);
+                                }
+                            }
+                        }
+
                         info!("Flushed flight history for {} ({} targets, {} daily summaries)", month, total_t, disk_summaries.len());
                         // Інвалідуємо старий запис у read_cache та оновлюємо мета-кеш дат
                         self.read_cache.write().remove(&month);
@@ -651,6 +815,24 @@ impl HistoryManager {
             return Some(cached.clone());
         }
 
+        // 1. Спроба читання з окремого компактного індекс-файлу .meta.json (<5 КБ)
+        let meta_file = self.history_dir.join(format!("flight_history_{}.meta.json", month));
+        if meta_file.exists() {
+            if let Ok(content) = fs::read_to_string(&meta_file) {
+                if let Ok(val) = serde_json::from_str::<Value>(&content) {
+                    let total = val.pointer("/meta/total_targets").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                    let updated_at = val.pointer("/meta/updated_at").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let dates = val.pointer("/meta/dates")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| arr.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+                        .unwrap_or_default();
+                    let res = (total, dates, updated_at);
+                    self.month_meta_cache.write().insert(month.to_string(), res.clone());
+                    return Some(res);
+                }
+            }
+        }
+
         let file_path = self.history_dir.join(format!("flight_history_{}.json", month));
         if !file_path.exists() {
             return None;
@@ -754,6 +936,38 @@ impl HistoryManager {
     pub fn get_month_history_filtered(&self, month: &str, date_filter: Option<&str>) -> Option<Value> {
         // Примусовий сброс свіжих цілей з оперативної пам'яті перед читанням вибірки
         self.flush_dirty();
+
+        // 1. Швидке завантаження з добового файлу якщо запитано конкретний день
+        if let Some(date_str) = date_filter {
+            let day_file = self.history_dir.join(month).join(format!("{}.json", date_str));
+            if day_file.exists() {
+                if let Ok(content) = fs::read_to_string(&day_file) {
+                    if let Ok(val) = serde_json::from_str::<Value>(&content) {
+                        if let Some(day_targets) = val.get("targets").and_then(|t| t.as_object()) {
+                            let now_str = Utc::now().to_rfc3339();
+                            let mut disk_summaries = HashMap::new();
+                            if let Some(ds) = self.get_daily_summary(date_str) {
+                                disk_summaries.insert(date_str.to_string(), ds);
+                            }
+                            return Some(json!({
+                                "meta": {
+                                    "month": month,
+                                    "updated_at": &now_str,
+                                    "total_targets": day_targets.len(),
+                                    "dates": vec![date_str.to_string()]
+                                },
+                                "daily_summaries": disk_summaries,
+                                "month": month,
+                                "updated_at": &now_str,
+                                "total_targets": day_targets.len(),
+                                "dates": vec![date_str.to_string()],
+                                "targets": day_targets
+                            }));
+                        }
+                    }
+                }
+            }
+        }
 
         let cached = {
             let guard = self.read_cache.read();
@@ -1116,5 +1330,129 @@ impl HistoryManager {
         } else {
             Err(format!("Отримані дані за місяць {} не містять цілей", month))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_now_kyiv_timezone_offset() {
+        let kyiv = HistoryManager::now_kyiv();
+        let offset_hours = kyiv.offset().local_minus_utc() / 3600;
+        // Україна завжди має зміщення UTC+2 (взимку) або UTC+3 (влітку)
+        assert!(offset_hours == 2 || offset_hours == 3, "Kyiv offset must be +2 or +3 hours from UTC, got: {}", offset_hours);
+    }
+
+    #[test]
+    fn test_current_month_format() {
+        let month = HistoryManager::current_month();
+        assert_eq!(month.len(), 7);
+        assert!(month.contains('-'));
+        let parts: Vec<&str> = month.split('-').collect();
+        assert_eq!(parts.len(), 2);
+        let year: i32 = parts[0].parse().unwrap();
+        let mon: u32 = parts[1].parse().unwrap();
+        assert!(year >= 2024);
+        assert!(mon >= 1 && mon <= 12);
+    }
+
+    #[test]
+    fn test_today_stats_transition_deduplication() {
+        let mut stats = TodayStats::default();
+        let target_id = "test_target_001".to_string();
+
+        // 1. Поява цілі: додаємо в active
+        stats.total = 1;
+        stats.tracked_target_ids.insert(target_id.clone());
+        stats.tracked_target_statuses.insert(target_id.clone(), "active".to_string());
+        assert_eq!(stats.total, 1);
+        assert_eq!(stats.eliminated_count, 0);
+
+        // 2. Зміна статусу: active -> eliminated
+        let prev = stats.tracked_target_statuses.get(&target_id).cloned();
+        assert_eq!(prev.as_deref(), Some("active"));
+        if prev.as_deref() != Some("eliminated") {
+            stats.eliminated_count += 1;
+            stats.tracked_target_statuses.insert(target_id.clone(), "eliminated".to_string());
+        }
+        assert_eq!(stats.eliminated_count, 1);
+
+        // 3. Захист від повторного інкременту при повторному eliminated
+        let current = stats.tracked_target_statuses.get(&target_id).cloned();
+        assert_eq!(current.as_deref(), Some("eliminated"));
+        if current.as_deref() != Some("eliminated") {
+            stats.eliminated_count += 1;
+        }
+        assert_eq!(stats.eliminated_count, 1, "Duplicate eliminated status must not double-increment");
+    }
+
+    #[test]
+    fn test_record_track_with_canonical_id_and_daily_file() {
+        let temp_dir = std::env::temp_dir().join(format!("air_hub_hist_test_{}", now_ts()));
+        let _ = fs::create_dir_all(&temp_dir);
+
+        let mgr = HistoryManager::new(&temp_dir);
+        let kyiv = HistoryManager::now_kyiv();
+        let month = kyiv.format("%Y-%m").to_string();
+        let date_str = kyiv.format("%Y-%m-%d").to_string();
+
+        let mut t1 = TargetTrack::new(
+            "trk_source1".to_string(),
+            "shahed".to_string(),
+            1,
+            50.45,
+            30.52,
+            90.0,
+            185.0,
+            "Київська область".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+        );
+        t1.canonical_id = "canon_drone_001".to_string();
+
+        // Запис треку від джерела 1
+        mgr.record_track(&t1, "active");
+        let (tot1, _) = mgr.get_today_counts();
+        assert_eq!(tot1, 1);
+
+        // Джерело 2 надсилає той самий дрон під іншим локальним ID, але з тим самим canonical_id
+        let mut t2 = t1.clone();
+        t2.id = "trk_source2".to_string();
+        t2.canonical_id = "canon_drone_001".to_string();
+        t2.lat = 50.46;
+        t2.lon = 30.53;
+
+        mgr.record_track(&t2, "active");
+        // Лічильник total НЕ повинен зрости, оскільки canonical_id той самий!
+        let (tot2, _) = mgr.get_today_counts();
+        assert_eq!(tot2, 1, "Canonical ID must prevent duplicate target count");
+
+        // Збиття цілі
+        mgr.record_track(&t2, "eliminated");
+        let (elim, hit, lost) = mgr.get_today_outcome_stats();
+        assert_eq!(elim, 1);
+        assert_eq!(hit, 0);
+        assert_eq!(lost, 0);
+
+        // Скидаємо на диск
+        mgr.flush_dirty();
+
+        // Перевіряємо що створено і монолітний місячний файл, і добовий файл
+        let month_file = temp_dir.join("history").join(format!("flight_history_{}.json", month));
+        assert!(month_file.exists(), "Master monthly file must exist");
+
+        let day_file = temp_dir.join("history").join(&month).join(format!("{}.json", date_str));
+        assert!(day_file.exists(), "Daily sharded file must exist");
+
+        // Читаємо через get_month_history_filtered з фільтром по дню
+        let day_data = mgr.get_month_history_filtered(&month, Some(&date_str));
+        assert!(day_data.is_some());
+        let val = day_data.unwrap();
+        assert_eq!(val["total_targets"], 1);
+        assert!(val["targets"].get("canon_drone_001").is_some());
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

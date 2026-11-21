@@ -32,6 +32,8 @@ pub struct ExtrapolatedPoint {
     pub lon: f64,
 }
 
+pub const MAX_TRAJECTORY_POINTS: usize = 500;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TargetTrack {
     pub id: String,
@@ -63,6 +65,34 @@ pub struct TargetTrack {
     pub status: String,
     #[serde(default)]
     pub cooldown_start_ts: Option<f64>,
+    #[serde(default)]
+    pub filt_lat: f64,
+    #[serde(default)]
+    pub filt_lon: f64,
+    #[serde(default)]
+    pub filtered_speed_kmh: f64,
+    #[serde(default)]
+    pub smoothed_heading: f64,
+    #[serde(default)]
+    pub last_moved_ts: f64,
+    #[serde(default)]
+    pub heading_confidence: f64,
+    #[serde(default)]
+    pub raw_lat: f64,
+    #[serde(default)]
+    pub raw_lon: f64,
+    #[serde(default)]
+    pub raw_speed_kmh: f64,
+    #[serde(default)]
+    pub raw_heading: f64,
+    #[serde(default)]
+    pub raw_ts: f64,
+    #[serde(default)]
+    pub consecutive_high_speed_ticks: u8,
+    #[serde(default)]
+    pub canonical_id: String,
+    #[serde(default)]
+    pub sources_seen: Vec<String>,
 }
 
 fn default_active_status() -> String {
@@ -92,7 +122,7 @@ impl TargetTrack {
         let eff_speed = if speed > 0.0 { speed } else { meta.default_speed };
 
         Self {
-            id,
+            id: id.clone(),
             raw_type,
             raw_code,
             category: cat.to_string(),
@@ -120,6 +150,20 @@ impl TargetTrack {
             last_history_sync_ts: 0.0,
             status: "active".to_string(),
             cooldown_start_ts: None,
+            filt_lat: lat,
+            filt_lon: lon,
+            filtered_speed_kmh: eff_speed,
+            smoothed_heading: heading,
+            last_moved_ts: now,
+            heading_confidence: if heading > 0.0 { 0.8 } else { 0.3 },
+            raw_lat: lat,
+            raw_lon: lon,
+            raw_speed_kmh: eff_speed,
+            raw_heading: heading,
+            raw_ts: now,
+            consecutive_high_speed_ticks: 0,
+            canonical_id: id.clone(),
+            sources_seen: Vec::new(),
         }
     }
 
@@ -146,6 +190,13 @@ impl TargetTrack {
         self
     }
 
+    pub fn cap_trajectory(&mut self) {
+        if self.trajectory.len() > MAX_TRAJECTORY_POINTS {
+            let excess = self.trajectory.len() - MAX_TRAJECTORY_POINTS;
+            self.trajectory.drain(0..excess);
+        }
+    }
+
     pub fn update(
         &mut self,
         lat: f64,
@@ -159,31 +210,78 @@ impl TargetTrack {
         raw_code: Option<i64>,
     ) {
         let now = now_sec();
+        let dt = (now - self.last_seen).max(0.1);
 
-        // 1. Дедуплікація виключно за первинними координатами від джерел:
-        // Якщо зміщення від останньої реальної засічки < 30 метрів — повторний дублікат відкидається
+        // Сирі координати (raw_lat, raw_lon, raw_ts, raw_heading) — Dual-State інваріант безпеки
+        self.raw_lat = lat;
+        self.raw_lon = lon;
+        self.raw_heading = heading;
+        self.raw_ts = now;
+
+        // 1. Дедуплікація та правило «стоячої точки»:
+        // Якщо зміщення від попередньої засічки < 50 метрів (радарна сітка/джиттер) —
+        // НЕ обнуляти filtered_speed_kmh і не перераховувати smoothed_heading; оновлювати лише last_seen
         let dist_from_current = calculate_haversine_distance(self.lat, self.lon, lat, lon);
-        if dist_from_current < 0.03 {
+        if dist_from_current < 0.05 {
             self.last_seen = now;
-            if speed > 0.0 { self.speed_kmh = speed; }
+            self.raw_speed_kmh = 0.0;
+            self.consecutive_high_speed_ticks = 0;
             let last_ts = self.trajectory.last().map(|p| p.ts).unwrap_or(0);
             if (now as i64).saturating_sub(last_ts) >= 30 {
-                if self.trajectory.len() >= 200 {
-                    self.trajectory.remove(0);
-                }
                 self.trajectory.push(TrajectoryPoint {
                     lat: self.lat,
                     lon: self.lon,
                     ts: now as i64,
                 });
+                self.cap_trajectory();
             }
             return;
         }
 
+        self.last_moved_ts = now;
+        let (_, meta) = classify_target(raw_type.unwrap_or(&self.raw_type), raw_code.unwrap_or(self.raw_code));
+
+        // 2. Кінематична фільтрація швидкості (Dual-State: 2D alpha-beta з 2-tick promotion):
+        let raw_speed = if speed > 0.0 {
+            speed
+        } else {
+            (dist_from_current / dt) * 3600.0
+        };
+        self.raw_speed_kmh = raw_speed;
+
+        // Захист від хибної класифікації (2-tick promotion):
+        // Якщо 2 пакети поспіль підтверджують високу швидкість (> 1.4 * max_speed_kmh за dt < 3 с),
+        // негайно піднімаємо alpha = 0.65, щоб візуальний маркер не відставав від реальної цілі.
+        // Одиничний сплеск згладжується м'яко (alpha = 0.15) без відкидання точки.
+        let mut alpha = 0.35;
+        if raw_speed > meta.max_speed_kmh * 1.4 && dt < 3.0 {
+            self.consecutive_high_speed_ticks = self.consecutive_high_speed_ticks.saturating_add(1);
+            if self.consecutive_high_speed_ticks >= 2 {
+                alpha = 0.65;
+            } else {
+                alpha = 0.15;
+            }
+        } else {
+            self.consecutive_high_speed_ticks = 0;
+        }
+
+        let new_filt_speed = (1.0 - alpha) * self.filtered_speed_kmh + alpha * raw_speed;
+        self.filtered_speed_kmh = if self.consecutive_high_speed_ticks >= 2 {
+            new_filt_speed
+        } else {
+            new_filt_speed.clamp(meta.min_speed_kmh, meta.max_speed_kmh)
+        };
+        self.speed_kmh = self.filtered_speed_kmh;
+
+        // Координатна фільтрація позиції (візуальний стан)
+        self.filt_lat = (1.0 - alpha) * self.filt_lat + alpha * lat;
+        self.filt_lon = (1.0 - alpha) * self.filt_lon + alpha * lon;
+
+        // 3. Згладжування курсу через векторне осереднення (EMA sin/cos)
         if let Some(last_pt) = self.trajectory.last() {
             let dist_from_last = calculate_haversine_distance(last_pt.lat, last_pt.lon, lat, lon);
 
-            // 2. Захист від фізично неможливих стрибків (телепортація > 120 км між пакетами)
+            // Захист від фізично неможливих стрибків (телепортація > 120 км між пакетами)
             if dist_from_last > 120.0 {
                 self.trajectory.clear();
                 self.trajectory.push(TrajectoryPoint {
@@ -192,23 +290,21 @@ impl TargetTrack {
                     ts: now as i64,
                 });
                 self.heading = if heading > 0.0 { heading } else { self.heading };
+                self.smoothed_heading = self.heading;
+                self.filt_lat = lat;
+                self.filt_lon = lon;
             } else {
                 let calculated_heading = if heading > 0.0 {
                     heading
                 } else if dist_from_last > 0.3 {
                     calculate_bearing(last_pt.lat, last_pt.lon, lat, lon)
                 } else {
-                    self.heading
+                    self.smoothed_heading
                 };
 
                 let time_since_last = (now as i64) - last_pt.ts;
-                let h_diff = heading_diff(self.heading, calculated_heading);
+                let h_diff = heading_diff(self.smoothed_heading, calculated_heading);
 
-                // Точка фіксується у постійну траєкторію, якщо:
-                // 1. Поворот курсу >= 4.0 градусів на відстані від 400 метрів (збереження віражів)
-                // 2. Або ціль пролетіла понад 1.5 км по прямій від останньої точки
-                // 3. Або різка зміна швидкості >= 30 км/год (маневр/розгін)
-                // 4. Або минуло понад 30 секунд без нових точок (контрольний чекпоінт)
                 let is_turn = dist_from_last >= 0.4 && h_diff >= 4.0;
                 let is_distance_step = dist_from_last >= 1.5;
                 let is_speed_change = (speed - self.speed_kmh).abs() >= 30.0 && speed > 0.0 && self.speed_kmh > 0.0;
@@ -220,24 +316,24 @@ impl TargetTrack {
                         lon,
                         ts: now as i64,
                     });
-                    // Захист від надмірного розростання понад 1000 точок
-                    if self.trajectory.len() > 1000 {
-                        self.trajectory.drain(0..100);
-                    }
+                    self.cap_trajectory();
                 }
-                // На прямих відрізках між фіксованими точками ми НЕ мутуємо self.trajectory.last_mut().
-                // Це гарантує, що dist_from_last та time_since_last накопичуються від дійсно зафіксованої
-                // опорної точки, а поточні координати цілі оновлюються у self.lat та self.lon нижче.
 
-                self.heading = calculated_heading;
+                // Векторне EMA згладжування курсу (sin/cos без розривів через 0/360)
+                let target_rad = calculated_heading.to_radians();
+                let cur_rad = self.smoothed_heading.to_radians();
+                let sin_avg = (1.0 - alpha) * cur_rad.sin() + alpha * target_rad.sin();
+                let cos_avg = (1.0 - alpha) * cur_rad.cos() + alpha * target_rad.cos();
+                let mut smoothed = sin_avg.atan2(cos_avg).to_degrees();
+                if smoothed < 0.0 { smoothed += 360.0; }
+                self.smoothed_heading = smoothed;
+                self.heading = smoothed;
+                self.heading_confidence = (self.heading_confidence * 0.85 + (if dist_from_last >= 1.0 { 0.15 } else { 0.05 })).min(1.0);
             }
         }
 
         self.lat = lat;
         self.lon = lon;
-        if speed > 0.0 {
-            self.speed_kmh = speed;
-        }
         self.oblast = oblast;
         self.oblast_id = oblast_id;
         self.raion_id = raion_id;
@@ -336,14 +432,92 @@ impl TargetTracker {
         let mut seen_ids = std::collections::HashSet::new();
         let mut lost_tracks = Vec::new();
 
-        // Захист від хибних хрестів збиття: тихий перехід між будь-якими джерелами (UkraineAlarm <-> Neptun <-> MAPA.UA)
+        // Захист від хибних хрестів збиття та дедуплікація цілей:
+        // Spatial Track Stitching з 1-to-1 жадібним матчингом для захисту від колізій у роях
         let is_source_switch = !self.current_source.is_empty()
             && !source.is_empty()
             && self.current_source != source;
 
         if is_source_switch {
-            // Очищаємо попередні треки попереднього провайдера БЕЗ переведення їх у recent_lost
-            self.tracks.clear();
+            let old_tracks: Vec<TargetTrack> = self.tracks.drain().map(|(_, v)| v).collect();
+            let mut matched_old_indices = std::collections::HashSet::new();
+            let mut candidate_matches: Vec<(f64, usize, usize)> = Vec::new();
+
+            for (inc_idx, t) in incoming_targets.iter().enumerate() {
+                if t.upstream_status == "remove" {
+                    continue;
+                }
+                let (t_cat, t_meta) = classify_target(&t.raw_name, t.raw_type_code);
+                for (old_idx, old_trk) in old_tracks.iter().enumerate() {
+                    let cat_compatible = old_trk.category == t_cat 
+                        || old_trk.category == "unknown" 
+                        || t_cat == "unknown"
+                        || (old_trk.is_drone && t_meta.is_drone);
+                    if !cat_compatible {
+                        continue;
+                    }
+
+                    let dt = (now - old_trk.last_seen).abs().max(1.0);
+                    let eff_speed = old_trk.speed_kmh.max(60.0);
+                    let max_dist_km = (eff_speed * (dt / 3600.0) * 1.5).max(12.0);
+                    let dist_km = calculate_haversine_distance(old_trk.lat, old_trk.lon, t.lat, t.lon);
+                    if dist_km > max_dist_km {
+                        continue;
+                    }
+
+                    let mut heading_penalty = 0.0;
+                    if dist_km > 0.3 && old_trk.heading > 0.0 {
+                        let bearing = calculate_bearing(old_trk.lat, old_trk.lon, t.lat, t.lon);
+                        let h_diff = heading_diff(bearing, old_trk.heading);
+                        if h_diff > 65.0 {
+                            continue;
+                        }
+                        heading_penalty += h_diff * 0.05;
+                    }
+                    let inc_h = t.heading_deg;
+                    if inc_h > 0.0 && old_trk.heading > 0.0 {
+                        let h_diff = heading_diff(inc_h, old_trk.heading);
+                        if h_diff > 75.0 {
+                            continue;
+                        }
+                        heading_penalty += h_diff * 0.05;
+                    }
+
+                    let score = dist_km + heading_penalty;
+                    candidate_matches.push((score, inc_idx, old_idx));
+                }
+            }
+
+            candidate_matches.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+            let mut matched_inc_indices = std::collections::HashSet::new();
+
+            for (_score, inc_idx, old_idx) in candidate_matches {
+                if matched_inc_indices.contains(&inc_idx) || matched_old_indices.contains(&old_idx) {
+                    continue;
+                }
+                matched_inc_indices.insert(inc_idx);
+                matched_old_indices.insert(old_idx);
+
+                let inc_target = &incoming_targets[inc_idx];
+                let mut stitched_track = old_tracks[old_idx].clone();
+                stitched_track.id = inc_target.id.clone();
+                if stitched_track.canonical_id.is_empty() {
+                    stitched_track.canonical_id = old_tracks[old_idx].id.clone();
+                }
+                if !stitched_track.sources_seen.contains(&source.to_string()) {
+                    stitched_track.sources_seen.push(source.to_string());
+                }
+                self.tracks.insert(inc_target.id.clone(), stitched_track);
+            }
+
+            // Незшиті старі треки переходять у статус "superseded" (тихе затухання БЕЗ recent_lost та БЕЗ тривог)
+            for (old_idx, mut old_trk) in old_tracks.into_iter().enumerate() {
+                if !matched_old_indices.contains(&old_idx) {
+                    old_trk.status = "superseded".to_string();
+                    old_trk.last_seen = now;
+                    lost_tracks.push(old_trk);
+                }
+            }
         }
         self.current_source = source.to_string();
 
@@ -455,6 +629,9 @@ impl TargetTracker {
                 if let Some(c) = t.confidence {
                     trk.confidence = Some(c);
                 }
+                if !trk.sources_seen.contains(&source.to_string()) {
+                    trk.sources_seen.push(source.to_string());
+                }
             } else {
                 let mut trk = TargetTrack::new(
                     t.id.clone(),
@@ -477,6 +654,9 @@ impl TargetTracker {
                 }
                 if let Some(c) = t.confidence {
                     trk.confidence = Some(c);
+                }
+                if !trk.sources_seen.contains(&source.to_string()) {
+                    trk.sources_seen.push(source.to_string());
                 }
                 self.tracks.insert(t.id.clone(), trk);
             }
@@ -623,6 +803,7 @@ pub struct ThreatState {
     pub last_alerts_update_ts: f64,
     pub ua_alerts_cooldown_until: f64,
     pub update_seq: u64,
+    pub notifier: Option<tokio::sync::watch::Sender<u64>>,
     pub upstream_provider: String,
     pub alarms_provider: String,
     pub targets_provider: String,
@@ -646,6 +827,7 @@ impl Default for ThreatState {
             last_alerts_update_ts: now_sec(),
             ua_alerts_cooldown_until: 0.0,
             update_seq: 1,
+            notifier: None,
             upstream_provider: "Centrifugo (ws.ukrainealarm.com)".to_string(),
             alarms_provider: "UkraineAlarm (API v3)".to_string(),
             targets_provider: "WS UkraineAlarm".to_string(),
@@ -657,12 +839,23 @@ impl Default for ThreatState {
 }
 
 impl ThreatState {
+    /// Подієве оновлення seq та миттєве пробудження WebSocket-клієнтів
+    pub fn bump_seq(&mut self) {
+        self.update_seq = self.update_seq.wrapping_add(1);
+        if let Some(ref tx) = self.notifier {
+            let _ = tx.send_replace(self.update_seq);
+        }
+    }
+
     /// Суворий перерахунок тривог: колір визначається сиренами та цілями (Red / Yellow)
     pub fn recompute_oblast_alerts(&mut self, detector: &OblastDetector) {
         let mut ob_targets: HashMap<String, usize> = HashMap::new();
         let mut ra_targets: HashMap<String, usize> = HashMap::new();
 
         for trk in self.tracker.tracks.values() {
+            if trk.status == "superseded" {
+                continue;
+            }
             *ob_targets.entry(trk.oblast_id.clone()).or_insert(0) += 1;
             if !trk.raion_id.is_empty() && trk.raion_id != "0" {
                 *ra_targets.entry(trk.raion_id.clone()).or_insert(0) += 1;
@@ -703,28 +896,10 @@ impl ThreatState {
             );
         }
 
-        // Синхронізація анклаву Києва: якщо Київська область (14) в тривозі ("red" або "yellow"), Київ (31) успадковує статус
-        if let Some(kyiv_ob) = self.oblast_alerts.get("14") {
-            if kyiv_ob.color == "red" {
-                if let Some(kyiv_city) = self.oblast_alerts.get_mut("31") {
-                    kyiv_city.alert = true;
-                    kyiv_city.color = "red".to_string();
-                    if kyiv_city.alert_type == "none" {
-                        kyiv_city.alert_type = "missile".to_string();
-                    }
-                }
-            } else if kyiv_ob.color == "yellow" {
-                if let Some(kyiv_city) = self.oblast_alerts.get_mut("31") {
-                    if kyiv_city.color != "red" {
-                        kyiv_city.alert = true;
-                        kyiv_city.color = "yellow".to_string();
-                        if kyiv_city.alert_type == "none" {
-                            kyiv_city.alert_type = "drone".to_string();
-                        }
-                    }
-                }
-            }
-        }
+        // Примітка: м. Київ (31) є окремою адміністративно-територіальною одиницею першого рівня (Rank 1)
+        // із власною системою оповіщення та офіційним каналом тривог (КМВА). Київ НЕ успадковує
+        // тривоги від Київської області (14), що повністю відповідає офіційним картам тривог (alerts.in.ua).
+        // Статус Києва визначається виключно власним офіційним потоком або безпосередньою наявністю цілей у межах міста.
 
         // Райони (Rank 2 + Анклави)
         for ra in &detector.raion_regions {
@@ -818,6 +993,7 @@ impl ThreatState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oblast_detector::RegionFeatureData;
 
     #[test]
     fn test_heading_diff_wraparound() {
@@ -892,7 +1068,9 @@ mod tests {
 
         assert_eq!(track.lat, 50.05);
         assert_eq!(track.lon, 30.0);
-        assert_eq!(track.speed_kmh, 220.0);
+        // Кінематичний alpha-beta фільтр плавно згладжує прискорення: швидкість зростає у напрямку 220, не перевищуючи max
+        assert!(track.speed_kmh > 175.0 && track.speed_kmh <= 220.0);
+        assert!(track.filtered_speed_kmh > 175.0 && track.filtered_speed_kmh <= 220.0);
     }
 
     #[test]
@@ -1037,5 +1215,416 @@ mod tests {
         assert!(tracker.recent_lost.contains_key("trk_beta"));
         assert_eq!(tracker.recent_lost["trk_beta"].outcome, "eliminated");
         assert_eq!(tracker.recent_lost["trk_beta"].status, "lost"); // Варіант А на мапі
+    }
+
+    #[test]
+    fn test_phase1_kinematic_alpha_beta_and_heading_smoothing() {
+        let mut track = TargetTrack::new(
+            "shahed_kine_01".to_string(),
+            "shahed".to_string(),
+            1,
+            50.0,
+            30.0,
+            90.0,
+            175.0,
+            "Київська область".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+        );
+
+        assert_eq!(track.filtered_speed_kmh, 175.0);
+        assert_eq!(track.smoothed_heading, 90.0);
+
+        // 1. Правило «стоячої точки»: зсув < 0.05 км (50 м) не обнуляє швидкість і не ламає курс
+        track.update(
+            50.0001,
+            30.0001,
+            0.0,
+            0.0,
+            "Київська область".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+            None,
+            None,
+        );
+        assert_eq!(track.filtered_speed_kmh, 175.0, "Stationary jitter must NOT zero out filtered speed");
+        assert_eq!(track.smoothed_heading, 90.0, "Stationary jitter must NOT corrupt smoothed heading");
+
+        // 2. Реальний зсув: плавний поворот курсу та фільтрація швидкості в межах [min, max]
+        track.update(
+            50.02,
+            30.05,
+            105.0,
+            240.0, // перевищує max_speed (220)
+            "Київська область".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+            None,
+            None,
+        );
+        // Швидкість затиснута в межах фізичного профілю Шахеда [110, 220]
+        assert!(track.filtered_speed_kmh <= 220.0, "Speed must be clamped to max_speed_kmh");
+        assert!(track.filtered_speed_kmh >= 110.0, "Speed must be above min_speed_kmh");
+        // Курс плавно змістився у напрямку 105 без стрибка
+        assert!(track.smoothed_heading >= 90.0 && track.smoothed_heading <= 105.0);
+    }
+
+    #[test]
+    fn test_dual_state_and_2tick_promotion() {
+        let mut track = TargetTrack::new(
+            "dual_state_target".to_string(),
+            "shahed".to_string(),
+            1,
+            50.0,
+            30.0,
+            90.0,
+            175.0,
+            "Київська область".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+        );
+
+        assert_eq!(track.raw_lat, 50.0);
+        assert_eq!(track.raw_lon, 30.0);
+        assert_eq!(track.lat, 50.0);
+        assert_eq!(track.lon, 30.0);
+        assert_eq!(track.consecutive_high_speed_ticks, 0);
+
+        // Tick 1: Одиничний сплеск швидкості (600 км/год > 220 * 1.4 = 308 км/год)
+        // Повинен застосувати alpha = 0.15, затиснути filtered_speed_kmh до max (220),
+        // але зберегти сирі координати та raw_speed_kmh = 600 без жодного відкидання!
+        track.update(
+            50.05,
+            30.05,
+            90.0,
+            600.0,
+            "Київська область".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+            None,
+            None,
+        );
+
+        assert_eq!(track.raw_lat, 50.05, "Raw lat must NEVER be clamped or modified");
+        assert_eq!(track.raw_lon, 30.05, "Raw lon must NEVER be clamped or modified");
+        assert_eq!(track.lat, 50.05, "Combat lat must match raw lat for siren/danger-zone alerts");
+        assert_eq!(track.raw_speed_kmh, 600.0);
+        assert_eq!(track.consecutive_high_speed_ticks, 1);
+        assert!(track.filtered_speed_kmh <= 220.0, "Tick 1 must clamp filtered speed to max_speed_kmh");
+        assert!(track.filt_lat < 50.05, "Visual filt_lat should be smoothly interpolated");
+
+        // Tick 2: Другий поспіль сплеск (підтвердження, що ціль насправді є швидкісною ракетою)
+        // 2-tick promotion: consecutive_high_speed_ticks >= 2 -> alpha = 0.65, unclamped
+        track.update(
+            50.10,
+            30.10,
+            90.0,
+            650.0,
+            "Київська область".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+            None,
+            None,
+        );
+
+        assert_eq!(track.consecutive_high_speed_ticks, 2);
+        assert!(track.filtered_speed_kmh > 220.0, "2-tick promotion must allow speed > 220 to avoid visual lag");
+        assert_eq!(track.raw_lat, 50.10);
+        assert_eq!(track.lat, 50.10);
+    }
+
+    #[test]
+    fn test_spatial_stitching_canonical_id_retention() {
+        let detector = OblastDetector::default();
+        let mut tracker = TargetTracker::default();
+
+        let t1 = RawExtractedTarget {
+            id: "ua_drone_101".to_string(),
+            lat: 50.45,
+            lon: 30.52,
+            raw_name: "shahed".to_string(),
+            raw_type_code: 8,
+            heading_deg: 90.0,
+            speed_kmh: Some(185.0),
+            confidence: None,
+            time_offset_ms: None,
+            trail_points: vec![],
+            upstream_status: "active".to_string(),
+        };
+
+        let _ = tracker.update_batch(&[t1], &detector, None, "WS UkraineAlarm");
+        assert_eq!(tracker.tracks.len(), 1);
+        assert_eq!(tracker.tracks["ua_drone_101"].canonical_id, "ua_drone_101");
+
+        // Failover на Neptun: новий ID "nep_trk_999", але координати поруч (50.46, 30.53) і курс сумісний
+        let t2 = RawExtractedTarget {
+            id: "nep_trk_999".to_string(),
+            lat: 50.46,
+            lon: 30.53,
+            raw_name: "uav".to_string(),
+            raw_type_code: 8,
+            heading_deg: 95.0,
+            speed_kmh: Some(180.0),
+            confidence: None,
+            time_offset_ms: None,
+            trail_points: vec![],
+            upstream_status: "active".to_string(),
+        };
+
+        let _ = tracker.update_batch(&[t2], &detector, None, "Neptun Failover");
+        assert_eq!(tracker.tracks.len(), 1);
+        assert!(tracker.tracks.contains_key("nep_trk_999"));
+        // КРИТИЧНО: канонічний ID збережено від первинного джерела!
+        assert_eq!(tracker.tracks["nep_trk_999"].canonical_id, "ua_drone_101");
+        assert!(tracker.tracks["nep_trk_999"].sources_seen.contains(&"WS UkraineAlarm".to_string()));
+        assert!(tracker.tracks["nep_trk_999"].sources_seen.contains(&"Neptun Failover".to_string()));
+        assert!(tracker.recent_lost.is_empty(), "Recent lost must remain empty on clean stitch");
+    }
+
+    #[test]
+    fn test_swarm_anticollision_stitching() {
+        let detector = OblastDetector::default();
+        let mut tracker = TargetTracker::default();
+
+        // Два Шахеди летять парою в рою на відстані ~3.5 км один від одного
+        let drone_north = RawExtractedTarget {
+            id: "swarm_north".to_string(),
+            lat: 50.50,
+            lon: 30.50,
+            raw_name: "shahed".to_string(),
+            raw_type_code: 8,
+            heading_deg: 90.0,
+            speed_kmh: Some(185.0),
+            confidence: None,
+            time_offset_ms: None,
+            trail_points: vec![],
+            upstream_status: "active".to_string(),
+        };
+        let drone_south = RawExtractedTarget {
+            id: "swarm_south".to_string(),
+            lat: 50.47,
+            lon: 30.50,
+            raw_name: "shahed".to_string(),
+            raw_type_code: 8,
+            heading_deg: 90.0,
+            speed_kmh: Some(185.0),
+            confidence: None,
+            time_offset_ms: None,
+            trail_points: vec![],
+            upstream_status: "active".to_string(),
+        };
+
+        let _ = tracker.update_batch(&[drone_north, drone_south], &detector, None, "PrimaryFeed");
+        assert_eq!(tracker.tracks.len(), 2);
+
+        // Failover: резервне джерело надсилає нові ID
+        let backup_north = RawExtractedTarget {
+            id: "backup_n".to_string(),
+            lat: 50.505,
+            lon: 30.515,
+            raw_name: "shahed".to_string(),
+            raw_type_code: 8,
+            heading_deg: 90.0,
+            speed_kmh: Some(185.0),
+            confidence: None,
+            time_offset_ms: None,
+            trail_points: vec![],
+            upstream_status: "active".to_string(),
+        };
+        let backup_south = RawExtractedTarget {
+            id: "backup_s".to_string(),
+            lat: 50.475,
+            lon: 30.515,
+            raw_name: "shahed".to_string(),
+            raw_type_code: 8,
+            heading_deg: 90.0,
+            speed_kmh: Some(185.0),
+            confidence: None,
+            time_offset_ms: None,
+            trail_points: vec![],
+            upstream_status: "active".to_string(),
+        };
+
+        let _ = tracker.update_batch(&[backup_north, backup_south], &detector, None, "SecondaryFeed");
+        assert_eq!(tracker.tracks.len(), 2);
+
+        // Завдяки 1-to-1 найменшому скорингу північний дрон зшивається з північним, а південний - з південним!
+        assert_eq!(tracker.tracks["backup_n"].canonical_id, "swarm_north");
+        assert_eq!(tracker.tracks["backup_s"].canonical_id, "swarm_south");
+    }
+
+    #[test]
+    fn test_kyiv_city_independent_from_oblast_alert() {
+        let mut threat_state = ThreatState::default();
+        let mut detector = OblastDetector::default();
+        detector.regions.push(RegionFeatureData {
+            id: "14".to_string(),
+            name: "Київська область".to_string(),
+            rank: 1,
+            oblast_id: "14".to_string(),
+            bbox: (29.0, 49.0, 32.0, 52.0),
+            center: (50.0, 30.0),
+            polygons: vec![],
+        });
+        detector.regions.push(RegionFeatureData {
+            id: "31".to_string(),
+            name: "м. Київ".to_string(),
+            rank: 1,
+            oblast_id: "31".to_string(),
+            bbox: (30.2, 50.3, 30.8, 50.6),
+            center: (50.45, 30.52),
+            polygons: vec![],
+        });
+
+        // Сценарій 1: Київська область (14) у тривозі "yellow" (шахеди в області), Київ (31) — без тривоги
+        threat_state.official_alerts.insert("14".to_string(), OfficialAlert {
+            id: "14".to_string(),
+            name: "Київська область".to_string(),
+            alert: true,
+            color: "yellow".to_string(),
+            alert_type: "drone".to_string(),
+            level: "State".to_string(),
+            updated_at: "2026-11-21T10:00:00Z".to_string(),
+        });
+        threat_state.official_alerts.insert("31".to_string(), OfficialAlert {
+            id: "31".to_string(),
+            name: "м. Київ".to_string(),
+            alert: false,
+            color: "none".to_string(),
+            alert_type: "none".to_string(),
+            level: "State".to_string(),
+            updated_at: "2026-11-21T10:00:00Z".to_string(),
+        });
+
+        threat_state.recompute_oblast_alerts(&detector);
+
+        let kyiv_ob = threat_state.oblast_alerts.get("14").unwrap();
+        assert!(kyiv_ob.alert);
+        assert_eq!(kyiv_ob.color, "yellow");
+
+        // Київ (31) НЕ повинен успадковувати тривогу області!
+        let kyiv_city = threat_state.oblast_alerts.get("31").unwrap();
+        assert!(!kyiv_city.alert);
+        assert_eq!(kyiv_city.color, "none");
+
+        // Сценарій 2: Київська область (14) у тривозі "red" (ракета в бік Білої Церкви), Київ без тривоги
+        threat_state.official_alerts.get_mut("14").unwrap().color = "red".to_string();
+        threat_state.official_alerts.get_mut("14").unwrap().alert_type = "missile".to_string();
+
+        threat_state.recompute_oblast_alerts(&detector);
+
+        let kyiv_city = threat_state.oblast_alerts.get("31").unwrap();
+        assert!(!kyiv_city.alert);
+        assert_eq!(kyiv_city.color, "none");
+
+        // Сценарій 3: Офіційна сирена вмикається безпосередньо для міста Київ -> Київ стає Red
+        threat_state.official_alerts.insert("31".to_string(), OfficialAlert {
+            id: "31".to_string(),
+            name: "м. Київ".to_string(),
+            alert: true,
+            color: "red".to_string(),
+            alert_type: "missile".to_string(),
+            level: "State".to_string(),
+            updated_at: "2026-11-21T10:05:00Z".to_string(),
+        });
+
+        threat_state.recompute_oblast_alerts(&detector);
+
+        let kyiv_city = threat_state.oblast_alerts.get("31").unwrap();
+        assert!(kyiv_city.alert);
+        assert_eq!(kyiv_city.color, "red");
+    }
+
+    #[test]
+    fn test_enclaves_kharkiv_zaporizhzhia_synchronization() {
+        let mut threat_state = ThreatState::default();
+        let mut detector = OblastDetector::default();
+        detector.regions.push(RegionFeatureData {
+            id: "22".to_string(),
+            name: "Харківська область".to_string(),
+            rank: 1,
+            oblast_id: "22".to_string(),
+            bbox: (35.0, 49.0, 38.0, 51.0),
+            center: (50.0, 36.5),
+            polygons: vec![],
+        });
+        detector.regions.push(RegionFeatureData {
+            id: "12".to_string(),
+            name: "Запорізька область".to_string(),
+            rank: 1,
+            oblast_id: "12".to_string(),
+            bbox: (34.5, 46.5, 37.5, 48.5),
+            center: (47.5, 35.5),
+            polygons: vec![],
+        });
+        detector.raion_regions.push(RegionFeatureData {
+            id: "124".to_string(),
+            name: "Харківський район".to_string(),
+            rank: 2,
+            oblast_id: "22".to_string(),
+            bbox: (35.8, 49.7, 36.6, 50.3),
+            center: (50.0, 36.2),
+            polygons: vec![],
+        });
+        detector.raion_regions.push(RegionFeatureData {
+            id: "149".to_string(),
+            name: "Запорізький район".to_string(),
+            rank: 2,
+            oblast_id: "12".to_string(),
+            bbox: (34.8, 47.6, 35.6, 48.2),
+            center: (47.8, 35.2),
+            polygons: vec![],
+        });
+        detector.raion_regions.push(RegionFeatureData {
+            id: "1293".to_string(),
+            name: "м. Харків".to_string(),
+            rank: 2,
+            oblast_id: "22".to_string(),
+            bbox: (36.1, 49.9, 36.4, 50.1),
+            center: (50.0, 36.23),
+            polygons: vec![],
+        });
+        detector.raion_regions.push(RegionFeatureData {
+            id: "564".to_string(),
+            name: "м. Запоріжжя".to_string(),
+            rank: 2,
+            oblast_id: "12".to_string(),
+            bbox: (35.0, 47.8, 35.3, 48.0),
+            center: (47.84, 35.14),
+            polygons: vec![],
+        });
+
+        // Тривога в Харківській області (22) -> Red
+        threat_state.official_alerts.insert("22".to_string(), OfficialAlert {
+            id: "22".to_string(),
+            name: "Харківська область".to_string(),
+            alert: true,
+            color: "red".to_string(),
+            alert_type: "missile".to_string(),
+            level: "State".to_string(),
+            updated_at: "2026-11-21T10:00:00Z".to_string(),
+        });
+        // Тривога в Запорізькій області (12) -> Yellow
+        threat_state.official_alerts.insert("12".to_string(), OfficialAlert {
+            id: "12".to_string(),
+            name: "Запорізька область".to_string(),
+            alert: true,
+            color: "yellow".to_string(),
+            alert_type: "drone".to_string(),
+            level: "State".to_string(),
+            updated_at: "2026-11-21T10:00:00Z".to_string(),
+        });
+
+        threat_state.recompute_oblast_alerts(&detector);
+
+        // м. Харків (1293) гарантовано успадковує Red від області/району і НЕ залишається чорною діркою!
+        let kharkiv_city = threat_state.raion_alerts.get("1293").unwrap();
+        assert!(kharkiv_city.alert, "Харків має успадкувати тривогу від області/району!");
+        assert_eq!(kharkiv_city.color, "red");
+
+        // м. Запоріжжя (564) гарантовано успадковує Yellow від області/району!
+        let zap_city = threat_state.raion_alerts.get("564").unwrap();
+        assert!(zap_city.alert, "Запоріжжя має успадкувати тривогу від області/району!");
+        assert_eq!(zap_city.color, "yellow");
     }
 }

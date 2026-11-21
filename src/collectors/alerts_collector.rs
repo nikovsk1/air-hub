@@ -386,7 +386,7 @@ async fn process_ukrainealarm_v3_alerts(
     state.last_alerts_update_ts = now_sec();
     state.alarms_provider = provider_name.to_string();
     state.last_alarms_provider_status = "primary".to_string();
-    state.update_seq += 1;
+    state.bump_seq();
 }
 
 /// Обробка даних альтернативного API Neptun (neptun.in.ua) - підтримує як REST, так і WebSocket фрейми
@@ -508,5 +508,5 @@ pub async fn process_neptun_alerts(
     state.last_alerts_update_ts = now_sec();
     state.alarms_provider = provider_name.to_string();
     state.last_alarms_provider_status = status_str.to_string();
-    state.update_seq += 1;
+    state.bump_seq();
 }

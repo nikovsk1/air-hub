@@ -85,7 +85,7 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/api/v1/admin/diia/status", get(handle_diia_status))
         .route("/api/v1/admin/diia/session", get(handle_diia_session))
         .route("/api/v1/admin/poi", get(handle_admin_list_poi).post(handle_admin_save_poi))
-        .route("/api/v1/admin/poi/:id", put(handle_admin_save_poi).delete(handle_admin_delete_poi))
+        .route("/api/v1/admin/poi/:id", put(handle_admin_update_poi).delete(handle_admin_delete_poi))
         .route("/api/v1/admin/backup", get(handle_download_backup))
         .route("/api/v1/admin/restore", post(handle_restore_backup))
         .route("/api/v1/admin/exchange_log", get(handle_get_exchange_log))
@@ -161,7 +161,7 @@ async fn handle_create_key(
         return status.into_response();
     }
     let owner = payload.owner.unwrap_or_else(|| "User".to_string());
-    match state.storage.create_user(&owner) {
+    match state.storage.create_user(&owner, Some(&state.detector)) {
         Ok(new_user) => {
             // Фронтенд ADMIN_HTML очікує resp.api_key на верхньому рівні
             Json(json!({
@@ -178,6 +178,7 @@ async fn handle_create_key(
 pub struct UpdateKeyPayload {
     pub owner: Option<String>,
     pub enabled: Option<bool>,
+    pub can_view_military_poi: Option<bool>,
 }
 
 async fn handle_update_key(
@@ -191,7 +192,7 @@ async fn handle_update_key(
     if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
         return status.into_response();
     }
-    match state.storage.update_user_meta(&key, payload.owner, payload.enabled) {
+    match state.storage.update_user_meta(&key, payload.owner, payload.enabled, payload.can_view_military_poi) {
         Ok(_) => Json(json!({"status": "updated"})).into_response(),
         Err(e) => (StatusCode::NOT_FOUND, Json(json!({"error": e}))).into_response(),
     }
@@ -294,6 +295,8 @@ pub struct SetHistoryConfigPayload {
     pub recording: Option<bool>,
     #[serde(alias = "gdrive_webhook")]
     pub webhook_url: Option<String>,
+    #[serde(alias = "sync_enabled", alias = "gdrive_enabled")]
+    pub gdrive_sync_enabled: Option<bool>,
     #[serde(alias = "gdrive_url", alias = "folder_url")]
     pub folder_url: Option<String>,
     #[serde(alias = "gdrive_sync_hours", alias = "auto_sync_hours")]
@@ -310,9 +313,15 @@ async fn handle_set_history_config(
     if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
         return status.into_response();
     }
-    match state.storage.update_gdrive_config(payload.recording, payload.webhook_url, payload.folder_url, payload.auto_sync_hours) {
-        Ok(_) => Json(json!({"status": "updated"})).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))).into_response(),
+    match state.storage.update_gdrive_config(
+        payload.recording,
+        payload.gdrive_sync_enabled,
+        payload.webhook_url,
+        payload.folder_url,
+        payload.auto_sync_hours,
+    ) {
+        Ok(_) => Json(json!({"ok": true, "status": "updated"})).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"ok": false, "status": "error", "error": e, "message": e}))).into_response(),
     }
 }
 
@@ -837,7 +846,7 @@ async fn handle_admin_list_poi(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> Result<impl IntoResponse, StatusCode> {
     check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key)?;
-    let pois = state.storage.get_pois();
+    let pois = state.storage.get_pois(true);
     Ok((
         StatusCode::OK,
         [(header::CONTENT_TYPE, "application/json")],
@@ -853,6 +862,20 @@ async fn handle_admin_save_poi(
     Json(item): Json<crate::storage::PoiItem>,
 ) -> Result<impl IntoResponse, StatusCode> {
     check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key)?;
+    state.storage.save_poi(item).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::OK)
+}
+
+async fn handle_admin_update_poi(
+    AxumPath(id): AxumPath<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(mut item): Json<crate::storage::PoiItem>,
+) -> Result<impl IntoResponse, StatusCode> {
+    check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key)?;
+    item.id = id;
     state.storage.save_poi(item).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::OK)
 }

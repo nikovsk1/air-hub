@@ -6,6 +6,22 @@ use chrono::Utc;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
+#[allow(dead_code)]
+pub mod threat_codes {
+    pub const SHAHED: i64 = 1;
+    pub const SHAHED_JET: i64 = 2;
+    pub const MISSILE: i64 = 3;
+    pub const BANDEROL: i64 = 4;
+    pub const KAB: i64 = 5;
+    pub const RECON: i64 = 6;
+    pub const FPV: i64 = 7;
+    pub const LANCET: i64 = 8;
+    pub const AVIATION: i64 = 9;
+    pub const ARTILLERY: i64 = 10;
+    pub const SHAHED_MESH: i64 = 11;
+    pub const BALLISTIC: i64 = 12;
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreatMeta {
     pub category: &'static str,
@@ -19,6 +35,11 @@ pub struct ThreatMeta {
     pub color_hex: &'static str,
     pub default_speed_kmh: f64,
     pub default_speed: f64,
+    pub min_speed_kmh: f64,
+    pub cruise_speed_kmh: f64,
+    pub max_speed_kmh: f64,
+    pub max_turn_deg_s: f64,
+    pub z_priority: u32,
     pub is_drone: bool,
     pub threat_level: &'static str,
 }
@@ -32,9 +53,14 @@ pub static THREAT_SHAHED: ThreatMeta = ThreatMeta {
     description: "Ударний БпЛА Shahed-136 / Герань-2",
     ha_icon: "mdi:navigation-variant",
     svg_icon: "ic_shahed.svg",
-    color_hex: "#FFE600",
-    default_speed_kmh: 185.0,
-    default_speed: 185.0,
+    color_hex: "#FACC15",
+    default_speed_kmh: 175.0,
+    default_speed: 175.0,
+    min_speed_kmh: 110.0,
+    cruise_speed_kmh: 175.0,
+    max_speed_kmh: 220.0,
+    max_turn_deg_s: 12.0,
+    z_priority: 60,
     is_drone: true,
     threat_level: "medium",
 };
@@ -48,9 +74,14 @@ pub static THREAT_SHAHED_JET: ThreatMeta = ThreatMeta {
     description: "Швидкісний реактивний Shahed-238 / Jet UAV",
     ha_icon: "mdi:rocket-outline",
     svg_icon: "ic_shahed_jet.svg",
-    color_hex: "#00F0FF",
-    default_speed_kmh: 420.0,
-    default_speed: 420.0,
+    color_hex: "#00E5FF",
+    default_speed_kmh: 500.0,
+    default_speed: 500.0,
+    min_speed_kmh: 380.0,
+    cruise_speed_kmh: 500.0,
+    max_speed_kmh: 600.0,
+    max_turn_deg_s: 15.0,
+    z_priority: 70,
     is_drone: true,
     threat_level: "high",
 };
@@ -64,9 +95,14 @@ pub static THREAT_MISSILE: ThreatMeta = ThreatMeta {
     description: "Крилата або керована авіаційна ракета (Х-101, Калібр, Х-59/69)",
     ha_icon: "mdi:rocket",
     svg_icon: "ic_missile.svg",
-    color_hex: "#FF2D55",
-    default_speed_kmh: 850.0,
-    default_speed: 850.0,
+    color_hex: "#EF4444",
+    default_speed_kmh: 820.0,
+    default_speed: 820.0,
+    min_speed_kmh: 650.0,
+    cruise_speed_kmh: 820.0,
+    max_speed_kmh: 950.0,
+    max_turn_deg_s: 10.0,
+    z_priority: 90,
     is_drone: false,
     threat_level: "critical",
 };
@@ -80,9 +116,14 @@ pub static THREAT_BALLISTIC: ThreatMeta = ThreatMeta {
     description: "Надзвукова балістична або аеробалістична ракета (Іскандер-М, Кинджал, С-300/400)",
     ha_icon: "mdi:rocket-launch",
     svg_icon: "ic_missile.svg",
-    color_hex: "#FF003C",
-    default_speed_kmh: 3600.0,
-    default_speed: 3600.0,
+    color_hex: "#DC2626",
+    default_speed_kmh: 4500.0,
+    default_speed: 4500.0,
+    min_speed_kmh: 2500.0,
+    cruise_speed_kmh: 4500.0,
+    max_speed_kmh: 9000.0,
+    max_turn_deg_s: 5.0,
+    z_priority: 100,
     is_drone: false,
     threat_level: "critical",
 };
@@ -96,9 +137,14 @@ pub static THREAT_KAB: ThreatMeta = ThreatMeta {
     description: "Керована плануюча авіабомба з модулем УМПК",
     ha_icon: "mdi:bomb",
     svg_icon: "ic_airbomb.svg",
-    color_hex: "#FF9500",
+    color_hex: "#FB923C",
     default_speed_kmh: 750.0,
     default_speed: 750.0,
+    min_speed_kmh: 500.0,
+    cruise_speed_kmh: 750.0,
+    max_speed_kmh: 1100.0,
+    max_turn_deg_s: 8.0,
+    z_priority: 80,
     is_drone: false,
     threat_level: "high",
 };
@@ -112,9 +158,14 @@ pub static THREAT_LANCET: ThreatMeta = ThreatMeta {
     description: "Баражуючий боєприпас Ланцет / Куб",
     ha_icon: "mdi:navigation-variant-outline",
     svg_icon: "ic_lancet.svg",
-    color_hex: "#FF007A",
+    color_hex: "#F43F5E",
     default_speed_kmh: 110.0,
     default_speed: 110.0,
+    min_speed_kmh: 80.0,
+    cruise_speed_kmh: 110.0,
+    max_speed_kmh: 300.0,
+    max_turn_deg_s: 20.0,
+    z_priority: 55,
     is_drone: true,
     threat_level: "medium",
 };
@@ -128,9 +179,14 @@ pub static THREAT_RECON: ThreatMeta = ThreatMeta {
     description: "Розвідувальний тактичний БпЛА (Zala, Supercam, Орлан-10, Mohajer)",
     ha_icon: "mdi:crosshairs-gps",
     svg_icon: "ic_recon.svg",
-    color_hex: "#B388FF",
-    default_speed_kmh: 130.0,
-    default_speed: 130.0,
+    color_hex: "#A855F7",
+    default_speed_kmh: 110.0,
+    default_speed: 110.0,
+    min_speed_kmh: 70.0,
+    cruise_speed_kmh: 110.0,
+    max_speed_kmh: 160.0,
+    max_turn_deg_s: 18.0,
+    z_priority: 40,
     is_drone: true,
     threat_level: "low",
 };
@@ -144,9 +200,14 @@ pub static THREAT_FPV: ThreatMeta = ThreatMeta {
     description: "Ударний FPV-дрон або крило Молнія в прифронтовій смузі",
     ha_icon: "mdi:quadcopter",
     svg_icon: "ic_fpv.svg",
-    color_hex: "#CF9B6D",
-    default_speed_kmh: 120.0,
-    default_speed: 120.0,
+    color_hex: "#EAB308",
+    default_speed_kmh: 80.0,
+    default_speed: 80.0,
+    min_speed_kmh: 40.0,
+    cruise_speed_kmh: 80.0,
+    max_speed_kmh: 140.0,
+    max_turn_deg_s: 35.0,
+    z_priority: 45,
     is_drone: true,
     threat_level: "medium",
 };
@@ -160,9 +221,14 @@ pub static THREAT_AVIATION: ThreatMeta = ThreatMeta {
     description: "Тактична / стратегічна ворожа авіація (Су-34, Су-35, Ту-95, МіГ-31К)",
     ha_icon: "mdi:airplane-alert",
     svg_icon: "ic_air_threat_combined_white.svg",
-    color_hex: "#FF3B30",
-    default_speed_kmh: 750.0,
-    default_speed: 750.0,
+    color_hex: "#E11D48",
+    default_speed_kmh: 850.0,
+    default_speed: 850.0,
+    min_speed_kmh: 450.0,
+    cruise_speed_kmh: 850.0,
+    max_speed_kmh: 1500.0,
+    max_turn_deg_s: 15.0,
+    z_priority: 75,
     is_drone: false,
     threat_level: "high",
 };
@@ -176,9 +242,14 @@ pub static THREAT_BANDEROL: ThreatMeta = ThreatMeta {
     description: "Фальш-ціль / приманка / пародія",
     ha_icon: "mdi:paper-plane-outline",
     svg_icon: "ic_banderol.svg",
-    color_hex: "#34E7E4",
-    default_speed_kmh: 150.0,
-    default_speed: 150.0,
+    color_hex: "#A7F3D0",
+    default_speed_kmh: 160.0,
+    default_speed: 160.0,
+    min_speed_kmh: 100.0,
+    cruise_speed_kmh: 160.0,
+    max_speed_kmh: 240.0,
+    max_turn_deg_s: 14.0,
+    z_priority: 50,
     is_drone: true,
     threat_level: "low",
 };
@@ -192,9 +263,14 @@ pub static THREAT_ARTILLERY: ThreatMeta = ThreatMeta {
     description: "Загроза артилерійського обстрілу або залпу РСЗВ",
     ha_icon: "mdi:ammunition",
     svg_icon: "ic_airbomb.svg",
-    color_hex: "#FF453A",
-    default_speed_kmh: 0.0,
-    default_speed: 0.0,
+    color_hex: "#DC2626",
+    default_speed_kmh: 1800.0,
+    default_speed: 1800.0,
+    min_speed_kmh: 900.0,
+    cruise_speed_kmh: 1800.0,
+    max_speed_kmh: 3500.0,
+    max_turn_deg_s: 5.0,
+    z_priority: 85,
     is_drone: false,
     threat_level: "critical",
 };
@@ -208,9 +284,14 @@ pub static THREAT_UNKNOWN: ThreatMeta = ThreatMeta {
     description: "Повітряний об'єкт, тип якого ще уточнюється засобами РЕР / ППО",
     ha_icon: "mdi:help-rhombus",
     svg_icon: "ic_air_threat_combined_white.svg",
-    color_hex: "#80959E",
-    default_speed_kmh: 200.0,
-    default_speed: 200.0,
+    color_hex: "#94A3B8",
+    default_speed_kmh: 250.0,
+    default_speed: 250.0,
+    min_speed_kmh: 80.0,
+    cruise_speed_kmh: 250.0,
+    max_speed_kmh: 1000.0,
+    max_turn_deg_s: 15.0,
+    z_priority: 30,
     is_drone: true,
     threat_level: "unknown",
 };
@@ -226,7 +307,7 @@ pub fn classify_target(raw_str: &str, raw_code: i64) -> (&'static str, &'static 
     // =========================================================================
     if !lower.is_empty() && lower != "ціль" && lower != "повітряна ціль" && lower != "об'єкт" && lower != "target" && lower != "unknown" {
         // 1. Реактивний шахед (shahed_jet)
-        if lower.contains("jet") || lower.contains("238") || lower.contains("реактив") || lower.contains("shahedjet") {
+        if lower.contains("jet") || lower.contains("238") || lower.contains("реактив") || lower.contains("реакт") || lower.contains("shahedjet") {
             return ("shahed_jet", &THREAT_SHAHED_JET);
         }
 
@@ -297,7 +378,7 @@ pub fn classify_target(raw_str: &str, raw_code: i64) -> (&'static str, &'static 
         }
 
         // 11. Поршневий або mesh-дрон Shahed / Герань (shahed)
-        if raw_code == 1 || raw_code == 8 || raw_code == 11
+        if raw_code == 1 || raw_code == 11
             || lower.contains("шахед") || lower.contains("shahed") || lower.contains("геран")
             || lower.contains("136") || lower.contains("дрон-камікадзе") || lower.contains("гербера")
             || lower.contains("бпла") || lower.contains("дрон") || lower.contains("mesh")
@@ -313,8 +394,8 @@ pub fn classify_target(raw_str: &str, raw_code: i64) -> (&'static str, &'static 
     // ("Ціль", "Об'єкт"), забезпечуючи надійність радарних засічок та API Neptun.
     // =========================================================================
     match raw_code {
-        // Реактивний дрон
-        2 => ("shahed_jet", &THREAT_SHAHED_JET),
+        // Реактивний дрон (код 2, а також код 8 згідно динамічної таксономії UkraineAlarm AST ic_shahed_jet)
+        2 | 8 => ("shahed_jet", &THREAT_SHAHED_JET),
         // Балістика
         12 | 112 => ("ballistic", &THREAT_BALLISTIC),
         // Крилата ракета
@@ -333,8 +414,8 @@ pub fn classify_target(raw_str: &str, raw_code: i64) -> (&'static str, &'static 
         9 | 19 => ("aviation", &THREAT_AVIATION),
         // Артилерія
         10 => ("artillery", &THREAT_ARTILLERY),
-        // Поршневий шахед (включаючи канонічний код 1)
-        1 | 8 | 11 => ("shahed", &THREAT_SHAHED),
+        // Поршневий шахед (включаючи канонічний код 1 та 11)
+        1 | 11 => ("shahed", &THREAT_SHAHED),
         // =====================================================================
         // ФАЗА 3: НЕВІДОМИЙ ОБ'ЄКТ
         // =====================================================================
@@ -570,31 +651,31 @@ mod tests {
     fn test_classify_target_semantic_first() {
         let (cat1, meta1) = classify_target("Шахед-136 курсом на Полтаву", 0);
         assert_eq!(cat1, "shahed");
-        assert_eq!(meta1.color_hex, "#FFE600");
+        assert_eq!(meta1.color_hex, "#FACC15");
 
         let (cat2, meta2) = classify_target("Реактивний шахед Shahed-238", 0);
         assert_eq!(cat2, "shahed_jet");
-        assert_eq!(meta2.color_hex, "#00F0FF");
+        assert_eq!(meta2.color_hex, "#00E5FF");
 
         let (cat3, meta3) = classify_target("Загроза балістики (Іскандер-М)", 0);
         assert_eq!(cat3, "ballistic");
-        assert_eq!(meta3.color_hex, "#FF003C");
+        assert_eq!(meta3.color_hex, "#DC2626");
 
         let (cat4, meta4) = classify_target("Крилата ракета Х-101 / Калібр", 0);
         assert_eq!(cat4, "missile");
-        assert_eq!(meta4.color_hex, "#FF2D55");
+        assert_eq!(meta4.color_hex, "#EF4444");
 
         let (cat5, meta5) = classify_target("Скидання КАБ / керованих авіабомб", 0);
         assert_eq!(cat5, "kab");
-        assert_eq!(meta5.color_hex, "#FF9500");
+        assert_eq!(meta5.color_hex, "#FB923C");
 
         let (cat6, meta6) = classify_target("БпЛА Ланцет у зоні ураження", 0);
         assert_eq!(cat6, "lancet");
-        assert_eq!(meta6.color_hex, "#FF007A");
+        assert_eq!(meta6.color_hex, "#F43F5E");
 
         let (cat7, meta7) = classify_target("Розвідник Zala / Supercam", 0);
         assert_eq!(cat7, "recon");
-        assert_eq!(meta7.color_hex, "#B388FF");
+        assert_eq!(meta7.color_hex, "#A855F7");
     }
 
     #[test]
@@ -605,6 +686,16 @@ mod tests {
 
         let (cat2, _) = classify_target("", 2);
         assert_eq!(cat2, "shahed_jet");
+
+        // Код 8 (динамічна таксономія UkraineAlarm AST для Реакт.уд.дрон / Shahed-238)
+        let (cat2_code8, meta2_code8) = classify_target("", 8);
+        assert_eq!(cat2_code8, "shahed_jet");
+        assert_eq!(meta2_code8.color_hex, "#00E5FF");
+
+        // Семантична назва "Реакт.уд.дрон" з кодом 8
+        let (cat2_name, meta2_name) = classify_target("Реакт.уд.дрон", 8);
+        assert_eq!(cat2_name, "shahed_jet");
+        assert_eq!(meta2_name.color_hex, "#00E5FF");
 
         let (cat3, _) = classify_target("Повітряна ціль", 3);
         assert_eq!(cat3, "missile");

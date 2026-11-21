@@ -59,6 +59,8 @@ pub struct User {
     pub alert_mig: bool,
     #[serde(default = "default_true")]
     pub alert_artillery: bool,
+    #[serde(default = "default_true")]
+    pub can_view_military_poi: bool,
     #[serde(default)]
     pub slots: HashMap<String, Slot>,
     pub created_at: String,
@@ -77,6 +79,7 @@ impl User {
             alert_siren: true,
             alert_mig: true,
             alert_artillery: true,
+            can_view_military_poi: false,
             slots: HashMap::new(),
             created_at: "".to_string(),
             last_seen_ts: None,
@@ -85,6 +88,7 @@ impl User {
 }
 
 fn default_true() -> bool { true }
+fn default_false() -> bool { false }
 fn default_danger_zone() -> f64 { 35.0 }
 fn default_react_threats() -> Vec<String> {
     vec![
@@ -216,6 +220,8 @@ pub struct HubConfigData {
     pub service_keys: ServiceKeysConfig,
     #[serde(default = "default_stream_sources")]
     pub streams: Vec<StreamSourceConfig>,
+    #[serde(default = "default_false")]
+    pub show_military_poi_default: bool,
 }
 
 fn default_sync_hours() -> u32 { 12 }
@@ -232,6 +238,7 @@ impl Default for HubConfigData {
             last_gdrive_sync_ts: None,
             service_keys: ServiceKeysConfig::default(),
             streams: default_stream_sources(),
+            show_military_poi_default: false,
         }
     }
 }
@@ -246,6 +253,15 @@ pub struct PoiItem {
     pub oblast: String,
     pub significance: String,
     pub status: String,
+}
+
+impl PoiItem {
+    pub fn is_military(&self) -> bool {
+        matches!(
+            self.category.as_str(),
+            "airbases" | "air_defense" | "defense_industry" | "ammo_depots" | "radar_sites" | "command_posts" | "training_camps"
+        )
+    }
 }
 
 pub struct StorageManager {
@@ -263,9 +279,20 @@ impl StorageManager {
 
         let poi_path = data_dir.join("poi.json");
         let mut loaded_pois = Vec::new();
+        let mut loaded_pois_ok = false;
         if poi_path.exists() {
             if let Ok(content) = fs::read_to_string(&poi_path) {
                 if let Ok(parsed) = serde_json::from_str::<Vec<PoiItem>>(&content) {
+                    loaded_pois = parsed;
+                    loaded_pois_ok = true;
+                }
+            }
+        }
+        let poi_bak = poi_path.with_extension("json.bak");
+        if !loaded_pois_ok && poi_bak.exists() {
+            if let Ok(content) = fs::read_to_string(&poi_bak) {
+                if let Ok(parsed) = serde_json::from_str::<Vec<PoiItem>>(&content) {
+                    tracing::warn!("Recovered POI database from backup {:?}", poi_bak);
                     loaded_pois = parsed;
                 }
             }
@@ -281,9 +308,23 @@ impl StorageManager {
             }
         }
 
+        let mut loaded_from_primary = false;
         if file_path.exists() {
             if let Ok(content) = fs::read_to_string(&file_path) {
                 if let Ok(parsed) = serde_json::from_str::<HubConfigData>(&content) {
+                    loaded = parsed;
+                    loaded_from_primary = true;
+                } else {
+                    tracing::error!("Hub config at {:?} is corrupted! Attempting recovery from backup...", file_path);
+                }
+            }
+        }
+
+        let bak_path = file_path.with_extension("json.bak");
+        if !loaded_from_primary && bak_path.exists() {
+            if let Ok(content) = fs::read_to_string(&bak_path) {
+                if let Ok(parsed) = serde_json::from_str::<HubConfigData>(&content) {
+                    tracing::warn!("Successfully recovered hub configuration from backup {:?}", bak_path);
                     loaded = parsed;
                 }
             }
@@ -324,6 +365,7 @@ impl StorageManager {
                     alert_siren: true,
                     alert_mig: true,
                     alert_artillery: true,
+                    can_view_military_poi: true,
                     slots,
                     created_at: chrono::Utc::now().to_rfc3339(),
                     last_seen_ts: Some(now_ts()),
@@ -432,8 +474,26 @@ impl StorageManager {
         Ok(res)
     }
 
-    pub fn get_pois(&self) -> Vec<PoiItem> {
-        self.poi_items.read().clone()
+    pub fn get_pois(&self, include_military: bool) -> Vec<PoiItem> {
+        let guard = self.poi_items.read();
+        if include_military {
+            guard.clone()
+        } else {
+            guard.iter().filter(|p| !p.is_military()).cloned().collect()
+        }
+    }
+
+    pub fn get_show_military_poi_default(&self) -> bool {
+        self.data.read().show_military_poi_default
+    }
+
+    #[allow(dead_code)]
+    pub fn set_show_military_poi_default(&self, val: bool) -> Result<(), String> {
+        {
+            let mut guard = self.data.write();
+            guard.show_military_poi_default = val;
+        }
+        self.save_atomic()
     }
 
     pub fn save_poi(&self, item: PoiItem) -> Result<(), String> {
@@ -472,15 +532,19 @@ impl StorageManager {
         let pid = std::process::id();
         let ts = now_ts();
         let tmp_path = self.poi_path.with_extension(format!("tmp.{}_{}", pid, ts));
+        let bak_path = self.poi_path.with_extension("json.bak");
+
         if let Ok(mut f) = File::create(&tmp_path) {
-            let write_ok = f.write_all(json_str.as_bytes()).and_then(|_| f.flush());
+            let write_ok = f.write_all(json_str.as_bytes()).and_then(|_| f.sync_all());
             drop(f);
             if write_ok.is_ok() {
                 if fs::rename(&tmp_path, &self.poi_path).is_ok() {
+                    let _ = fs::copy(&self.poi_path, &bak_path);
                     return Ok(());
                 }
                 if fs::copy(&tmp_path, &self.poi_path).is_ok() {
                     let _ = fs::remove_file(&tmp_path);
+                    let _ = fs::copy(&self.poi_path, &bak_path);
                     return Ok(());
                 }
                 let _ = fs::remove_file(&tmp_path);
@@ -491,11 +555,12 @@ impl StorageManager {
 
         let mut direct_f = File::create(&self.poi_path).map_err(|e| e.to_string())?;
         direct_f.write_all(json_str.as_bytes()).map_err(|e| e.to_string())?;
-        direct_f.flush().map_err(|e| e.to_string())?;
+        direct_f.sync_all().map_err(|e| e.to_string())?;
+        let _ = fs::copy(&self.poi_path, &bak_path);
         Ok(())
     }
 
-    /// Атомарний запис конфігурації (.tmp.{pid}_{ts} -> rename) з багаторівневим fallback (copy / direct write)
+    /// Атомарний запис конфігурації (.tmp.{pid}_{ts} -> rename) з fsync (sync_all), створенням .bak та fallback
     pub fn save_atomic(&self) -> Result<(), String> {
         let json_str = {
             let guard = self.data.read();
@@ -509,15 +574,17 @@ impl StorageManager {
         let pid = std::process::id();
         let ts = now_ts();
         let tmp_path = self.file_path.with_extension(format!("tmp.{}_{}", pid, ts));
+        let bak_path = self.file_path.with_extension("json.bak");
 
-        // Спроба 1: Створення .tmp файлу та атомарний rename
+        // Спроба 1: Створення .tmp файлу та атомарний rename з обов'язковим sync_all() (fsync)
         if let Ok(mut f) = File::create(&tmp_path) {
-            let write_ok = f.write_all(json_str.as_bytes()).and_then(|_| f.flush());
+            let write_ok = f.write_all(json_str.as_bytes()).and_then(|_| f.sync_all());
             drop(f);
 
             if write_ok.is_ok() {
                 // Спроба атомарного rename
                 if fs::rename(&tmp_path, &self.file_path).is_ok() {
+                    let _ = fs::copy(&self.file_path, &bak_path);
                     return Ok(());
                 }
 
@@ -525,6 +592,7 @@ impl StorageManager {
                 // або різні точки монтування / overlayfs EXDEV/EBUSY/ENOENT), копіюємо вміст поверх цільового файлу
                 if fs::copy(&tmp_path, &self.file_path).is_ok() {
                     let _ = fs::remove_file(&tmp_path);
+                    let _ = fs::copy(&self.file_path, &bak_path);
                     tracing::info!("save_atomic: updated {:?} via copy fallback", self.file_path);
                     return Ok(());
                 }
@@ -539,7 +607,8 @@ impl StorageManager {
         match File::create(&self.file_path) {
             Ok(mut direct_f) => {
                 direct_f.write_all(json_str.as_bytes()).map_err(|e| format!("Direct write failed: {}", e))?;
-                direct_f.flush().map_err(|e| format!("Direct flush failed: {}", e))?;
+                direct_f.sync_all().map_err(|e| format!("Direct fsync failed: {}", e))?;
+                let _ = fs::copy(&self.file_path, &bak_path);
                 tracing::warn!("Warning: save_atomic used direct write fallback for {:?}", self.file_path);
                 Ok(())
             }
@@ -583,7 +652,7 @@ impl StorageManager {
         guard.users.values().cloned().collect()
     }
 
-    pub fn update_user_meta(&self, key: &str, owner: Option<String>, enabled: Option<bool>) -> Result<(), String> {
+    pub fn update_user_meta(&self, key: &str, owner: Option<String>, enabled: Option<bool>, can_view_military_poi: Option<bool>) -> Result<(), String> {
         {
             let mut guard = self.data.write();
             let user = guard.users.get_mut(key).ok_or_else(|| "User not found".to_string())?;
@@ -592,6 +661,9 @@ impl StorageManager {
             }
             if let Some(e) = enabled {
                 user.enabled = e;
+            }
+            if let Some(cv) = can_view_military_poi {
+                user.can_view_military_poi = cv;
             }
         }
         self.save_atomic()
@@ -767,10 +839,17 @@ impl StorageManager {
         guard.service_keys.cartodb_global_api_key.clone()
     }
 
-    pub fn create_user(&self, owner: &str) -> Result<User, String> {
+    pub fn create_user(&self, owner: &str, detector: Option<&crate::oblast_detector::OblastDetector>) -> Result<User, String> {
         let mut random_bytes = [0u8; 16];
         rand::thread_rng().fill_bytes(&mut random_bytes);
         let api_key = format!("ak_{}", hex::encode(random_bytes));
+
+        let (ob, ob_id, ra, ra_id) = if let Some(det) = detector {
+            let loc = det.find_location_info(50.4501, 30.5234);
+            (Some(loc.oblast), Some(loc.oblast_id), Some(loc.raion), Some(loc.raion_id))
+        } else {
+            (None, None, None, None)
+        };
 
         let new_user = User {
             owner: owner.to_string(),
@@ -782,6 +861,7 @@ impl StorageManager {
             alert_siren: true,
             alert_mig: true,
             alert_artillery: true,
+            can_view_military_poi: true,
             slots: {
                 let mut def_slots = HashMap::new();
                 def_slots.insert("1".to_string(), Slot {
@@ -797,10 +877,10 @@ impl StorageManager {
                     alert_mig: true,
                     alert_artillery: true,
                     is_dynamic: false,
-                    oblast: None,
-                    oblast_id: None,
-                    raion: None,
-                    raion_id: None,
+                    oblast: ob,
+                    oblast_id: ob_id,
+                    raion: ra,
+                    raion_id: ra_id,
                     accuracy_m: None,
                 });
                 def_slots
@@ -1089,15 +1169,38 @@ impl StorageManager {
     pub fn update_gdrive_config(
         &self,
         recording: Option<bool>,
+        sync_enabled: Option<bool>,
         webhook_url: Option<String>,
         folder_url: Option<String>,
         auto_sync_hours: Option<u32>,
     ) -> Result<(), String> {
         let mut guard = self.data.write();
         if let Some(r) = recording { guard.history_recording = r; }
-        if let Some(w) = webhook_url { guard.gdrive_webhook_url = Some(w); }
-        if let Some(f) = folder_url { guard.gdrive_folder_url = Some(f); }
+        if let Some(s) = sync_enabled { guard.gdrive_sync_enabled = s; }
+        if let Some(w) = webhook_url {
+            let trimmed = w.trim().to_string();
+            if trimmed.is_empty() {
+                guard.gdrive_webhook_url = None;
+                guard.gdrive_sync_enabled = false;
+            } else {
+                if !trimmed.starts_with("https://") {
+                    return Err("Google Drive Webhook URL must use HTTPS scheme".to_string());
+                }
+                guard.gdrive_webhook_url = Some(trimmed);
+            }
+        }
+        if let Some(f) = folder_url {
+            let trimmed = f.trim().to_string();
+            if trimmed.is_empty() {
+                guard.gdrive_folder_url = None;
+            } else {
+                guard.gdrive_folder_url = Some(trimmed);
+            }
+        }
         if let Some(h) = auto_sync_hours { guard.gdrive_auto_sync_hours = h; }
+        if sync_enabled.is_none() && guard.gdrive_webhook_url.is_some() && guard.gdrive_auto_sync_hours > 0 {
+            guard.gdrive_sync_enabled = true;
+        }
         drop(guard);
         self.save_atomic()
     }
@@ -1123,6 +1226,34 @@ mod tests {
         assert!(guest.slots.is_empty(), "Guest must not have pre-configured private observation slots");
         assert_eq!(guest.default_danger_zone, 35.0);
         assert!(guest.enabled);
+        assert!(!guest.can_view_military_poi, "Guest must not have military POI access");
+    }
+
+    #[test]
+    fn test_poi_military_filtering_and_rbac() {
+        let airbase = PoiItem {
+            id: "poi_air_1".to_string(),
+            category: "airbases".to_string(),
+            name: "Аеродром".to_string(),
+            lat: 50.0,
+            lon: 30.0,
+            oblast: "Київська".to_string(),
+            significance: "strategic".to_string(),
+            status: "active".to_string(),
+        };
+        let energy = PoiItem {
+            id: "poi_eng_1".to_string(),
+            category: "energy_hubs".to_string(),
+            name: "ТЕЦ-5".to_string(),
+            lat: 50.4,
+            lon: 30.5,
+            oblast: "м. Київ".to_string(),
+            significance: "critical".to_string(),
+            status: "active".to_string(),
+        };
+
+        assert!(airbase.is_military(), "Airbases category must be military");
+        assert!(!energy.is_military(), "Energy hubs category must be civilian");
     }
 
     #[test]
@@ -1140,5 +1271,29 @@ mod tests {
         defaults.sort_by_key(|s| s.priority);
         assert_eq!(defaults[0].priority, 0);
         assert_eq!(defaults[0].id, "neptun_targets");
+    }
+
+    #[test]
+    fn test_storage_disaster_recovery_from_backup() {
+        let temp_dir = std::env::temp_dir().join(format!("air_hub_test_{}_{}", std::process::id(), now_ts()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let detector = OblastDetector::default();
+
+        let mgr = StorageManager::new(&temp_dir, &[("admin_user".to_string(), "ak_test123".to_string())], &detector, 35.0);
+        let _ = mgr.save_atomic();
+
+        let cfg_path = temp_dir.join("hub_config.json");
+        let bak_path = temp_dir.join("hub_config.json.bak");
+        assert!(cfg_path.exists(), "Primary config must exist");
+        assert!(bak_path.exists(), "Backup config (.bak) must exist after save_atomic");
+
+        // Симуляція раптового пошкодження основного файлу (битий JSON)
+        fs::write(&cfg_path, b"CORRUPTED_ZERO_BYTE_DATA_OR_TRUNCATED_JSON").unwrap();
+
+        // Переініціалізація сховища: повинно автоматично відновитися з .bak
+        let recovered_mgr = StorageManager::new(&temp_dir, &[], &detector, 35.0);
+        assert!(recovered_mgr.get_user_by_key("ak_test123").is_some(), "User must be successfully recovered from .bak");
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

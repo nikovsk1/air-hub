@@ -96,6 +96,36 @@ pub fn get_canonical_raion_to_oblast() -> &'static HashMap<&'static str, &'stati
     })
 }
 
+/// Канонічні аліаси перейменованих районів України (згідно з постановами Верховної Ради України)
+pub fn get_renamed_raion_aliases() -> &'static [(&'static str, &'static str)] {
+    &[
+        // Звягельський район (Житомирська обл., ID 60, раніше Новоград-Волинський, Постанова ВРУ № 2779-IX)
+        ("звягельський район", "60"),
+        ("звягельський", "60"),
+        ("звягель", "60"),
+        ("м. звягель", "60"),
+        ("новоград-волинський район", "60"),
+        ("новоград-волинський", "60"),
+
+        // Володимирський район (Волинська обл., ID 38, раніше Володимир-Волинський, Постанова ВРУ № 2443-IX)
+        ("володимирський район", "38"),
+        ("володимирський", "38"),
+        ("володимир", "38"),
+        ("м. володимир", "38"),
+        ("володимир-волинський район", "38"),
+        ("володимир-волинський", "38"),
+
+        // Шептицький район (Львівська обл., ID 92, раніше Червоноградський, Постанова ВРУ № 3984-IX)
+        ("шептицький район", "92"),
+        ("шептицький", "92"),
+        ("шептицького", "92"),
+        ("шептицького район", "92"),
+        ("м. шептицький", "92"),
+        ("червоноградський район", "92"),
+        ("червоноградський", "92"),
+    ]
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationInfo {
     pub oblast: String,
@@ -238,6 +268,11 @@ impl OblastDetector {
                         detector.raion_name_to_id.insert(short, reg_id);
                     }
                 }
+            }
+
+            // Реєстрація канонічних аліасів офіційно перейменованих районів України
+            for &(alias, raion_id) in get_renamed_raion_aliases() {
+                detector.raion_name_to_id.insert(alias.to_string(), raion_id.to_string());
             }
 
             // 3. Обробка міст-анклавів (Rank 3, які утворюють геометричні вирізи в областях та районах)
@@ -468,7 +503,11 @@ impl OblastDetector {
         if name.is_empty() {
             return "0".to_string();
         }
-        let clean = name.to_lowercase().trim().to_string();
+        let clean = name.to_lowercase()
+            .replace("р-н", "район")
+            .replace("р.", "район")
+            .trim()
+            .to_string();
         if let Some(id) = self.raion_name_to_id.get(&clean) {
             return id.clone();
         }
@@ -479,6 +518,12 @@ impl OblastDetector {
         for (k, v) in &self.raion_name_to_id {
             if !short.is_empty() && (k.contains(&short) || short.contains(k)) {
                 return v.clone();
+            }
+        }
+        // Перевірка аліасів перейменованих районів на випадок прямого звернення
+        for &(alias, id) in get_renamed_raion_aliases() {
+            if clean == alias || clean.contains(alias) || alias.contains(&clean) {
+                return id.to_string();
             }
         }
         "0".to_string()
@@ -582,4 +627,49 @@ fn calculate_bbox(polygons: &[Vec<Vec<(f64, f64)>>]) -> (f64, f64, f64, f64) {
     }
 
     (min_lon, min_lat, max_lon, max_lat)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_renamed_raion_aliases_resolution() {
+        let mut detector = OblastDetector::default();
+        for &(alias, id) in get_renamed_raion_aliases() {
+            detector.raion_name_to_id.insert(alias.to_string(), id.to_string());
+        }
+
+        // Звягельський (60) - Постанова ВРУ № 2779-IX (колишній Новоград-Волинський)
+        assert_eq!(detector.get_raion_id_by_name("Звягельський район"), "60");
+        assert_eq!(detector.get_raion_id_by_name("Звягельський р-н"), "60");
+        assert_eq!(detector.get_raion_id_by_name("м. Звягель"), "60");
+        assert_eq!(detector.get_raion_id_by_name("Новоград-Волинський район"), "60");
+
+        // Володимирський (38) - Постанова ВРУ № 2443-IX (колишній Володимир-Волинський)
+        assert_eq!(detector.get_raion_id_by_name("Володимирський район"), "38");
+        assert_eq!(detector.get_raion_id_by_name("Володимирський р-н"), "38");
+        assert_eq!(detector.get_raion_id_by_name("Володимир-Волинський район"), "38");
+
+        // Шептицький (92) - Постанова ВРУ № 3984-IX (колишній Червоноградський)
+        assert_eq!(detector.get_raion_id_by_name("Шептицький район"), "92");
+        assert_eq!(detector.get_raion_id_by_name("Шептицький р-н"), "92");
+        assert_eq!(detector.get_raion_id_by_name("Червоноградський район"), "92");
+
+        // Невідомий район повертає "0"
+        assert_eq!(detector.get_raion_id_by_name("Неіснуючий район"), "0");
+        assert_eq!(detector.get_raion_id_by_name(""), "0");
+    }
+
+    #[test]
+    fn test_canonical_raion_to_oblast_mappings() {
+        let canonical = get_canonical_raion_to_oblast();
+        // Перевірка районів Київської області (14): 73-79
+        assert_eq!(canonical.get("73").copied(), Some("14")); // Білоцерківський
+        assert_eq!(canonical.get("75").copied(), Some("14")); // Бучанський
+        // Перевірка районів Харківської області (22)
+        assert_eq!(canonical.get("124").copied(), Some("22")); // Харківський
+        // Перевірка районів Львівської області (27)
+        assert_eq!(canonical.get("88").copied(), Some("27")); // Львівський
+    }
 }
