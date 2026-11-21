@@ -2637,6 +2637,15 @@
       // Disable double click zoom so fast double-clicks or double-taps to dismiss never zoom in
       map.doubleClickZoom.disable();
 
+      // Suppress benign AbortError thrown by MapLibre when in-flight tile requests are superseded by zoom/provider switch
+      map.on('error', (e) => {
+        const err = e && (e.error || e);
+        if (err && (err.name === 'AbortError' || err.message?.includes('AbortError') || err.message?.includes('abort') || e.status === 0)) {
+          return;
+        }
+        console.warn('[MapLibre]', err);
+      });
+
       map.on('load', () => {
         isMapLoaded = true;
 
@@ -4029,7 +4038,6 @@
 
     // Basemap switching controller (Layer visibility toggling - Zero map.setStyle wipeout)
     function setBasemap(provider) {
-      if (!map) return;
       currentBasemap = provider;
 
       ['btnBaseArcgis', 'btnBaseCarto', 'btnBaseSatellite'].forEach(id => {
@@ -4041,6 +4049,8 @@
         const pNorm = (provider === 'cartodb' || provider === 'carto') ? 'carto' : ((provider === 'satellite' || provider === 'esri') ? 'satellite' : 'arcgis');
         syncProviderCardsUI(pNorm);
       }
+
+      if (!map || !isMapLoaded) return;
 
       const effectiveKey = (typeof getEffectiveCartoToken === 'function')
         ? getEffectiveCartoToken()
@@ -7115,9 +7125,13 @@
       );
     }
 
+    let lastAppliedCartoToken = null;
     function applyCartoTilesWithToken(token) {
-      if (!map || !map.getSource('carto-dark')) return;
+      if (!isMapLoaded || !map || !map.getSource('carto-dark')) return;
       const clean = (token || '').trim();
+      if (lastAppliedCartoToken === clean) return;
+      lastAppliedCartoToken = clean;
+
       const q = clean
         ? `?key=${encodeURIComponent(clean)}&api_key=${encodeURIComponent(clean)}`
         : '';
@@ -7127,13 +7141,19 @@
         `https://c.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png${q}`,
         `https://d.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png${q}`
       ];
-      const src = map.getSource('carto-dark');
-      if (typeof src.setTiles === 'function') {
-        src.setTiles(tiles);
-      }
-      if (map.style && map.style.sourceCaches && map.style.sourceCaches['carto-dark']) {
-        map.style.sourceCaches['carto-dark'].clearTiles();
-        map.style.sourceCaches['carto-dark'].update(map.transform);
+      try {
+        const src = map.getSource('carto-dark');
+        if (src && typeof src.setTiles === 'function') {
+          const curTiles = src.tiles || [];
+          if (curTiles.length === tiles.length && curTiles[0] === tiles[0]) {
+            return;
+          }
+          src.setTiles(tiles);
+        }
+      } catch (err) {
+        if (err && err.name !== 'AbortError') {
+          console.warn('[Carto] setTiles error:', err);
+        }
       }
       map.triggerRepaint();
     }
@@ -7186,10 +7206,6 @@
       const tokenInput = document.getElementById('mapApiToken');
       if (tokenInput) {
         tokenInput.value = clientToken ? savedCartoToken : '';
-      }
-
-      if (savedCartoToken) {
-        applyCartoTilesWithToken(savedCartoToken);
       }
 
       const normProvider = (savedProvider === 'cartodb' || savedProvider === 'carto') 
@@ -8222,7 +8238,6 @@
       loadRegionsData();
       loadPoiData();
       fetchUserSlots();
-      loadMapProviderConfig();
       initMapEngine();
       checkAndStartStressMode();
     });
