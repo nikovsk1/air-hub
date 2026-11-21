@@ -61,6 +61,11 @@ fn quarter_round(st: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize) {
     st[b] = rotl(st[b] ^ st[c], 7);
 }
 
+#[inline]
+fn read_u32_le_safe(slice: &[u8]) -> Result<u32, String> {
+    slice.try_into().map(u32::from_le_bytes).map_err(|_| "Invalid slice length for u32".to_string())
+}
+
 /// Декодування зашифрованого ChaCha20/AST корисного навантаження від карти ukrainealarm (~5:, ~6: тощо)
 pub fn decode_payload_native(payload_str: &str) -> Result<Value, String> {
     let colon_pos = payload_str.find(':').ok_or_else(|| "Missing colon in payload prefix".to_string())?;
@@ -72,9 +77,9 @@ pub fn decode_payload_native(payload_str: &str) -> Result<Value, String> {
         return Err("Payload too short: < 16 bytes".to_string());
     }
 
-    let f = u32::from_le_bytes(raw_bytes[0..4].try_into().unwrap());
-    let h = u32::from_le_bytes(raw_bytes[4..8].try_into().unwrap());
-    let g = u32::from_le_bytes(raw_bytes[8..12].try_into().unwrap());
+    let f = read_u32_le_safe(&raw_bytes[0..4])?;
+    let h = read_u32_le_safe(&raw_bytes[4..8])?;
+    let g = read_u32_le_safe(&raw_bytes[8..12])?;
 
     let mut state_arr: [u32; 16] = [
         1634760805, 857760878, 2036477234, 1797285236,
@@ -193,8 +198,8 @@ pub fn decode_payload_native(payload_str: &str) -> Result<Value, String> {
                 if *offset + 8 > raw.len() {
                     return Err("EOF reading f64".to_string());
                 }
-                let u0 = u32::from_le_bytes(raw[*offset..*offset + 4].try_into().unwrap()) ^ xor_rng.next();
-                let u1 = u32::from_le_bytes(raw[*offset + 4..*offset + 8].try_into().unwrap()) ^ xor_rng.next();
+                let u0 = read_u32_le_safe(&raw[*offset..*offset + 4])? ^ xor_rng.next();
+                let u1 = read_u32_le_safe(&raw[*offset + 4..*offset + 8])? ^ xor_rng.next();
                 *offset += 8;
                 let mut bytes = [0u8; 8];
                 bytes[0..4].copy_from_slice(&u0.to_le_bytes());
@@ -755,20 +760,23 @@ static RE_ANIM_ROT: OnceLock<Regex> = OnceLock::new();
 
 /// Парсинг векторних цілей з декомпресованого SVG-документа
 pub fn extract_targets_from_svg(svg_str: &str) -> Result<Vec<RawExtractedTarget>, String> {
-    let re_title_tag = RE_TITLE_TAG.get_or_init(|| Regex::new(r"(?i)<title\b([^>]*)>(.*?)</title>").unwrap());
-    let re_title_attr = RE_TITLE_ATTR.get_or_init(|| Regex::new(r#"(?i)\bdata-l=["']([^"']+)["']"#).unwrap());
-    let re_id = RE_ID.get_or_init(|| Regex::new(r#"(?i)\bid=["']([^"']+)["']"#).unwrap());
-    let re_trans = RE_TRANS.get_or_init(|| Regex::new(r"(?i)translate\(\s*([-\d\.]+)[,\s]+([-\d\.]+)\s*\)").unwrap());
-    let re_anim_trans = RE_ANIM_TRANS.get_or_init(|| Regex::new(r#"(?is)<animateTransform\b[^>]*\btype=["']translate["'][^>]*(?:from|to|values)=["']([-\d\.]+)[,\s]+([-\d\.]+)"#).unwrap());
-    let re_matrix = RE_MATRIX.get_or_init(|| Regex::new(r"(?i)matrix\(\s*[-\d\.]+[,\s]+[-\d\.]+[,\s]+[-\d\.]+[,\s]+[-\d\.]+[,\s]+([-\d\.]+)[,\s]+([-\d\.]+)\s*\)").unwrap());
-    let re_rot = RE_ROT.get_or_init(|| Regex::new(r"(?i)rotate\(\s*([-\d\.]+)").unwrap());
-    let re_anim_rot = RE_ANIM_ROT.get_or_init(|| Regex::new(r#"(?is)<animateTransform\b[^>]*\btype=["']rotate["'][^>]*(?:from|to|values)=["']([-\d\.]+)"#).unwrap());
+    let re_title_tag = RE_TITLE_TAG.get_or_init(|| Regex::new(r"(?i)<title\b([^>]*)>(.*?)</title>").expect("valid title tag regex"));
+    let re_title_attr = RE_TITLE_ATTR.get_or_init(|| Regex::new(r#"(?i)\bdata-l=["']([^"']+)["']"#).expect("valid title attr regex"));
+    let re_id = RE_ID.get_or_init(|| Regex::new(r#"(?i)\bid=["']([^"']+)["']"#).expect("valid id regex"));
+    let re_trans = RE_TRANS.get_or_init(|| Regex::new(r"(?i)translate\(\s*([-\d\.]+)[,\s]+([-\d\.]+)\s*\)").expect("valid trans regex"));
+    let re_anim_trans = RE_ANIM_TRANS.get_or_init(|| Regex::new(r#"(?is)<animateTransform\b[^>]*\btype=["']translate["'][^>]*(?:from|to|values)=["']([-\d\.]+)[,\s]+([-\d\.]+)"#).expect("valid anim trans regex"));
+    let re_matrix = RE_MATRIX.get_or_init(|| Regex::new(r"(?i)matrix\(\s*[-\d\.]+[,\s]+[-\d\.]+[,\s]+[-\d\.]+[,\s]+[-\d\.]+[,\s]+([-\d\.]+)[,\s]+([-\d\.]+)\s*\)").expect("valid matrix regex"));
+    let re_rot = RE_ROT.get_or_init(|| Regex::new(r"(?i)rotate\(\s*([-\d\.]+)").expect("valid rot regex"));
+    let re_anim_rot = RE_ANIM_ROT.get_or_init(|| Regex::new(r#"(?is)<animateTransform\b[^>]*\btype=["']rotate["'][^>]*(?:from|to|values)=["']([-\d\.]+)"#).expect("valid anim rot regex"));
 
     let mut results = Vec::new();
 
     // Кожна векторна ціль має елемент <title>
     for title_cap in re_title_tag.captures_iter(svg_str) {
-        let title_match = title_cap.get(0).unwrap();
+        let title_match = match title_cap.get(0) {
+            Some(m) => m,
+            None => continue,
+        };
         let title_pos = title_match.start();
 
         // Шукаємо найближчий відкриваючий тег <g перед <title>
@@ -873,10 +881,10 @@ pub fn decode_surface_v2_payload(payload_str: &str) -> Result<Vec<RawExtractedTa
         return Err("Payload too short: < 16 bytes".to_string());
     }
 
-    let f = u32::from_le_bytes(raw_bytes[0..4].try_into().unwrap());
-    let h = u32::from_le_bytes(raw_bytes[4..8].try_into().unwrap());
-    let g = u32::from_le_bytes(raw_bytes[8..12].try_into().unwrap());
-    let checksum_expected = u32::from_le_bytes(raw_bytes[12..16].try_into().unwrap());
+    let f = read_u32_le_safe(&raw_bytes[0..4])?;
+    let h = read_u32_le_safe(&raw_bytes[4..8])?;
+    let g = read_u32_le_safe(&raw_bytes[8..12])?;
+    let checksum_expected = read_u32_le_safe(&raw_bytes[12..16])?;
 
     let mut state_arr: [u32; 16] = [
         1634760805, 857760878, 2036477234, 1797285236,

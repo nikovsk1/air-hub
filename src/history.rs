@@ -7,7 +7,7 @@ use parking_lot::RwLock;
 use chrono::{Datelike, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::storage::now_ts;
 use crate::tracker::TargetTrack;
@@ -496,8 +496,56 @@ impl HistoryManager {
             let file_path = self.history_dir.join(format!("flight_history_{}.json", month));
             let meta_file_path = self.history_dir.join(format!("flight_history_{}.meta.json", month));
             let pid = std::process::id();
-            let tmp_path = file_path.with_extension(format!("tmp.{}_{}", pid, now_ts()));
+            let now_rfc3339 = Utc::now().to_rfc3339();
 
+            // 1. Оновлюємо добові файли history/YYYY-MM/YYYY-MM-DD.json ТІЛЬКИ для змінених днів (захист eMMC від зносу)
+            let month_dir = self.history_dir.join(&month);
+            let _ = fs::create_dir_all(&month_dir);
+            let mut days_to_update: HashMap<String, HashMap<String, Value>> = HashMap::new();
+            if let Some(new_targets) = dirty_batch.get(&month) {
+                for (tid, item) in new_targets {
+                    if let Some(d) = item.get("date").and_then(|v| v.as_str()) {
+                        days_to_update.entry(d.to_string()).or_default().insert(tid.clone(), item.clone());
+                    }
+                }
+            }
+            for (date_str, day_items) in days_to_update {
+                let day_file_path = month_dir.join(format!("{}.json", date_str));
+                let mut day_targets = HashMap::new();
+                if day_file_path.exists() {
+                    if let Ok(c) = fs::read_to_string(&day_file_path) {
+                        if let Ok(v) = serde_json::from_str::<Value>(&c) {
+                            if let Some(t_obj) = v.get("targets").and_then(|t| t.as_object()) {
+                                for (k, val) in t_obj {
+                                    day_targets.insert(k.clone(), val.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+                for (tid, item) in day_items {
+                    day_targets.insert(tid, item);
+                }
+                let day_summary = disk_summaries.get(&date_str).cloned();
+                let day_data = json!({
+                    "date": &date_str,
+                    "month": &month,
+                    "summary": day_summary,
+                    "total_targets": day_targets.len(),
+                    "targets": day_targets
+                });
+                if let Ok(d_str) = serde_json::to_string(&day_data) {
+                    let tmp_day = day_file_path.with_extension(format!("tmp.{}_{}", pid, now_ts()));
+                    if let Ok(mut df) = File::create(&tmp_day) {
+                        let _ = df.write_all(d_str.as_bytes());
+                        let _ = df.sync_all();
+                        drop(df);
+                        let _ = fs::rename(&tmp_day, &day_file_path);
+                    }
+                }
+            }
+
+            // 2. Оновлюємо легкий .meta.json індекс
             let mut dates_set = std::collections::BTreeSet::new();
             for t in targets.values() {
                 if let Some(d) = t.get("date").and_then(|v| v.as_str()) {
@@ -506,111 +554,111 @@ impl HistoryManager {
                     }
                 }
             }
+            for d in disk_summaries.keys() {
+                dates_set.insert(d.clone());
+            }
             let dates_vec: Vec<String> = dates_set.into_iter().collect();
-
             let total_t = targets.len();
-            let now_rfc3339 = Utc::now().to_rfc3339();
-            let full_data = json!({
+
+            let meta_json = json!({
                 "meta": {
                     "month": &month,
                     "updated_at": &now_rfc3339,
                     "total_targets": total_t,
                     "dates": &dates_vec
-                },
-                "daily_summaries": disk_summaries,
-                "month": &month,
-                "updated_at": &now_rfc3339,
-                "total_targets": total_t,
-                "dates": &dates_vec,
-                "targets": targets
+                }
             });
+            if let Ok(meta_str) = serde_json::to_string(&meta_json) {
+                let _ = fs::write(&meta_file_path, meta_str.as_bytes());
+            }
 
-            if let Ok(json_str) = serde_json::to_string(&full_data) {
-                if let Ok(mut f) = File::create(&tmp_path) {
-                    let _ = f.write_all(json_str.as_bytes());
-                    let _ = f.sync_all();
-                    drop(f);
-                    let rename_res = fs::rename(&tmp_path, &file_path);
-                    let success = if rename_res.is_ok() {
-                        true
-                    } else if fs::copy(&tmp_path, &file_path).is_ok() {
-                        let _ = fs::remove_file(&tmp_path);
-                        true
-                    } else {
-                        let _ = fs::remove_file(&tmp_path);
-                        false
-                    };
+            // 3. Якщо монолітний місячний файл ще не існує на диску - створюємо його один раз
+            if !file_path.exists() {
+                let _ = self.consolidate_month_file(&month);
+            }
 
-                    if success {
-                        // Збереження легкого .meta.json індексу поруч із основним файлом
-                        let meta_json = json!({
-                            "meta": {
-                                "month": &month,
-                                "updated_at": &now_rfc3339,
-                                "total_targets": total_t,
-                                "dates": &dates_vec
-                            }
-                        });
-                        if let Ok(meta_str) = serde_json::to_string(&meta_json) {
-                            let _ = fs::write(&meta_file_path, meta_str.as_bytes());
-                        }
+            info!("Flushed flight history shards for {} ({} targets, {} daily summaries)", month, total_t, disk_summaries.len());
+            // Інвалідуємо старий запис у read_cache та оновлюємо мета-кеш дат
+            self.read_cache.write().remove(&month);
+            self.month_meta_cache.write().insert(month.clone(), (total_t, dates_vec, now_rfc3339));
+        }
+    }
 
-                        // Зберігаємо також окремий добовий файл у history/YYYY-MM/YYYY-MM-DD.json
-                        let month_dir = self.history_dir.join(&month);
-                        let _ = fs::create_dir_all(&month_dir);
-                        let mut days_to_update: HashMap<String, HashMap<String, Value>> = HashMap::new();
-                        if let Some(new_targets) = dirty_batch.get(&month) {
-                            for (tid, item) in new_targets {
-                                if let Some(d) = item.get("date").and_then(|v| v.as_str()) {
-                                    days_to_update.entry(d.to_string()).or_default().insert(tid.clone(), item.clone());
-                                }
-                            }
-                        }
-                        for (date_str, day_items) in days_to_update {
-                            let day_file_path = month_dir.join(format!("{}.json", date_str));
-                            let mut day_targets = HashMap::new();
-                            if day_file_path.exists() {
-                                if let Ok(c) = fs::read_to_string(&day_file_path) {
-                                    if let Ok(v) = serde_json::from_str::<Value>(&c) {
-                                        if let Some(t_obj) = v.get("targets").and_then(|t| t.as_object()) {
-                                            for (k, val) in t_obj {
-                                                day_targets.insert(k.clone(), val.clone());
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            for (tid, item) in day_items {
-                                day_targets.insert(tid, item);
-                            }
-                            let day_summary = disk_summaries.get(&date_str).cloned();
-                            let day_data = json!({
-                                "date": &date_str,
-                                "month": &month,
-                                "summary": day_summary,
-                                "total_targets": day_targets.len(),
-                                "targets": day_targets
-                            });
-                            if let Ok(d_str) = serde_json::to_string(&day_data) {
-                                let tmp_day = day_file_path.with_extension(format!("tmp.{}_{}", pid, now_ts()));
-                                if let Ok(mut df) = File::create(&tmp_day) {
-                                    let _ = df.write_all(d_str.as_bytes());
-                                    let _ = df.sync_all();
-                                    drop(df);
-                                    let _ = fs::rename(&tmp_day, &day_file_path);
-                                }
-                            }
-                        }
+    /// Консолідація добових файлів у єдиний монолітний місячний файл flight_history_{month}.json
+    pub fn consolidate_month_file(&self, month: &str) -> Result<(), String> {
+        let (targets, disk_summaries) = self.load_month_full_from_disk(month);
+        if targets.is_empty() && disk_summaries.is_empty() {
+            return Ok(());
+        }
 
-                        info!("Flushed flight history for {} ({} targets, {} daily summaries)", month, total_t, disk_summaries.len());
-                        // Інвалідуємо старий запис у read_cache та оновлюємо мета-кеш дат
-                        self.read_cache.write().remove(&month);
-                        self.month_meta_cache.write().insert(month.clone(), (total_t, dates_vec, now_rfc3339));
-                    } else {
-                        warn!("Failed to save flight history {}: rename and copy fallback failed", month);
-                    }
+        let file_path = self.history_dir.join(format!("flight_history_{}.json", month));
+        let meta_file_path = self.history_dir.join(format!("flight_history_{}.meta.json", month));
+        let pid = std::process::id();
+        let tmp_path = file_path.with_extension(format!("tmp.{}_{}", pid, now_ts()));
+
+        let mut dates_set = std::collections::BTreeSet::new();
+        for t in targets.values() {
+            if let Some(d) = t.get("date").and_then(|v| v.as_str()) {
+                if !d.is_empty() {
+                    dates_set.insert(d.to_string());
                 }
             }
+        }
+        for d in disk_summaries.keys() {
+            dates_set.insert(d.clone());
+        }
+        let dates_vec: Vec<String> = dates_set.into_iter().collect();
+
+        let total_t = targets.len();
+        let now_rfc3339 = Utc::now().to_rfc3339();
+        let full_data = json!({
+            "meta": {
+                "month": month,
+                "updated_at": &now_rfc3339,
+                "total_targets": total_t,
+                "dates": &dates_vec
+            },
+            "daily_summaries": disk_summaries,
+            "month": month,
+            "updated_at": &now_rfc3339,
+            "total_targets": total_t,
+            "dates": &dates_vec,
+            "targets": targets
+        });
+
+        let json_str = serde_json::to_string(&full_data).map_err(|e| e.to_string())?;
+        let mut f = File::create(&tmp_path).map_err(|e| e.to_string())?;
+        f.write_all(json_str.as_bytes()).map_err(|e| e.to_string())?;
+        let _ = f.sync_all();
+        drop(f);
+
+        let rename_res = fs::rename(&tmp_path, &file_path);
+        let success = if rename_res.is_ok() {
+            true
+        } else if fs::copy(&tmp_path, &file_path).is_ok() {
+            let _ = fs::remove_file(&tmp_path);
+            true
+        } else {
+            let _ = fs::remove_file(&tmp_path);
+            false
+        };
+
+        if success {
+            let meta_json = json!({
+                "meta": {
+                    "month": month,
+                    "updated_at": &now_rfc3339,
+                    "total_targets": total_t,
+                    "dates": &dates_vec
+                }
+            });
+            if let Ok(meta_str) = serde_json::to_string(&meta_json) {
+                let _ = fs::write(&meta_file_path, meta_str.as_bytes());
+            }
+            self.month_meta_cache.write().insert(month.to_string(), (total_t, dates_vec, now_rfc3339));
+            Ok(())
+        } else {
+            Err("Failed to rename temporary consolidated file".to_string())
         }
     }
 
@@ -625,32 +673,53 @@ impl HistoryManager {
 
     fn load_month_full_from_disk(&self, month: &str) -> (HashMap<String, Value>, HashMap<String, DailySummary>) {
         let file_path = self.history_dir.join(format!("flight_history_{}.json", month));
-        if !file_path.exists() {
-            return (HashMap::new(), HashMap::new());
-        }
-
-        let content = match fs::read_to_string(&file_path) {
-            Ok(c) => c,
-            Err(_) => return (HashMap::new(), HashMap::new()),
-        };
-
-        let val: Value = match serde_json::from_str(&content) {
-            Ok(v) => v,
-            Err(_) => return (HashMap::new(), HashMap::new()),
-        };
-
         let mut targets_res = HashMap::new();
-        if let Some(targets) = val.get("targets").and_then(|t| t.as_object()) {
-            for (k, v) in targets {
-                targets_res.insert(k.clone(), v.clone());
+        let mut summaries_res = HashMap::new();
+
+        if file_path.exists() {
+            if let Ok(content) = fs::read_to_string(&file_path) {
+                if let Ok(val) = serde_json::from_str::<Value>(&content) {
+                    if let Some(targets) = val.get("targets").and_then(|t| t.as_object()) {
+                        for (k, v) in targets {
+                            targets_res.insert(k.clone(), v.clone());
+                        }
+                    }
+
+                    if let Some(ds_map) = val.get("daily_summaries").and_then(|d| d.as_object()) {
+                        for (k, v) in ds_map {
+                            if let Ok(summary) = serde_json::from_value::<DailySummary>(v.clone()) {
+                                summaries_res.insert(k.clone(), summary);
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        let mut summaries_res = HashMap::new();
-        if let Some(ds_map) = val.get("daily_summaries").and_then(|d| d.as_object()) {
-            for (k, v) in ds_map {
-                if let Ok(summary) = serde_json::from_value::<DailySummary>(v.clone()) {
-                    summaries_res.insert(k.clone(), summary);
+        // Також підвантажуємо / об'єднуємо з актуальних добових файлів history/YYYY-MM/YYYY-MM-DD.json
+        let month_dir = self.history_dir.join(month);
+        if month_dir.is_dir() {
+            if let Ok(entries) = fs::read_dir(&month_dir) {
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    if p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("json") {
+                        if let Ok(content) = fs::read_to_string(&p) {
+                            if let Ok(day_val) = serde_json::from_str::<Value>(&content) {
+                                if let Some(targets) = day_val.get("targets").and_then(|t| t.as_object()) {
+                                    for (k, v) in targets {
+                                        targets_res.insert(k.clone(), v.clone());
+                                    }
+                                }
+                                if let Some(summary_val) = day_val.get("summary") {
+                                    if let Ok(s) = serde_json::from_value::<DailySummary>(summary_val.clone()) {
+                                        if let Some(d_str) = day_val.get("date").and_then(|d| d.as_str()) {
+                                            summaries_res.insert(d_str.to_string(), s);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1178,6 +1247,7 @@ impl HistoryManager {
 
     /// Експорт даних за місяць у форматі JSON для завантаження
     pub fn export_month_json(&self, month: &str) -> Option<String> {
+        let _ = self.consolidate_month_file(month);
         let file_path = self.history_dir.join(format!("flight_history_{}.json", month));
         if file_path.exists() {
             fs::read_to_string(&file_path).ok()
@@ -1452,6 +1522,75 @@ mod tests {
         let val = day_data.unwrap();
         assert_eq!(val["total_targets"], 1);
         assert!(val["targets"].get("canon_drone_001").is_some());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_incremental_sharded_flush_and_consolidation_integrity() {
+        let temp_dir = std::env::temp_dir().join(format!("air_hub_sharded_test_{}", now_ts()));
+        let _ = fs::create_dir_all(&temp_dir);
+
+        let mgr = HistoryManager::new(&temp_dir);
+        let kyiv = HistoryManager::now_kyiv();
+        let month = kyiv.format("%Y-%m").to_string();
+        let date_today = kyiv.format("%Y-%m-%d").to_string();
+        let past_date = format!("{}-01", month);
+
+        // 1. Створюємо ціль за сьогодні
+        let mut t1 = TargetTrack::new(
+            "t1".to_string(), "shahed".to_string(), 1,
+            50.45, 30.52, 90.0, 185.0,
+            "Київська".to_string(), "10".to_string(), "101".to_string()
+        );
+        t1.canonical_id = "canon_001".to_string();
+        mgr.record_track(&t1, "active");
+
+        // Зберігаємо першу зміну (перший flush створює і добовий, і базовий місячний файл)
+        mgr.flush_dirty();
+
+        let today_file = temp_dir.join("history").join(&month).join(format!("{}.json", date_today));
+        let month_file = temp_dir.join("history").join(format!("flight_history_{}.json", month));
+        assert!(today_file.exists(), "Today sharded file must exist");
+        assert!(month_file.exists(), "Initial month file must exist");
+
+        let month_file_initial_len = fs::metadata(&month_file).map(|m| m.len()).unwrap_or(0);
+
+        // 2. Симулюємо наявність іншого добового файлу минулого дня в директорії history/YYYY-MM/
+        let past_day_file = temp_dir.join("history").join(&month).join(format!("{}.json", past_date));
+        let past_day_data = json!({
+            "date": &past_date,
+            "month": &month,
+            "summary": null,
+            "total_targets": 1,
+            "targets": {
+                "canon_past_001": {
+                    "id": "canon_past_001",
+                    "type": "missile",
+                    "date": &past_date
+                }
+            }
+        });
+        fs::write(&past_day_file, serde_json::to_string(&past_day_data).unwrap()).unwrap();
+
+        // 3. load_month_full_from_disk зобов'язаний автоматично об'єднати обидва дні
+        let (merged_targets, _) = mgr.load_month_full_from_disk(&month);
+        assert_eq!(merged_targets.len(), 2, "Merged targets must include both today and past day");
+        assert!(merged_targets.contains_key("canon_001"));
+        assert!(merged_targets.contains_key("canon_past_001"));
+
+        // 4. Викликаємо консолідацію (як при експорті / бекапі / завантаженні)
+        assert!(mgr.consolidate_month_file(&month).is_ok());
+
+        let month_file_consolidated_len = fs::metadata(&month_file).map(|m| m.len()).unwrap_or(0);
+        assert!(month_file_consolidated_len > month_file_initial_len, "Consolidated month file must include new records");
+
+        // 5. Перевіряємо що export_month_json повертає валідний JSON з обома цілями
+        let exported_json = mgr.export_month_json(&month).expect("Export must succeed");
+        let parsed: Value = serde_json::from_str(&exported_json).expect("Export must be valid JSON");
+        assert_eq!(parsed["total_targets"], 2);
+        assert!(parsed["targets"].get("canon_001").is_some());
+        assert!(parsed["targets"].get("canon_past_001").is_some());
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

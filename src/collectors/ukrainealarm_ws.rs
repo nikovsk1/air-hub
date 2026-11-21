@@ -20,6 +20,11 @@ use crate::tracker::{now_sec, ThreatState};
 
 const PAGE_URL: &str = "https://map.ukrainealarm.com/onlyMap";
 
+static RE_TOKEN: OnceLock<Regex> = OnceLock::new();
+static RE_CHANNEL: OnceLock<Regex> = OnceLock::new();
+static RE_WS_URL: OnceLock<Regex> = OnceLock::new();
+static RE_SUB_EP: OnceLock<Regex> = OnceLock::new();
+
 /// Уніфікована обробка корисного навантаження (як з Centrifugo WebSocket, так і з REST Fallback)
 pub async fn process_ukrainealarm_payload(
     payload: &str,
@@ -281,10 +286,10 @@ pub async fn run_ukrainealarm_collector(
     http_client: reqwest::Client,
     diia_bridge: Arc<parking_lot::RwLock<crate::diia_relay::DiiaBridgeState>>,
 ) {
-    let re_token = Regex::new(r#"id=["']centrifugo-token["'][^>]*value=["']([^"']+)["']"#).unwrap();
-    let re_channel = Regex::new(r#"data-target-centrifugo-channel=["']([^"']+)["']"#).unwrap();
-    let re_ws_url = Regex::new(r#"id=["']centrifugo-url["'][^>]*value=["']([^"']+)["']"#).unwrap();
-    let re_sub_ep = Regex::new(r#"data-target-subscribe-endpoint=["']([^"']+)["']"#).unwrap();
+    let re_token = RE_TOKEN.get_or_init(|| Regex::new(r#"id=["']centrifugo-token["'][^>]*value=["']([^"']+)["']"#).unwrap());
+    let re_channel = RE_CHANNEL.get_or_init(|| Regex::new(r#"data-target-centrifugo-channel=["']([^"']+)["']"#).unwrap());
+    let re_ws_url = RE_WS_URL.get_or_init(|| Regex::new(r#"id=["']centrifugo-url["'][^>]*value=["']([^"']+)["']"#).unwrap());
+    let re_sub_ep = RE_SUB_EP.get_or_init(|| Regex::new(r#"data-target-subscribe-endpoint=["']([^"']+)["']"#).unwrap());
 
     loop {
         let ua_stream = storage.get_stream("ukrainealarm_ws");
@@ -295,9 +300,10 @@ pub async fn run_ukrainealarm_collector(
 
         info!("Connecting to UkraineAlarm Centrifugo WebSocket upstream...");
 
+        let browser_ua = crate::diia_relay::get_browser_ua();
         let page_resp = match http_client
             .get(PAGE_URL)
-            .header(USER_AGENT, crate::diia_relay::BROWSER_UA)
+            .header(USER_AGENT, &browser_ua)
             .header(ORIGIN, "https://map.ukrainealarm.com")
             .header(REFERER, "https://map.ukrainealarm.com/")
             .header("sec-ch-ua", crate::diia_relay::SEC_CH_UA)

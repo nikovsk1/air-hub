@@ -1293,7 +1293,7 @@ async fn handle_get_map(
     let st = state.threat_state.read().await;
     Json(json!({
         "timestamp": (st.last_update_ts * 1000.0) as i64,
-        "active_threats": st.tracker.tracks.values().collect::<Vec<_>>(),
+        "active_threats": st.tracker.tracks.values().filter(|trk| trk.status != "superseded").collect::<Vec<_>>(),
         "recent_lost": st.tracker.recent_lost.values().collect::<Vec<_>>(),
         "oblasts": st.oblast_alerts.values().collect::<Vec<_>>(),
         "raions": st.raion_alerts.values().collect::<Vec<_>>(),

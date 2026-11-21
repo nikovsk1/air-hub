@@ -530,11 +530,14 @@ async fn run_neptun_targets_arbiter(
                         let parsed = parse_neptun_threats_list(&v);
                         debug!("Neptun targets: WebSocket silent, REST fallback fetched {} threats", parsed.len());
                         let mut tb = targets_buf.write().await;
+                        let now = now_sec();
                         tb.targets.clear();
+                        tb.targets_seen.clear();
                         for t in &parsed {
+                            tb.targets_seen.insert(t.id.clone(), now);
                             tb.targets.insert(t.id.clone(), t.clone());
                         }
-                        tb.last_received_ts = now_sec();
+                        tb.last_received_ts = now;
                         (parsed, true)
                     } else {
                         (Vec::new(), false)

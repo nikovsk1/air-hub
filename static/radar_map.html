@@ -1292,32 +1292,7 @@
     <button class="quick-chip" id="chipPoi" onclick="setQuickFilter('poi')" style="padding:4px 10px; font-size:11px; font-weight:600; border-radius:14px; border:1px solid rgba(16,185,129,0.3); background:rgba(30,41,59,0.85); color:#34D399; cursor:pointer; backdrop-filter:blur(8px);">📍 POI</button>
   </div>
 
-  <!-- Target Inspector Drawer (Flightradar24 Style) -->
-  <div class="target-inspector-drawer" id="targetInspectorDrawer" style="display:none; position:absolute; bottom:64px; left:12px; width:320px; max-width:calc(100vw - 24px); background:rgba(15,23,42,0.95); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border:1px solid rgba(56,189,248,0.4); border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.6); z-index:1001; pointer-events:auto; padding:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:8px; margin-bottom:8px;">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <span id="drawerCatIcon" style="font-size:18px;">🎯</span>
-        <div>
-          <div id="drawerTargetTitle" style="font-size:13px; font-weight:800; color:#FFFFFF;">Ціль #--</div>
-          <div id="drawerTargetSubtitle" style="font-size:10px; color:#94A3B8;">Тип цілі</div>
-        </div>
-      </div>
-      <button onclick="closeTargetInspector()" style="background:transparent; border:none; color:#94A3B8; font-size:16px; cursor:pointer; padding:4px;">✖</button>
-    </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; margin-bottom:10px;">
-      <div style="background:rgba(255,255,255,0.03); padding:6px; border-radius:6px;"><span style="color:#64748B; font-size:9.5px; display:block;">ШВИДКІСТЬ</span><b id="drawerSpeed" style="color:#FACC15; font-size:12px;">-- км/г</b></div>
-      <div style="background:rgba(255,255,255,0.03); padding:6px; border-radius:6px;"><span style="color:#64748B; font-size:9.5px; display:block;">КУРС</span><b id="drawerHeading" style="color:#38BDF8; font-size:12px;">--°</b></div>
-      <div style="background:rgba(255,255,255,0.03); padding:6px; border-radius:6px;"><span style="color:#64748B; font-size:9.5px; display:block;">ВІДСТАНЬ ДО СЛОТУ</span><b id="drawerDist" style="color:#EF4444; font-size:12px;">-- км</b></div>
-      <div style="background:rgba(255,255,255,0.03); padding:6px; border-radius:6px;"><span style="color:#64748B; font-size:9.5px; display:block;">ПРОГНОЗ (ETA)</span><b id="drawerEta" style="color:#F97316; font-size:12px;">--</b></div>
-    </div>
-    <div id="drawerApproachRow" style="font-size:11px; color:#E2E8F0; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:6px; padding:6px; margin-bottom:10px; text-align:center;">
-      <span id="drawerApproachText">Рухається повз / віддаляється</span>
-    </div>
-    <div style="display:flex; gap:6px;">
-      <button id="btnDrawerFollow" onclick="toggleFollowTarget()" style="flex:1; padding:6px 10px; font-size:11px; font-weight:700; background:rgba(56,189,248,0.2); border:1px solid rgba(56,189,248,0.4); border-radius:6px; color:#38BDF8; cursor:pointer;">🎯 Слідувати</button>
-      <button id="btnDrawer3D" onclick="chaseSelectedTarget3D()" style="flex:1; padding:6px 10px; font-size:11px; font-weight:700; background:rgba(245,158,11,0.2); border:1px solid rgba(245,158,11,0.4); border-radius:6px; color:#F59E0B; cursor:pointer;">🚀 3D Фокус</button>
-    </div>
-  </div>
+
 
   <!-- ================= TACTICAL SIDEBAR (3 TABS) ================= -->
   <aside class="tactical-sidebar" id="tacticalSidebar">
@@ -2041,6 +2016,7 @@
       ballistic: { name: 'Балістична ракета', color: '#EC4899', icon: 'rocket' },
       aviation: { name: 'Тактична авіація', color: '#38BDF8', icon: 'jet' },
       kab: { name: 'КАБ / Бомба', color: '#FB923C', icon: 'bomb' },
+      banderol: { name: 'Бандероль / фальш-ціль', color: '#34E7E4', icon: 'glider' },
       lancet: { name: 'Ланцет', color: '#C084FC', icon: 'drone_x' },
       recon: { name: 'Розвідник / БПЛА', color: '#93C5FD', icon: 'glider' },
       fpv: { name: 'FPV / Молнія', color: '#FBBF24', icon: 'quad' },
@@ -2048,172 +2024,238 @@
       unknown: { name: 'Невідома ціль', color: '#94A3B8', icon: 'dot' }
     };
 
-for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
+    for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
-    // Vector sprite generation for canvas textures
-        function createThreatSprite(cat, color) {
+    // Vector sprite generation for canvas textures (Crisp mapa.ua style silhouettes)
+    function createThreatSprite(cat, color) {
       const canvas = document.createElement('canvas');
       canvas.width = 48;
       canvas.height = 48;
       const ctx = canvas.getContext('2d');
-      ctx.strokeStyle = '#0B0E14';
-      ctx.lineWidth = 2.8;
-      ctx.fillStyle = color || '#FACC15';
+      const baseColor = color || (THREAT_CATEGORIES[cat] ? THREAT_CATEGORIES[cat].color : '#FACC15');
 
       ctx.save();
       ctx.translate(24, 24);
 
+      // Contrast shadow for readability against dark basemap & bright alerts
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 1;
+
+      ctx.fillStyle = baseColor;
+      ctx.strokeStyle = '#0B0E14';
+      ctx.lineWidth = 2.4;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+
+      ctx.beginPath();
       if (cat === 'shahed') {
-        // Delta wing
-        ctx.beginPath();
-        ctx.moveTo(0, -18);
-        ctx.lineTo(16, 14);
-        ctx.lineTo(0, 8);
-        ctx.lineTo(-16, 14);
+        // Military Delta Wing (Shahed-136/131 with elevons, winglets & pusher prop notch)
+        ctx.moveTo(0, -19);
+        ctx.lineTo(2.5, -13);
+        ctx.lineTo(17.5, 11);
+        ctx.lineTo(17.5, 15);
+        ctx.lineTo(14.5, 14);
+        ctx.lineTo(3.5, 9);
+        ctx.lineTo(2, 12);
+        ctx.lineTo(-2, 12);
+        ctx.lineTo(-3.5, 9);
+        ctx.lineTo(-14.5, 14);
+        ctx.lineTo(-17.5, 15);
+        ctx.lineTo(-17.5, 11);
+        ctx.lineTo(-2.5, -13);
         ctx.closePath();
       } else if (cat === 'shahed_jet') {
-        // Swept delta with air intake
-        ctx.beginPath();
-        ctx.moveTo(0, -19);
-        ctx.lineTo(17, 13);
+        // Swept delta with dorsal air intake and clipped winglets
+        ctx.moveTo(0, -20);
+        ctx.lineTo(3, -14);
+        ctx.lineTo(18, 12);
+        ctx.lineTo(18, 15);
         ctx.lineTo(6, 10);
-        ctx.lineTo(0, 14);
+        ctx.lineTo(2.5, 14);
+        ctx.lineTo(-2.5, 14);
         ctx.lineTo(-6, 10);
-        ctx.lineTo(-17, 13);
+        ctx.lineTo(-18, 15);
+        ctx.lineTo(-18, 12);
+        ctx.lineTo(-3, -14);
         ctx.closePath();
       } else if (cat === 'missile') {
-        // Cruise missile body + wings
-        ctx.beginPath();
-        ctx.moveTo(0, -20);
-        ctx.lineTo(4, -6);
-        ctx.lineTo(16, -2);
-        ctx.lineTo(4, 2);
-        ctx.lineTo(4, 15);
-        ctx.lineTo(8, 18);
-        ctx.lineTo(8, 20);
-        ctx.lineTo(-8, 20);
-        ctx.lineTo(-8, 18);
-        ctx.lineTo(-4, 15);
-        ctx.lineTo(-4, 2);
-        ctx.lineTo(-16, -2);
-        ctx.lineTo(-4, -6);
+        // Cruise missile with slender fuselage, swept wings & cruciform tail fins
+        ctx.moveTo(0, -21);
+        ctx.lineTo(2.5, -17);
+        ctx.lineTo(2.5, -4);
+        ctx.lineTo(17, 1);
+        ctx.lineTo(17, 4);
+        ctx.lineTo(2.5, 2);
+        ctx.lineTo(2.5, 14);
+        ctx.lineTo(7.5, 18);
+        ctx.lineTo(7.5, 20);
+        ctx.lineTo(-7.5, 20);
+        ctx.lineTo(-7.5, 18);
+        ctx.lineTo(-2.5, 14);
+        ctx.lineTo(-2.5, 2);
+        ctx.lineTo(-17, 4);
+        ctx.lineTo(-17, 1);
+        ctx.lineTo(-2.5, -4);
+        ctx.lineTo(-2.5, -17);
         ctx.closePath();
       } else if (cat === 'ballistic') {
-        // Heavy conical ballistic missile
-        ctx.beginPath();
-        ctx.moveTo(0, -21);
-        ctx.lineTo(6, -10);
-        ctx.lineTo(6, 14);
-        ctx.lineTo(12, 19);
-        ctx.lineTo(-12, 19);
-        ctx.lineTo(-6, 14);
-        ctx.lineTo(-6, -10);
+        // Conical ballistic missile with ogive nose, cylindrical body & rear guidance fins
+        ctx.moveTo(0, -22);
+        ctx.lineTo(4.5, -13);
+        ctx.lineTo(4.5, 12);
+        ctx.lineTo(11, 18);
+        ctx.lineTo(11, 20);
+        ctx.lineTo(4, 18);
+        ctx.lineTo(2.5, 20);
+        ctx.lineTo(-2.5, 20);
+        ctx.lineTo(-4, 18);
+        ctx.lineTo(-11, 20);
+        ctx.lineTo(-11, 18);
+        ctx.lineTo(-4.5, 12);
+        ctx.lineTo(-4.5, -13);
         ctx.closePath();
       } else if (cat === 'aviation') {
-        // Combat fighter jet silhouette
-        ctx.beginPath();
-        ctx.moveTo(0, -20);
-        ctx.lineTo(4, -8);
-        ctx.lineTo(19, 6);
-        ctx.lineTo(6, 6);
-        ctx.lineTo(6, 15);
-        ctx.lineTo(11, 19);
-        ctx.lineTo(-11, 19);
-        ctx.lineTo(-6, 15);
-        ctx.lineTo(-6, 6);
-        ctx.lineTo(-19, 6);
-        ctx.lineTo(-4, -8);
+        // Tactical combat fighter jet (swept wings, twin engines & canted stabilizers)
+        ctx.moveTo(0, -21);
+        ctx.lineTo(2.5, -13);
+        ctx.lineTo(4, -6);
+        ctx.lineTo(19, 5);
+        ctx.lineTo(19, 8);
+        ctx.lineTo(6.5, 7);
+        ctx.lineTo(6.5, 14);
+        ctx.lineTo(12, 19);
+        ctx.lineTo(12, 21);
+        ctx.lineTo(4, 18);
+        ctx.lineTo(2, 20);
+        ctx.lineTo(-2, 20);
+        ctx.lineTo(-4, 18);
+        ctx.lineTo(-12, 21);
+        ctx.lineTo(-12, 19);
+        ctx.lineTo(-6.5, 14);
+        ctx.lineTo(-6.5, 7);
+        ctx.lineTo(-19, 8);
+        ctx.lineTo(-19, 5);
+        ctx.lineTo(-4, -6);
+        ctx.lineTo(-2.5, -13);
         ctx.closePath();
       } else if (cat === 'kab') {
-        // Aerial bomb with UMPK wings
-        ctx.beginPath();
-        ctx.moveTo(0, 18);
-        ctx.bezierCurveTo(8, 12, 8, -4, 5, -12);
-        ctx.lineTo(18, -12);
-        ctx.lineTo(18, -16);
-        ctx.lineTo(4, -16);
-        ctx.lineTo(0, -20);
-        ctx.lineTo(-4, -16);
-        ctx.lineTo(-18, -16);
-        ctx.lineTo(-18, -12);
-        ctx.lineTo(-5, -12);
-        ctx.bezierCurveTo(-8, -4, -8, 12, 0, 18);
+        // Guided aerial bomb with UMPK planar folding wings
+        ctx.moveTo(0, -20);
+        ctx.bezierCurveTo(4.5, -15, 5.5, -6, 5, 2);
+        ctx.lineTo(19, -1);
+        ctx.lineTo(19, 3);
+        ctx.lineTo(4.5, 6);
+        ctx.lineTo(4, 15);
+        ctx.lineTo(7, 18);
+        ctx.lineTo(7, 20);
+        ctx.lineTo(-7, 20);
+        ctx.lineTo(-7, 18);
+        ctx.lineTo(-4, 15);
+        ctx.lineTo(-4.5, 6);
+        ctx.lineTo(-19, 3);
+        ctx.lineTo(-19, -1);
+        ctx.lineTo(-5, 2);
+        ctx.bezierCurveTo(-5.5, -6, -4.5, -15, 0, -20);
         ctx.closePath();
       } else if (cat === 'banderol') {
-        // Wide straight wing glider
-        ctx.beginPath();
+        // High-aspect decoy glider / drone
         ctx.moveTo(0, -18);
-        ctx.lineTo(3, -4);
-        ctx.lineTo(20, -4);
-        ctx.lineTo(20, 0);
-        ctx.lineTo(3, 0);
-        ctx.lineTo(2, 16);
-        ctx.lineTo(8, 18);
-        ctx.lineTo(-8, 18);
-        ctx.lineTo(-2, 16);
-        ctx.lineTo(-3, 0);
-        ctx.lineTo(-20, 0);
-        ctx.lineTo(-20, -4);
-        ctx.lineTo(-3, -4);
-        ctx.closePath();
-      } else if (cat === 'recon') {
-        // UAV with camera pod
-        ctx.beginPath();
-        ctx.moveTo(0, -17);
-        ctx.lineTo(3, -5);
-        ctx.lineTo(19, -5);
-        ctx.lineTo(19, -1);
-        ctx.lineTo(3, -1);
-        ctx.lineTo(3, 15);
+        ctx.lineTo(2.5, -5);
+        ctx.lineTo(20, -5);
+        ctx.lineTo(20, -1);
+        ctx.lineTo(2.5, 0);
+        ctx.lineTo(2, 15);
         ctx.lineTo(7, 18);
         ctx.lineTo(-7, 18);
-        ctx.lineTo(-3, 15);
-        ctx.lineTo(-3, -1);
-        ctx.lineTo(-19, -1);
-        ctx.lineTo(-19, -5);
-        ctx.lineTo(-3, -5);
+        ctx.lineTo(-2, 15);
+        ctx.lineTo(-2.5, 0);
+        ctx.lineTo(-20, -1);
+        ctx.lineTo(-20, -5);
+        ctx.lineTo(-2.5, -5);
+        ctx.closePath();
+      } else if (cat === 'recon') {
+        // Reconnaissance UAV (pusher configuration with straight wing & V-tail)
+        ctx.moveTo(0, -18);
+        ctx.lineTo(2.5, -6);
+        ctx.lineTo(19, -6);
+        ctx.lineTo(19, -2);
+        ctx.lineTo(2.5, -1);
+        ctx.lineTo(2.5, 14);
+        ctx.lineTo(8, 18);
+        ctx.lineTo(6, 20);
+        ctx.lineTo(0, 16);
+        ctx.lineTo(-6, 20);
+        ctx.lineTo(-8, 18);
+        ctx.lineTo(-2.5, 14);
+        ctx.lineTo(-2.5, -1);
+        ctx.lineTo(-19, -2);
+        ctx.lineTo(-19, -6);
+        ctx.lineTo(-2.5, -6);
         ctx.closePath();
       } else if (cat === 'lancet') {
-        // Double X-wing fuselage
-        ctx.beginPath();
-        ctx.moveTo(0, -18); ctx.lineTo(3, 18); ctx.lineTo(-3, 18); ctx.closePath();
-        ctx.stroke(); ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(-15, -10); ctx.lineTo(15, 10);
-        ctx.moveTo(15, -10); ctx.lineTo(-15, 10);
+        // Loitering munition with dual cruciform X-wings
+        ctx.moveTo(0, -19);
+        ctx.lineTo(2.5, -14);
+        ctx.lineTo(2.5, -7);
+        ctx.lineTo(15, -13);
+        ctx.lineTo(17, -10);
+        ctx.lineTo(2.5, 0);
+        ctx.lineTo(2.5, 7);
+        ctx.lineTo(13, 14);
+        ctx.lineTo(11, 16);
+        ctx.lineTo(2, 12);
+        ctx.lineTo(0, 15);
+        ctx.lineTo(-2, 12);
+        ctx.lineTo(-11, 16);
+        ctx.lineTo(-13, 14);
+        ctx.lineTo(-2.5, 7);
+        ctx.lineTo(-2.5, 0);
+        ctx.lineTo(-17, -10);
+        ctx.lineTo(-15, -13);
+        ctx.lineTo(-2.5, -7);
+        ctx.lineTo(-2.5, -14);
+        ctx.closePath();
       } else if (cat === 'fpv') {
-        // Quadcopter cross with rotor circles
-        ctx.beginPath();
-        ctx.moveTo(-12, -12); ctx.lineTo(12, 12);
-        ctx.moveTo(12, -12); ctx.lineTo(-12, 12);
-        ctx.rect(-3, -5, 6, 10);
+        // FPV quadcopter X-frame with central battery pod
+        ctx.rect(-3.5, -7, 7, 14);
+        ctx.moveTo(-13, -13); ctx.lineTo(-3.5, -4);
+        ctx.moveTo(13, -13); ctx.lineTo(3.5, -4);
+        ctx.moveTo(-13, 13); ctx.lineTo(-3.5, 4);
+        ctx.moveTo(13, 13); ctx.lineTo(3.5, 4);
       } else if (cat === 'artillery') {
-        // Detonation star burst
-        ctx.beginPath();
+        // Artillery detonation burst
         for (let i = 0; i < 8; i++) {
           const a1 = (i * 45) * Math.PI / 180;
           const a2 = (i * 45 + 22.5) * Math.PI / 180;
           ctx.lineTo(Math.cos(a1) * 18, Math.sin(a1) * 18);
-          ctx.lineTo(Math.cos(a2) * 7, Math.sin(a2) * 7);
+          ctx.lineTo(Math.cos(a2) * 7.5, Math.sin(a2) * 7.5);
         }
         ctx.closePath();
       } else {
-        // Unknown delta wing
-        ctx.beginPath();
-        ctx.moveTo(0, -16);
-        ctx.lineTo(14, 14);
+        // Generic tactical delta arrow
+        ctx.moveTo(0, -18);
+        ctx.lineTo(15, 14);
         ctx.lineTo(0, 8);
-        ctx.lineTo(-14, 14);
+        ctx.lineTo(-15, 14);
         ctx.closePath();
       }
 
-      ctx.stroke();
       ctx.fill();
-
-      // Inner white tactical highlight
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 1.0;
       ctx.stroke();
+
+      if (cat === 'fpv') {
+        ctx.fillStyle = '#0B0E14';
+        [[-13, -13], [13, -13], [-13, 13], [13, 13]].forEach(([x, y]) => {
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = baseColor;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        });
+      }
 
       ctx.restore();
 
@@ -3583,12 +3625,20 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       map.addSource('user-slots-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addSource('poi-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addSource('threats-forecast-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('threats-head-connectors-source', {
+        type: 'geojson',
+        lineMetrics: false,
+        buffer: 0,
+        tolerance: 0.5,
+        maxzoom: 14,
+        data: { type: 'FeatureCollection', features: [] }
+      });
       map.addSource('threats-trails-source', {
         type: 'geojson',
         lineMetrics: true,
         buffer: 0,
         tolerance: 0.5,
-        maxzoom: 12,
+        maxzoom: 14,
         data: { type: 'FeatureCollection', features: [] }
       });
       map.addSource('threats-lost-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -3792,57 +3842,121 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           'line-color': ['get', 'color'],
           'line-width': 2.5,
           'line-dasharray': [2, 2],
-          'line-opacity': 0.7
+          'line-opacity': 0.75
         }
       });
 
-      // Split-Rate Native MapLibre: mapa.ua style dual-line trail rendering
-      // 1. Lower Glow Layer: wide blurred neon halo
+      function hexToRgb(hex) {
+        let c = (hex || '#FACC15').replace('#', '');
+        if (c.length === 3) c = c.split('').map(x => x + x).join('');
+        const num = parseInt(c, 16);
+        return [ (num >> 16) & 255, (num >> 8) & 255, num & 255 ].join(', ');
+      }
+
+      // Mapa.ua fading trails: per-category layers with static line-gradient (compliant with MapLibre specification)
+      for (const catKey in THREAT_CATEGORIES) {
+        const rgb = hexToRgb(THREAT_CATEGORIES[catKey].color);
+        // Wide blurred neon halo
+        map.addLayer({
+          id: `threats-trails-glow-${catKey}`,
+          type: 'line',
+          source: 'threats-trails-source',
+          filter: ['==', ['get', 'cat'], catKey],
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round'
+          },
+          paint: {
+            'line-width': 5.5,
+            'line-blur': 3.0,
+            'line-gradient': [
+              'interpolate', ['linear'], ['line-progress'],
+              0.0, `rgba(${rgb}, 0.0)`,
+              0.3, `rgba(${rgb}, 0.12)`,
+              0.7, `rgba(${rgb}, 0.45)`,
+              1.0, `rgba(${rgb}, 0.85)`
+            ]
+          }
+        });
+
+        // Crisp high-contrast trajectory core
+        map.addLayer({
+          id: `threats-trails-core-${catKey}`,
+          type: 'line',
+          source: 'threats-trails-source',
+          filter: ['==', ['get', 'cat'], catKey],
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round'
+          },
+          paint: {
+            'line-width': 2.0,
+            'line-gradient': [
+              'interpolate', ['linear'], ['line-progress'],
+              0.0, `rgba(${rgb}, 0.0)`,
+              0.2, `rgba(${rgb}, 0.15)`,
+              0.6, `rgba(${rgb}, 0.65)`,
+              1.0, `rgba(${rgb}, 1.0)`
+            ]
+          }
+        });
+      }
+
+      // 30Hz live kinematic head connectors (Zero Gap between trail and aircraft icon)
       map.addLayer({
-        id: 'threats-trails-glow',
+        id: 'threats-connectors-glow',
         type: 'line',
-        source: 'threats-trails-source',
+        source: 'threats-head-connectors-source',
         layout: {
           'line-cap': 'round',
           'line-join': 'round'
         },
         paint: {
           'line-color': ['get', 'color'],
-          'line-width': 6.0,
-          'line-blur': 4.0,
-          'line-opacity': 0.35
+          'line-width': 5.5,
+          'line-blur': 3.0,
+          'line-opacity': 0.85
         }
       });
 
-      // 2. Upper Core Layer: crisp high-contrast trajectory core
       map.addLayer({
-        id: 'threats-trails-core',
+        id: 'threats-connectors-core',
         type: 'line',
-        source: 'threats-trails-source',
+        source: 'threats-head-connectors-source',
         layout: {
           'line-cap': 'round',
           'line-join': 'round'
         },
         paint: {
           'line-color': ['get', 'color'],
-          'line-width': 1.5,
-          'line-opacity': 0.95
+          'line-width': 2.0,
+          'line-opacity': 1.0
         }
       });
 
-      // 3. Fallback compatibility alias for legacy layer selectors
+      // Heatmap layer for impacts / losses
       map.addLayer({
-        id: 'threats-trails-layer',
-        type: 'line',
-        source: 'threats-trails-source',
-        layout: {
-          'line-cap': 'round',
-          'line-join': 'round'
-        },
+        id: 'threats-impacts-heatmap-layer',
+        type: 'heatmap',
+        source: 'threats-lost-source',
+        layout: { visibility: 'none' },
         paint: {
-          'line-color': ['get', 'color'],
-          'line-width': 1.0,
-          'line-opacity': 0.0
+          'heatmap-weight': 1,
+          'heatmap-intensity': 1,
+          'heatmap-color': [
+            'interpolate', ['linear'], ['heatmap-density'],
+            0.0, 'rgba(0, 0, 0, 0)',
+            0.2, '#06B6D4',
+            0.4, '#10B981',
+            0.7, '#F59E0B',
+            1.0, '#EF4444'
+          ],
+          'heatmap-radius': [
+            'interpolate', ['linear'], ['zoom'],
+            4, 15,
+            10, 35
+          ],
+          'heatmap-opacity': 0.85
         }
       });
 
@@ -4952,6 +5066,10 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       const altM = Math.round(t.altitudeM || getNominalAltitudeMeters(t.cat));
       const coords = lngLat || (t.sim ? [t.sim.curLon, t.sim.curLat] : [30.52, 50.45]);
 
+      const distStr = t.distance_km ? `${t.distance_km.toFixed(1)} км` : (t.distance ? `${Number(t.distance).toFixed(1)} км` : '-- км');
+      const etaStr = t.eta_formatted || (t.eta_min ? `${Math.round(t.eta_min)} хв` : '--');
+      const approachDesc = t.approach_desc || 'Повітряний простір';
+
       const html = `
         <div class="target-popup-header">
           <span style="color:${catMeta.color};">▲ ${escapeHtml(catMeta.name)}</span>
@@ -4962,6 +5080,9 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           <span class="lbl">Курс (Пеленг):</span><span class="val">${heading}°</span>
           <span class="lbl">Висота (екстр.):</span><span class="val">~${altM} м</span>
           <span class="lbl">У групі:</span><span class="val">${t.groupCount || 1} од.</span>
+          <span class="lbl">До точки:</span><span class="val" style="color:#F59E0B;">${distStr}</span>
+          <span class="lbl">Прогноз (ETA):</span><span class="val" style="color:#38BDF8;">${etaStr}</span>
+          <span class="lbl">Статус:</span><span class="val" style="font-size:10px;">${escapeHtml(approachDesc)}</span>
         </div>
         <button type="button" class="btn-3d-chase" onclick="focusTarget3D('${escapeHtml(tid)}')">
           🎯 Перейти в режим 3Д
@@ -4972,14 +5093,12 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         closeButton: true,
         closeOnClick: true,
         className: 'target-context-popup',
-        maxWidth: '250px',
+        maxWidth: '260px',
         offset: 14
       })
         .setLngLat(coords)
         .setHTML(html)
         .addTo(map);
-
-      openTargetInspector(tid);
     }
 
     let selectedInspectorTargetId = null;
@@ -4999,47 +5118,94 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
       if (!map) return;
 
-      const setTrailFilter = (expr) => {
-        ['threats-trails-glow', 'threats-trails-core', 'threats-trails-layer'].forEach(l => {
-          if (map.getLayer(l)) map.setFilter(l, expr);
-        });
-      };
       const setTrailVisibility = (vis) => {
-        ['threats-trails-glow', 'threats-trails-core', 'threats-trails-layer'].forEach(l => {
+        for (const catKey in THREAT_CATEGORIES) {
+          ['threats-trails-glow-' + catKey, 'threats-trails-core-' + catKey].forEach(l => {
+            if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', vis);
+          });
+        }
+        ['threats-connectors-glow', 'threats-connectors-core'].forEach(l => {
           if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', vis);
         });
       };
 
+      const setCategoryVisibility = (allowedCats) => {
+        for (const catKey in THREAT_CATEGORIES) {
+          const vis = allowedCats.includes(catKey) ? 'visible' : 'none';
+          ['threats-trails-glow-' + catKey, 'threats-trails-core-' + catKey].forEach(l => {
+            if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', vis);
+          });
+        }
+      };
+
       if (filter === 'all') {
-        const catArray = Array.from(enabledThreatCategories);
-        const filterExpr = ['in', ['get', 'cat'], ['literal', catArray]];
-        if (map.getLayer('threats-aircraft-layer')) map.setFilter('threats-aircraft-layer', filterExpr);
-        if (map.getLayer('threats-labels-layer')) map.setFilter('threats-labels-layer', filterExpr);
-        setTrailFilter(filterExpr);
+        if (map.getLayer('threats-aircraft-layer')) {
+          map.setLayoutProperty('threats-aircraft-layer', 'visibility', 'visible');
+          map.setFilter('threats-aircraft-layer', null);
+        }
+        if (map.getLayer('threats-labels-layer')) {
+          map.setLayoutProperty('threats-labels-layer', 'visibility', (is3DModeActive || !showLabelsIn2D) ? 'none' : 'visible');
+          map.setFilter('threats-labels-layer', null);
+        }
         setTrailVisibility('visible');
-        if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', filterExpr);
+        if (map.getLayer('threats-connectors-glow')) map.setFilter('threats-connectors-glow', null);
+        if (map.getLayer('threats-connectors-core')) map.setFilter('threats-connectors-core', null);
+        if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', null);
         if (map.getLayer('poi-layer')) map.setLayoutProperty('poi-layer', 'visibility', 'visible');
       } else if (filter === 'missiles') {
-        const filterExpr = ['in', ['get', 'cat'], ['literal', ['missile', 'ballistic', 'kab', 'artillery']]];
-        if (map.getLayer('threats-aircraft-layer')) map.setFilter('threats-aircraft-layer', filterExpr);
-        if (map.getLayer('threats-labels-layer')) map.setFilter('threats-labels-layer', filterExpr);
-        setTrailFilter(filterExpr);
-        setTrailVisibility('visible');
+        const allowed = ['missile', 'ballistic', 'kab', 'artillery'];
+        const filterExpr = ['in', ['get', 'cat'], ['literal', allowed]];
+        if (map.getLayer('threats-aircraft-layer')) {
+          map.setLayoutProperty('threats-aircraft-layer', 'visibility', 'visible');
+          map.setFilter('threats-aircraft-layer', filterExpr);
+        }
+        if (map.getLayer('threats-labels-layer')) {
+          map.setLayoutProperty('threats-labels-layer', 'visibility', (is3DModeActive || !showLabelsIn2D) ? 'none' : 'visible');
+          map.setFilter('threats-labels-layer', filterExpr);
+        }
+        setCategoryVisibility(allowed);
+        if (map.getLayer('threats-connectors-glow')) {
+          map.setLayoutProperty('threats-connectors-glow', 'visibility', 'visible');
+          map.setFilter('threats-connectors-glow', filterExpr);
+        }
+        if (map.getLayer('threats-connectors-core')) {
+          map.setLayoutProperty('threats-connectors-core', 'visibility', 'visible');
+          map.setFilter('threats-connectors-core', filterExpr);
+        }
         if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', filterExpr);
         if (map.getLayer('poi-layer')) map.setLayoutProperty('poi-layer', 'visibility', 'none');
       } else if (filter === 'shaheds') {
-        const filterExpr = ['in', ['get', 'cat'], ['literal', ['shahed', 'shahed_jet', 'banderol']]];
-        if (map.getLayer('threats-aircraft-layer')) map.setFilter('threats-aircraft-layer', filterExpr);
-        if (map.getLayer('threats-labels-layer')) map.setFilter('threats-labels-layer', filterExpr);
-        setTrailFilter(filterExpr);
-        setTrailVisibility('visible');
+        const allowed = ['shahed', 'shahed_jet', 'banderol'];
+        const filterExpr = ['in', ['get', 'cat'], ['literal', allowed]];
+        if (map.getLayer('threats-aircraft-layer')) {
+          map.setLayoutProperty('threats-aircraft-layer', 'visibility', 'visible');
+          map.setFilter('threats-aircraft-layer', filterExpr);
+        }
+        if (map.getLayer('threats-labels-layer')) {
+          map.setLayoutProperty('threats-labels-layer', 'visibility', (is3DModeActive || !showLabelsIn2D) ? 'none' : 'visible');
+          map.setFilter('threats-labels-layer', filterExpr);
+        }
+        setCategoryVisibility(allowed);
+        if (map.getLayer('threats-connectors-glow')) {
+          map.setLayoutProperty('threats-connectors-glow', 'visibility', 'visible');
+          map.setFilter('threats-connectors-glow', filterExpr);
+        }
+        if (map.getLayer('threats-connectors-core')) {
+          map.setLayoutProperty('threats-connectors-core', 'visibility', 'visible');
+          map.setFilter('threats-connectors-core', filterExpr);
+        }
         if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', filterExpr);
         if (map.getLayer('poi-layer')) map.setLayoutProperty('poi-layer', 'visibility', 'none');
       } else if (filter === 'danger') {
         const filterExpr = ['==', ['get', 'in_danger'], true];
-        if (map.getLayer('threats-aircraft-layer')) map.setFilter('threats-aircraft-layer', filterExpr);
-        if (map.getLayer('threats-labels-layer')) map.setFilter('threats-labels-layer', filterExpr);
-        setTrailFilter(filterExpr);
+        if (map.getLayer('threats-aircraft-layer')) {
+          map.setLayoutProperty('threats-aircraft-layer', 'visibility', 'visible');
+          map.setFilter('threats-aircraft-layer', filterExpr);
+        }
+        if (map.getLayer('threats-labels-layer')) {
+          map.setLayoutProperty('threats-labels-layer', 'visibility', (is3DModeActive || !showLabelsIn2D) ? 'none' : 'visible');
+          map.setFilter('threats-labels-layer', filterExpr);
+        }
         setTrailVisibility('visible');
         if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', filterExpr);
         if (map.getLayer('poi-layer')) map.setLayoutProperty('poi-layer', 'visibility', 'none');
@@ -5047,18 +5213,18 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         if (map.getLayer('threats-aircraft-layer')) map.setLayoutProperty('threats-aircraft-layer', 'visibility', 'none');
         if (map.getLayer('threats-labels-layer')) map.setLayoutProperty('threats-labels-layer', 'visibility', 'none');
         setTrailVisibility('none');
+        if (map.getLayer('threats-forecast-layer')) map.setLayoutProperty('threats-forecast-layer', 'visibility', 'none');
         if (map.getLayer('poi-layer')) map.setLayoutProperty('poi-layer', 'visibility', 'visible');
       }
     }
 
     function openTargetInspector(tid) {
-      const t = activeThreats[tid];
-      if (!t) return;
-      const drawer = document.getElementById('targetInspectorDrawer');
-      if (!drawer) return;
+      selectedInspectorTargetId = tid;
+    }
 
-      const catMeta = THREAT_CATEGORIES[t.cat] || THREAT_CATEGORIES.unknown;
-      const speed = Math.round(t.sim ? (t.sim.speedKmh || 0) : (t.speed_kmh || 0));
+    function closeTargetInspector() {
+      selectedInspectorTargetId = null;
+    }
       const heading = Math.round(((((t.sim ? t.sim.curHeading : 0) % 360) + 360) % 360));
 
       const iconEl = document.getElementById('drawerCatIcon');
@@ -5535,14 +5701,23 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       return current;
     }
 
-    // Split-Rate Native MapLibre: Trajectory trails and forecast corridors updated ONLY upon WS/REST data arrival (0.2-1 Hz)
+    // Split-Rate Native MapLibre: Trajectory trails updated ONLY upon WS/REST data arrival (0.2-1 Hz)
     function syncThreatTrailsToSource(incomingThreats) {
       if (!map || !map.getSource('threats-trails-source')) return;
       const trailFeatures = [];
-      const forecastFeatures = [];
       const threats = incomingThreats || [];
 
       threats.forEach(t => {
+        const tid = t.id;
+        const status = String(t.status || 'active').toLowerCase();
+        // Downed, eliminated, hit_target, lost, or superseded targets MUST NEVER have trails!
+        if (status === 'lost' || status === 'eliminated' || status === 'hit_target' || status === 'superseded' || status === 'downed') {
+          return;
+        }
+        if (window.recentLostThreats && window.recentLostThreats[tid]) {
+          return;
+        }
+
         const cat = normalizeCat(t.category || t.type || t.type_ua);
         if (!enabledThreatCategories.has(cat)) return;
         const catMeta = THREAT_CATEGORIES[cat] || THREAT_CATEGORIES.unknown;
@@ -5557,7 +5732,19 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         const curLon = Number(t.lon);
         const curLat = Number(t.lat);
         if (Number.isFinite(curLon) && Number.isFinite(curLat)) {
-          pts.push([curLon, curLat]);
+          if (pts.length === 0) {
+            pts.push([curLon, curLat]);
+          } else {
+            const lastP = pts[pts.length - 1];
+            if (Math.abs(lastP[0] - curLon) > 0.0001 || Math.abs(lastP[1] - curLat) > 0.0001) {
+              pts.push([curLon, curLat]);
+            }
+          }
+        }
+
+        // Store last trail point for the 30Hz head connector
+        if (pts.length > 0 && activeThreats[tid]) {
+          activeThreats[tid].lastTrailPt = pts[pts.length - 1];
         }
 
         if (pts.length > 1) {
@@ -5566,34 +5753,11 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
             type: 'Feature',
             geometry: { type: 'LineString', coordinates: smoothed },
             properties: {
-              id: t.id,
+              id: tid,
               cat: cat,
               color: catMeta.color
             }
           });
-        }
-
-        const corridor = t.extrapolated || t.corridor || t.extrapolated_path || [];
-        if (corridor.length > 0 && Number.isFinite(curLon) && Number.isFinite(curLat)) {
-          const fCoords = [[curLon, curLat]];
-          corridor.forEach(cp => {
-            const cLat = Number(cp.lat ?? cp[0]);
-            const cLon = Number(cp.lon ?? cp[1]);
-            if (Number.isFinite(cLat) && Number.isFinite(cLon)) {
-              fCoords.push([cLon, cLat]);
-            }
-          });
-          if (fCoords.length > 1) {
-            forecastFeatures.push({
-              type: 'Feature',
-              geometry: { type: 'LineString', coordinates: fCoords },
-              properties: {
-                id: t.id,
-                cat: cat,
-                color: catMeta.color
-              }
-            });
-          }
         }
       });
 
@@ -5601,13 +5765,6 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         type: 'FeatureCollection',
         features: trailFeatures
       });
-
-      if (map.getSource('threats-forecast-source')) {
-        map.getSource('threats-forecast-source').setData({
-          type: 'FeatureCollection',
-          features: forecastFeatures
-        });
-      }
     }
 
     function initLiveKinematicsLoop() {
@@ -5645,18 +5802,34 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
       const shouldSyncAircraft = (now - lastAircraftSyncTs) >= aircraftSyncInterval;
       const aircraftFeatures = [];
+      const connectorFeatures = [];
+      const forecastFeatures = [];
 
       for (const tid in activeThreats) {
         const t = activeThreats[tid];
         const sim = t.sim;
 
-        // Kinematic 11-second delay horizon freeze
+        // Soft kinematic speed decay with last_moved_ts & cruise_speed_kmh support
+        // 0-15s: 100%, 15-30s: linear decay down to 35%, 30-45s: smooth decay down to 0% (opacity 0.55), >45s: freeze
         const timeSinceTelemetry = (now - (t.lastTelemetryTs || now)) / 1000.0;
-        let effectiveSpeed = sim.speedKmh || 200.0;
-        if (timeSinceTelemetry > 11.0) {
+        let baseSpeed = Number(t.cruise_speed_kmh || sim.speedKmh || 200.0);
+        let effectiveSpeed = baseSpeed;
+        let signalOpacity = 1.0;
+
+        if (timeSinceTelemetry <= 15.0) {
+          effectiveSpeed = baseSpeed;
+          signalOpacity = 1.0;
+        } else if (timeSinceTelemetry <= 30.0) {
+          const ratio = (timeSinceTelemetry - 15.0) / 15.0; // 0.0 -> 1.0
+          effectiveSpeed = baseSpeed * (1.0 - ratio * 0.65); // 100% -> 35%
+          signalOpacity = 1.0 - ratio * 0.25; // 1.0 -> 0.75
+        } else if (timeSinceTelemetry <= 45.0) {
+          const ratio = (timeSinceTelemetry - 30.0) / 15.0; // 0.0 -> 1.0
+          effectiveSpeed = baseSpeed * 0.35 * (1.0 - ratio); // 35% -> 0%
+          signalOpacity = 0.75 - ratio * 0.20; // 0.75 -> 0.55
+        } else {
           effectiveSpeed = 0;
-        } else if (timeSinceTelemetry > 8.0) {
-          effectiveSpeed = effectiveSpeed * ((11.0 - timeSinceTelemetry) / 3.0);
+          signalOpacity = 0.45;
         }
 
         // Dead Reckoning 1.0x with overshoot coasting & zero crab angle
@@ -5678,6 +5851,44 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
         // Throttled Aircraft Feature Generation (30Hz desktop / 15-20Hz mobile)
         if (shouldSyncAircraft && isCatVisible) {
+          // Zero Gap Head Connector: attaches last trail point directly to aircraft head
+          const lastPt = t.lastTrailPt || headCoord;
+          if (lastPt && (Math.abs(lastPt[0] - headCoord[0]) > 0.00005 || Math.abs(lastPt[1] - headCoord[1]) > 0.00005)) {
+            connectorFeatures.push({
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: [lastPt, headCoord] },
+              properties: {
+                id: tid,
+                cat: t.cat,
+                color: catMeta.color
+              }
+            });
+          }
+
+          // Real-time dynamic forecast corridor starting at aircraft head
+          const corridor = t.corridor || [];
+          if (corridor.length > 0) {
+            const fCoords = [headCoord];
+            corridor.forEach(cp => {
+              const cLat = Number(cp.lat ?? cp[0]);
+              const cLon = Number(cp.lon ?? cp[1]);
+              if (Number.isFinite(cLat) && Number.isFinite(cLon)) {
+                fCoords.push([cLon, cLat]);
+              }
+            });
+            if (fCoords.length > 1) {
+              forecastFeatures.push({
+                type: 'Feature',
+                geometry: { type: 'LineString', coordinates: fCoords },
+                properties: {
+                  id: tid,
+                  cat: t.cat,
+                  color: catMeta.color
+                }
+              });
+            }
+          }
+
           // Combat Aircraft Silhouettes - suppress 2D icon if this target is focused in 3D Chase mode
           if (!is3DModeActive || focusedTargetId !== tid) {
             const isDanger = t.in_danger_zone || t.in_danger;
@@ -5685,12 +5896,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
             const showClean = (isFocused || isDanger || showLabelsIn2D);
             const labelText = showClean ? `${catMeta.name} · ${Math.round(effectiveSpeed)} км/г` : '';
 
-            let signalOpacity = 1.0;
-            if (timeSinceTelemetry > 11.0) {
-              signalOpacity = 0.35;
-            } else if (timeSinceTelemetry > 8.0) {
-              signalOpacity = 0.65;
-            }
+            // Use smooth signalOpacity from soft decay model (1.0 -> 0.75 -> 0.55 -> 0.45)
 
             aircraftFeatures.push({
               type: 'Feature',
@@ -5772,11 +5978,17 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         }
       }
 
-      // Populate GeoJSON sources: aircraft source throttled to 30Hz desktop / 15-20Hz mobile
+      // Populate GeoJSON sources: aircraft & connectors throttled to 30Hz desktop / 15-20Hz mobile
       if (shouldSyncAircraft) {
         lastAircraftSyncTs = now;
         if (map.getSource('threats-aircraft-source')) {
           map.getSource('threats-aircraft-source').setData({ type: 'FeatureCollection', features: aircraftFeatures });
+        }
+        if (map.getSource('threats-head-connectors-source')) {
+          map.getSource('threats-head-connectors-source').setData({ type: 'FeatureCollection', features: connectorFeatures });
+        }
+        if (map.getSource('threats-forecast-source')) {
+          map.getSource('threats-forecast-source').setData({ type: 'FeatureCollection', features: forecastFeatures });
         }
       }
 
@@ -5987,9 +6199,19 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         }
 
         fresh[tid] = {
+          ...t,
+          id: tid,
           cat,
-          groupCount: t.group_count || 1,
+          type_ua: t.type_ua || t.type,
+          oblast: t.oblast || '',
+          distance_km: t.distance_km ?? t.distance,
+          eta_formatted: t.eta_formatted,
+          eta_min: t.eta_min,
+          approach_desc: t.approach_desc,
+          altitudeM: t.altitude_m || t.altitude || getNominalAltitudeMeters(cat),
+          groupCount: t.group_count || t.groupCount || 1,
           baseTrailPts: t.trajectory || [],
+          lastTrailPt: activeThreats[tid]?.lastTrailPt,
           corridor: t.corridor || t.extrapolated || [],
           lastTelemetryTs: performance.now(),
           sim: {
@@ -6790,9 +7012,14 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
         if (map.getLayer('threats-aircraft-layer')) map.setFilter('threats-aircraft-layer', filterExpr);
         if (map.getLayer('threats-labels-layer')) map.setFilter('threats-labels-layer', filterExpr);
         if (map.getLayer('threats-group-badges')) map.setFilter('threats-group-badges', ['all', ['>', ['get', 'group_count'], 1], filterExpr]);
-        if (map.getLayer('threats-trails-glow')) map.setFilter('threats-trails-glow', filterExpr);
-        if (map.getLayer('threats-trails-core')) map.setFilter('threats-trails-core', filterExpr);
-        if (map.getLayer('threats-trails-layer')) map.setFilter('threats-trails-layer', filterExpr);
+        for (const catKey in THREAT_CATEGORIES) {
+          const vis = enabledThreatCategories.has(catKey) ? 'visible' : 'none';
+          ['threats-trails-glow-' + catKey, 'threats-trails-core-' + catKey].forEach(l => {
+            if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', vis);
+          });
+        }
+        if (map.getLayer('threats-connectors-glow')) map.setFilter('threats-connectors-glow', filterExpr);
+        if (map.getLayer('threats-connectors-core')) map.setFilter('threats-connectors-core', filterExpr);
         if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', filterExpr);
       }
       for (const tid in activeThreats) {
@@ -7201,7 +7428,14 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
     function toggleHistoryTrails(isChecked) {
       if (!map || !map.setLayoutProperty) return;
-      ['threats-trails-glow', 'threats-trails-core', 'threats-trails-layer'].forEach(l => {
+      for (const catKey in THREAT_CATEGORIES) {
+        ['threats-trails-glow-' + catKey, 'threats-trails-core-' + catKey].forEach(l => {
+          if (map.getLayer(l)) {
+            map.setLayoutProperty(l, 'visibility', isChecked ? 'visible' : 'none');
+          }
+        });
+      }
+      ['threats-connectors-glow', 'threats-connectors-core'].forEach(l => {
         if (map.getLayer(l)) {
           map.setLayoutProperty(l, 'visibility', isChecked ? 'visible' : 'none');
         }
@@ -7231,12 +7465,20 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
     }
 
     function toggleHeatmap(type, isChecked) {
-      // Heatmap layer toggle stub
+      if (!map || !map.setLayoutProperty) return;
+      if (type === 'impacts' || type === 'corridors') {
+        if (map.getLayer('threats-impacts-heatmap-layer')) {
+          map.setLayoutProperty('threats-impacts-heatmap-layer', 'visibility', isChecked ? 'visible' : 'none');
+        }
+      }
     }
 
     function onHeatmapOpacityChange(val) {
       const lbl = document.getElementById('valHeatmapOpacity');
       if (lbl) lbl.innerText = val + '%';
+      if (map && map.setPaintProperty && map.getLayer('threats-impacts-heatmap-layer')) {
+        map.setPaintProperty('threats-impacts-heatmap-layer', 'heatmap-opacity', Number(val) / 100.0);
+      }
     }
 
     // Analytics Period & Date Presets
@@ -7403,6 +7645,10 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
           name: item.name_ua || item.type_ua || item.name || (THREAT_CATEGORIES[cat]?.name) || 'Ціль',
           launch_time: startTs,
           lost_time: Math.max(startTs + 10, endTs),
+          start_time: startTs,
+          end_time: Math.max(startTs + 10, endTs),
+          startTs: startTs,
+          endTs: Math.max(startTs + 10, endTs),
           downed: !!(item.downed || item.status === 'downed' || item.status === 'lost'),
           timedPts,
           lost_point: timedPts.length > 0 ? [timedPts[timedPts.length - 1].lat, timedPts[timedPts.length - 1].lon] : null
@@ -7869,7 +8115,7 @@ for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
       if (btn) btn.classList.add('active');
       const slider = document.getElementById('timeSlider');
       if (slider) slider.value = slider.max || 1000;
-      lastGeoJsonSyncTs = 0;
+      lastAircraftSyncTs = 0;
       if (typeof updateLiveKinematics === 'function') {
         updateLiveKinematics(0, performance.now());
       }

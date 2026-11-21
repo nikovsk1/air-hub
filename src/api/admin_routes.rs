@@ -417,6 +417,7 @@ async fn handle_delete_history_month(
     if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
         return status.into_response();
     }
+    let _ = state.history_mgr.consolidate_month_file(&month);
     let file_path = state.history_mgr.history_dir.join(format!("flight_history_{}.json", month));
     let existed = file_path.exists();
     if existed {
@@ -443,6 +444,7 @@ async fn handle_download_history_month(
     if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
         return status.into_response();
     }
+    let _ = state.history_mgr.consolidate_month_file(&month);
     let file_path = state.history_mgr.history_dir.join(format!("flight_history_{}.json", month));
     if let Ok(content) = fs::read_to_string(&file_path) {
         (

@@ -1221,7 +1221,7 @@
         const dismissedCount = parseInt(localStorage.getItem('admin_dismissed_unknown_count') || '0', 10);
         if (unkBanner && unkText) {
           if (unkCount > 0 && unkCount > dismissedCount) {
-            const listStr = hData.unknown_target_types.map(x => `${x.type_identifier} (код: ${x.raw_code}, повторень: ${x.count})`).join(", ");
+            const listStr = hData.unknown_target_types.map(x => `${escapeHtml(x.type_identifier)} (код: ${x.raw_code}, повторень: ${x.count})`).join(", ");
             unkText.innerHTML = `<b>Увага: виявлено новий невідомий тип цілі в ефірі:</b> ${listStr}. Ціль автоматично супроводжується як <i>"Ціль не визначена"</i> із збереженням усіх алертів та координат.`;
             unkBanner.classList.remove("hidden");
           } else {
@@ -2131,7 +2131,7 @@ ${resp.api_key}
           const rad = sl.danger_radius_km ?? s.danger_radius_km ?? 35;
           const isDyn = sl.type === "dynamic";
           return `<span class="inline-flex items-center gap-1 bg-gray-950 border border-gray-800 px-2 py-0.5 rounded text-[11px] text-gray-300" title="Точка #${sid}: ${sl.name || 'Слот'} (${sl.lat}, ${sl.lon})">
-            <span class="text-gray-400 font-medium">#${sid}${isDyn ? ' 📡' : ''} ${sl.name || 'Точка'}:</span>
+            <span class="text-gray-400 font-medium">#${sid}${isDyn ? ' 📡' : ''} ${escapeHtml(sl.name || 'Точка')}:</span>
             <span class="text-orange-400 font-mono font-bold">${rad} км</span>
           </span>`;
         }).join(" ");
@@ -2246,6 +2246,10 @@ ${resp.api_key}
                 </div>
 
                 <div class="flex items-center gap-2">
+                  <label class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-gray-950 border border-gray-800 text-[11px] text-gray-300 cursor-pointer hover:border-gray-700 transition" title="Доступ до перегляду військових аеродромів та баз ППО">
+                    <input type="checkbox" ${u.can_view_military_poi ? 'checked' : ''} onchange="toggleMilitaryPoi('${u.api_key}', this.checked)" class="rounded accent-emerald-500 cursor-pointer">
+                    <span class="${u.can_view_military_poi ? 'text-emerald-400 font-semibold' : 'text-gray-400'}">🛡️ Військові POI</span>
+                  </label>
                   <span class="text-xs px-2.5 py-1 rounded-full font-mono font-bold ${slotsCount >= 5 ? 'bg-amber-950 text-amber-400 border border-amber-800' : 'bg-blue-950 text-blue-400 border border-blue-800'}">
                     ${slotsCount} / 5 слотів
                   </span>
@@ -2611,6 +2615,16 @@ ${resp.api_key}
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled })
+      });
+      loadKeys();
+    }
+
+    async function toggleMilitaryPoi(key, can_view_military_poi) {
+      if (!currentAdminKey) return showLoginScreen();
+      await adminFetch("/api/v1/admin/keys/" + encodeURIComponent(key), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ can_view_military_poi })
       });
       loadKeys();
     }
@@ -3263,7 +3277,7 @@ ${resp.api_key}
       let html = `<div class="font-semibold text-gray-300 mb-1">Точки спостереження (${slots.length}):</div><div class="space-y-1">`;
       slots.forEach(s => {
         html += `<div class="flex items-center justify-between text-[11px] text-gray-300 bg-gray-900/60 px-2 py-1 rounded border border-gray-800">
-          <span>📍 <strong>${s.name || 'Точка'}</strong> <span class="text-gray-500">(${s.lat.toFixed(4)}, ${s.lon.toFixed(4)})</span></span>
+          <span>📍 <strong>${escapeHtml(s.name || 'Точка')}</strong> <span class="text-gray-500">(${s.lat.toFixed(4)}, ${s.lon.toFixed(4)})</span></span>
           <span class="text-orange-400 font-mono font-bold">${s.danger_zone || s.danger_radius_km || 35} км</span>
         </div>`;
       });

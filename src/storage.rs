@@ -59,7 +59,7 @@ pub struct User {
     pub alert_mig: bool,
     #[serde(default = "default_true")]
     pub alert_artillery: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_false")]
     pub can_view_military_poi: bool,
     #[serde(default)]
     pub slots: HashMap<String, Slot>,
@@ -1295,5 +1295,19 @@ mod tests {
         assert!(recovered_mgr.get_user_by_key("ak_test123").is_some(), "User must be successfully recovered from .bak");
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_user_deserialization_defaults_military_poi_to_false() {
+        // Тест безпеки RBAC: при десеріалізації користувача без явної вказівки can_view_military_poi,
+        // значення повинно за замовчуванням бути FALSE, а не TRUE.
+        let user_json = r#"{
+            "owner": "Regular Civilian User",
+            "api_key": "civ_key_001",
+            "created_at": "2026-11-21T00:00:00Z"
+        }"#;
+
+        let user: User = serde_json::from_str(user_json).expect("User deserialization must succeed");
+        assert!(!user.can_view_military_poi, "can_view_military_poi MUST default to false for security");
     }
 }
