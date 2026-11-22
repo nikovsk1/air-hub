@@ -3828,11 +3828,28 @@
         id: 'threats-forecast-layer',
         type: 'line',
         source: 'threats-forecast-source',
+        filter: ['==', '$type', 'LineString'],
         paint: {
           'line-color': ['get', 'color'],
           'line-width': 2.5,
           'line-dasharray': [2, 2],
           'line-opacity': 0.75
+        }
+      });
+
+      // Tactical bead chain forecast corridor (1-15 min decaying opacity circles)
+      map.addLayer({
+        id: 'threats-forecast-ticks',
+        type: 'circle',
+        source: 'threats-forecast-source',
+        filter: ['==', '$type', 'Point'],
+        paint: {
+          'circle-color': ['get', 'color'],
+          'circle-radius': ['coalesce', ['get', 'radius'], 3.0],
+          'circle-opacity': ['coalesce', ['get', 'opacity'], 0.85],
+          'circle-stroke-width': ['coalesce', ['get', 'stroke_width'], 1.0],
+          'circle-stroke-color': '#0B132B',
+          'circle-stroke-opacity': ['coalesce', ['get', 'stroke_opacity'], 0.7]
         }
       });
 
@@ -4185,6 +4202,22 @@
         case 'fpv': return 180;
         default: return 450;
       }
+    }
+
+    function disposeThreeGroup(grp) {
+      if (!grp) return;
+      grp.traverse(child => {
+        if (child.geometry) {
+          child.geometry.dispose();
+        }
+        if (child.material) {
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          mats.forEach(m => {
+            if (m.map) m.map.dispose();
+            m.dispose();
+          });
+        }
+      });
     }
 
     function buildThreatMesh(cat, color, isGhost, altMeters = 400) {
@@ -5141,7 +5174,14 @@
         setTrailVisibility('visible');
         if (map.getLayer('threats-connectors-glow')) map.setFilter('threats-connectors-glow', null);
         if (map.getLayer('threats-connectors-core')) map.setFilter('threats-connectors-core', null);
-        if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', null);
+        if (map.getLayer('threats-forecast-layer')) {
+          map.setLayoutProperty('threats-forecast-layer', 'visibility', 'visible');
+          map.setFilter('threats-forecast-layer', ['==', '$type', 'LineString']);
+        }
+        if (map.getLayer('threats-forecast-ticks')) {
+          map.setLayoutProperty('threats-forecast-ticks', 'visibility', 'visible');
+          map.setFilter('threats-forecast-ticks', ['==', '$type', 'Point']);
+        }
         if (map.getLayer('poi-layer')) map.setLayoutProperty('poi-layer', 'visibility', 'visible');
       } else if (filter === 'missiles') {
         const allowed = ['missile', 'ballistic', 'kab', 'artillery'];
@@ -5163,7 +5203,14 @@
           map.setLayoutProperty('threats-connectors-core', 'visibility', 'visible');
           map.setFilter('threats-connectors-core', filterExpr);
         }
-        if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', filterExpr);
+        if (map.getLayer('threats-forecast-layer')) {
+          map.setLayoutProperty('threats-forecast-layer', 'visibility', 'visible');
+          map.setFilter('threats-forecast-layer', ['all', ['==', '$type', 'LineString'], filterExpr]);
+        }
+        if (map.getLayer('threats-forecast-ticks')) {
+          map.setLayoutProperty('threats-forecast-ticks', 'visibility', 'visible');
+          map.setFilter('threats-forecast-ticks', ['all', ['==', '$type', 'Point'], filterExpr]);
+        }
         if (map.getLayer('poi-layer')) map.setLayoutProperty('poi-layer', 'visibility', 'none');
       } else if (filter === 'shaheds') {
         const allowed = ['shahed', 'shahed_jet', 'banderol'];
@@ -5185,7 +5232,14 @@
           map.setLayoutProperty('threats-connectors-core', 'visibility', 'visible');
           map.setFilter('threats-connectors-core', filterExpr);
         }
-        if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', filterExpr);
+        if (map.getLayer('threats-forecast-layer')) {
+          map.setLayoutProperty('threats-forecast-layer', 'visibility', 'visible');
+          map.setFilter('threats-forecast-layer', ['all', ['==', '$type', 'LineString'], filterExpr]);
+        }
+        if (map.getLayer('threats-forecast-ticks')) {
+          map.setLayoutProperty('threats-forecast-ticks', 'visibility', 'visible');
+          map.setFilter('threats-forecast-ticks', ['all', ['==', '$type', 'Point'], filterExpr]);
+        }
         if (map.getLayer('poi-layer')) map.setLayoutProperty('poi-layer', 'visibility', 'none');
       } else if (filter === 'danger') {
         const filterExpr = ['==', ['get', 'in_danger'], true];
@@ -5198,13 +5252,21 @@
           map.setFilter('threats-labels-layer', filterExpr);
         }
         setTrailVisibility('visible');
-        if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', filterExpr);
+        if (map.getLayer('threats-forecast-layer')) {
+          map.setLayoutProperty('threats-forecast-layer', 'visibility', 'visible');
+          map.setFilter('threats-forecast-layer', ['all', ['==', '$type', 'LineString'], filterExpr]);
+        }
+        if (map.getLayer('threats-forecast-ticks')) {
+          map.setLayoutProperty('threats-forecast-ticks', 'visibility', 'visible');
+          map.setFilter('threats-forecast-ticks', ['all', ['==', '$type', 'Point'], filterExpr]);
+        }
         if (map.getLayer('poi-layer')) map.setLayoutProperty('poi-layer', 'visibility', 'none');
       } else if (filter === 'poi') {
         if (map.getLayer('threats-aircraft-layer')) map.setLayoutProperty('threats-aircraft-layer', 'visibility', 'none');
         if (map.getLayer('threats-labels-layer')) map.setLayoutProperty('threats-labels-layer', 'visibility', 'none');
         setTrailVisibility('none');
         if (map.getLayer('threats-forecast-layer')) map.setLayoutProperty('threats-forecast-layer', 'visibility', 'none');
+        if (map.getLayer('threats-forecast-ticks')) map.setLayoutProperty('threats-forecast-ticks', 'visibility', 'none');
         if (map.getLayer('poi-layer')) map.setLayoutProperty('poi-layer', 'visibility', 'visible');
       }
     }
@@ -5624,6 +5686,7 @@
     // =========================================================================
     let lastAnimTs = performance.now();
     let lastAircraftSyncTs = 0;
+    let lastForecastSyncTs = 0;
 
     let isDocumentVisible = !document.hidden;
     document.addEventListener('visibilitychange', () => {
@@ -5652,6 +5715,51 @@
       return current;
     }
 
+    // Client-side visual de-spiking for LIVE mode only:
+    // Filters out acute sensor ping jitter (N-zigzags > 110 deg over < 4.5 km, or 1-cell radar grid ping-pong jumps <= 8.8 km) without mutating backend history
+    function despikeVisualTrail(pts) {
+      if (!pts || pts.length < 3) return pts || [];
+      const clean = [pts[0]];
+      for (let i = 1; i < pts.length - 1; i++) {
+        const prev = clean[clean.length - 1];
+        const curr = pts[i];
+        const next = pts[i + 1];
+
+        const d1 = computeDistanceKm(prev[1], prev[0], curr[1], curr[0]);
+        const d2 = computeDistanceKm(curr[1], curr[0], next[1], next[0]);
+        const dDirect = computeDistanceKm(prev[1], prev[0], next[1], next[0]);
+
+        // Skip redundant stationary micro-noise (< 50 meters)
+        if (d1 < 0.05) continue;
+
+        if (d1 <= 8.8 && d2 <= 8.8 && d1 > 0.05 && d2 > 0.05) {
+          const midLat = (curr[1] + prev[1]) * 0.5;
+          const cosLat = Math.cos((midLat * Math.PI) / 180.0);
+          const v1x = (curr[0] - prev[0]) * cosLat, v1y = curr[1] - prev[1];
+          const v2x = (next[0] - curr[0]) * cosLat, v2y = next[1] - curr[1];
+          const dot = v1x * v2x + v1y * v2y;
+          const mag = Math.hypot(v1x, v1y) * Math.hypot(v2x, v2y);
+          if (mag > 0) {
+            const cosA = Math.max(-1, Math.min(1, dot / mag));
+            const turnDeg = (Math.acos(cosA) * 180) / Math.PI;
+
+            // Condition 1: Sharp micro-jitter (< 4.5 km legs, > 110 deg)
+            const isMicroJitter = (d1 < 4.5 && d2 < 4.5 && turnDeg > 110);
+            // Condition 2: Grid-cell ping-pong reversal (1-cell jump <= 8.8 km, sharp turn > 140 deg or returning close dDirect < 2.0 km)
+            const isGridPingPong = (turnDeg > 140 || (dDirect < 2.0 && (d1 > 3.0 || d2 > 3.0)));
+
+            if (isMicroJitter || isGridPingPong) {
+              // Sensor triangulation artifact - skip from LIVE visual line
+              continue;
+            }
+          }
+        }
+        clean.push(curr);
+      }
+      clean.push(pts[pts.length - 1]);
+      return clean;
+    }
+
     // Split-Rate Native MapLibre: Trajectory trails updated ONLY upon WS/REST data arrival (0.2-1 Hz)
     function syncThreatTrailsToSource(incomingThreats) {
       if (!map || !map.getSource('threats-trails-source')) return;
@@ -5665,7 +5773,7 @@
         if (status === 'lost' || status === 'eliminated' || status === 'hit_target' || status === 'superseded' || status === 'downed') {
           return;
         }
-        if (window.recentLostThreats && window.recentLostThreats[tid]) {
+        if ((recentLostThreats && recentLostThreats[tid]) || (allReceivedLostThreats && allReceivedLostThreats[tid])) {
           return;
         }
 
@@ -5693,13 +5801,9 @@
           }
         }
 
-        // Store last trail point for the 30Hz head connector
-        if (pts.length > 0 && activeThreats[tid]) {
-          activeThreats[tid].lastTrailPt = pts[pts.length - 1];
-        }
-
         if (pts.length > 1) {
-          const smoothed = chaikinSmooth(pts, 2);
+          const cleanPts = despikeVisualTrail(pts);
+          const smoothed = chaikinSmooth(cleanPts, 2);
           trailFeatures.push({
             type: 'Feature',
             geometry: { type: 'LineString', coordinates: smoothed },
@@ -5709,6 +5813,12 @@
               color: catMeta.color
             }
           });
+          // Pin last smoothed trail point for the 30Hz head connector
+          if (activeThreats[tid]) {
+            activeThreats[tid].lastTrailPt = smoothed[smoothed.length - 1];
+          }
+        } else if (pts.length === 1 && activeThreats[tid]) {
+          activeThreats[tid].lastTrailPt = pts[0];
         }
       });
 
@@ -5759,11 +5869,21 @@
       for (const tid in activeThreats) {
         const t = activeThreats[tid];
         const sim = t.sim;
+        if (!sim) continue;
+
+        // Downed, eliminated, hit_target, lost, or superseded targets MUST NEVER be displayed!
+        const status = String(t.status || 'active').toLowerCase();
+        if (status === 'lost' || status === 'eliminated' || status === 'hit_target' || status === 'superseded' || status === 'downed') {
+          continue;
+        }
+        if ((recentLostThreats && recentLostThreats[tid]) || (allReceivedLostThreats && allReceivedLostThreats[tid])) {
+          continue;
+        }
 
         // Soft kinematic speed decay with last_moved_ts & cruise_speed_kmh support
         // 0-15s: 100%, 15-30s: linear decay down to 35%, 30-45s: smooth decay down to 0% (opacity 0.55), >45s: freeze
         const timeSinceTelemetry = (now - (t.lastTelemetryTs || now)) / 1000.0;
-        let baseSpeed = Number(t.cruise_speed_kmh || sim.speedKmh || 200.0);
+        let baseSpeed = Number(t.filtered_speed_kmh || sim.speedKmh || t.cruise_speed_kmh || 200.0);
         let effectiveSpeed = baseSpeed;
         let signalOpacity = 1.0;
 
@@ -5783,17 +5903,47 @@
           signalOpacity = 0.45;
         }
 
-        // Dead Reckoning 1.0x with overshoot coasting & zero crab angle
-        if (effectiveSpeed > 5) {
-          let coastSpeed = effectiveSpeed;
-          if (sim.overshootKm > 0) {
-            coastSpeed = effectiveSpeed * 0.15;
-            sim.overshootKm = Math.max(0, sim.overshootKm - (effectiveSpeed / 3600.0) * dt);
+        // Metric scale factors at current latitude
+        const kmPerLat = 111.0;
+        const kmPerLon = 111.0 * Math.cos((sim.curLat * Math.PI) / 180.0);
+        const dxKm = (sim.srvLon - sim.curLon) * kmPerLon;
+        const dyKm = (sim.srvLat - sim.curLat) * kmPerLat;
+        const distToSrvKm = Math.hypot(dxKm, dyKm);
+
+        // 1. Smooth angular heading transition towards server heading
+        const diffH = ((sim.srvHeading - sim.curHeading + 540) % 360) - 180;
+        sim.curHeading = (sim.curHeading + diffH * Math.min(1.0, dt * 4.0) + 360) % 360;
+
+        // 2. Bounded Catch-Up & Glide State Machine
+        if (sim.hasNewServerTarget) {
+          if (distToSrvKm > 25.0) {
+            // Far teleport / relocation: snap immediately
+            sim.curLat = sim.srvLat;
+            sim.curLon = sim.srvLon;
+            sim.glideKm = 0;
+            sim.hasNewServerTarget = false;
+          } else if (distToSrvKm > 0.03) {
+            // Smooth exponential catch-up (settles in ~1.5s)
+            const blend = 1.0 - Math.exp(-dt * 2.4);
+            sim.curLat += (sim.srvLat - sim.curLat) * blend;
+            sim.curLon += (sim.srvLon - sim.curLon) * blend;
+            sim.glideKm = 0;
+          } else {
+            // Reached server point
+            sim.hasNewServerTarget = false;
+            sim.glideKm = 0;
           }
-          const dKm = (coastSpeed / 3600.0) * dt;
-          const rad = (sim.curHeading * Math.PI) / 180.0;
-          sim.curLat += (dKm / 111.0) * Math.cos(rad);
-          sim.curLon += (dKm / (111.0 * Math.cos((sim.curLat * Math.PI) / 180.0))) * Math.sin(rad);
+        } else if (effectiveSpeed > 5) {
+          // Bounded Glide Phase: forward motion strictly capped at maxGlideKm
+          const maxGlideKm = effectiveSpeed >= 300 ? 0.8 : 0.35;
+          if (sim.glideKm < maxGlideKm) {
+            const glideFactor = Math.max(0, 1.0 - sim.glideKm / maxGlideKm) * 0.45;
+            const stepKm = (effectiveSpeed / 3600.0) * dt * glideFactor;
+            const rad = (sim.curHeading * Math.PI) / 180.0;
+            sim.curLat += (stepKm / kmPerLat) * Math.cos(rad);
+            sim.curLon += (stepKm / kmPerLon) * Math.sin(rad);
+            sim.glideKm += stepKm;
+          }
         }
 
         const isCatVisible = enabledThreatCategories.has(t.cat);
@@ -5816,25 +5966,27 @@
             });
           }
 
-          // Real-time dynamic forecast corridor starting at aircraft head
-          const corridor = t.corridor || [];
-          if (corridor.length > 0) {
-            const fCoords = [headCoord];
-            corridor.forEach(cp => {
-              const cLat = Number(cp.lat ?? cp[0]);
-              const cLon = Number(cp.lon ?? cp[1]);
-              if (Number.isFinite(cLat) && Number.isFinite(cLon)) {
-                fCoords.push([cLon, cLat]);
-              }
-            });
-            if (fCoords.length > 1) {
+          // Tactical 15-minute bead chain forecast corridor (1-15 min dotted circles with 3-phase decaying opacity)
+          if (effectiveSpeed > 30 && timeSinceTelemetry <= 30.0) {
+            const rad = (sim.curHeading * Math.PI) / 180.0;
+            for (let mins = 1; mins <= 15; mins++) {
+              const distKm = (effectiveSpeed / 60.0) * mins;
+              const pLat = sim.curLat + (distKm / kmPerLat) * Math.cos(rad);
+              const pLon = sim.curLon + (distKm / kmPerLon) * Math.sin(rad);
+              const isPhase1 = (mins <= 5);
+              const isPhase2 = (mins > 5 && mins <= 10);
               forecastFeatures.push({
                 type: 'Feature',
-                geometry: { type: 'LineString', coordinates: fCoords },
+                geometry: { type: 'Point', coordinates: [pLon, pLat] },
                 properties: {
-                  id: tid,
+                  id: `${tid}-dot-${mins}`,
                   cat: t.cat,
-                  color: catMeta.color
+                  color: catMeta.color,
+                  mins: mins,
+                  radius: isPhase1 ? 3.5 : (isPhase2 ? 2.8 : 2.2),
+                  opacity: isPhase1 ? 0.95 : (isPhase2 ? 0.55 : 0.22),
+                  stroke_width: isPhase1 ? 1.0 : (isPhase2 ? 0.5 : 0.0),
+                  stroke_opacity: isPhase1 ? 0.85 : (isPhase2 ? 0.4 : 0.0)
                 }
               });
             }
@@ -5873,9 +6025,17 @@
           const isGhost = (focusedTargetId !== null && focusedTargetId !== tid);
           const altMeters = t.altitudeM || getNominalAltitudeMeters(t.cat);
 
+          // Morph 3D model if category changed (e.g. unknown -> shahed, shahed -> shahed_jet)
+          if (meshGroup && meshGroup.userData?.cat !== t.cat) {
+            threeScene.remove(meshGroup);
+            disposeThreeGroup(meshGroup);
+            delete threat3DMeshes[tid];
+            meshGroup = null;
+          }
+
           if (!meshGroup) {
             meshGroup = buildThreatMesh(t.cat, catMeta.color, isGhost, altMeters);
-            meshGroup.userData = { tid, isGhost };
+            meshGroup.userData = { tid, isGhost, cat: t.cat };
             threeScene.add(meshGroup);
             threat3DMeshes[tid] = meshGroup;
           } else if (meshGroup.userData?.isGhost !== isGhost) {
@@ -5938,8 +6098,11 @@
         if (map.getSource('threats-head-connectors-source')) {
           map.getSource('threats-head-connectors-source').setData({ type: 'FeatureCollection', features: connectorFeatures });
         }
-        if (map.getSource('threats-forecast-source')) {
-          map.getSource('threats-forecast-source').setData({ type: 'FeatureCollection', features: forecastFeatures });
+        if (now - lastForecastSyncTs >= 600 || lastForecastSyncTs === 0) {
+          lastForecastSyncTs = now;
+          if (map.getSource('threats-forecast-source')) {
+            map.getSource('threats-forecast-source').setData({ type: 'FeatureCollection', features: forecastFeatures });
+          }
         }
       }
 
@@ -6072,27 +6235,40 @@
 
         const sLat = Number(t.lat);
         const sLon = Number(t.lon);
-        let sHeading = Number(t.heading ?? t.heading_deg ?? activeThreats[tid]?.sim?.curHeading ?? 0);
-        if ((t.heading === undefined || t.heading === null || t.heading === 0) && t.trajectory && t.trajectory.length >= 2) {
-          const p1 = t.trajectory[t.trajectory.length - 2];
-          const p2 = t.trajectory[t.trajectory.length - 1];
-          const lat1 = Number(p1.lat ?? p1[0]);
-          const lon1 = Number(p1.lon ?? p1[1]);
-          const lat2 = Number(p2.lat ?? p2[0]);
-          const lon2 = Number(p2.lon ?? p2[1]);
-          if (Number.isFinite(lat1) && Number.isFinite(lat2) && (lat1 !== lat2 || lon1 !== lon2)) {
-            const y = Math.sin((lon2 - lon1) * Math.PI / 180.0) * Math.cos(lat2 * Math.PI / 180.0);
-            const x = Math.cos(lat1 * Math.PI / 180.0) * Math.sin(lat2 * Math.PI / 180.0) -
-                      Math.sin(lat1 * Math.PI / 180.0) * Math.cos(lat2 * Math.PI / 180.0) * Math.cos((lon2 - lon1) * Math.PI / 180.0);
+        let sHeading = Number(
+          (t.raw_heading !== undefined && t.raw_heading !== null && !isNaN(t.raw_heading))
+            ? t.raw_heading
+            : (t.heading ?? t.heading_deg ?? activeThreats[tid]?.sim?.curHeading ?? 0)
+        );
+        if ((!sHeading || isNaN(sHeading) || sHeading === 0) && t.trajectory && t.trajectory.length >= 2) {
+          let p2 = null, p1 = null;
+          for (let pi = t.trajectory.length - 1; pi >= 0; pi--) {
+            const pt = t.trajectory[pi];
+            const pLat = Number(pt.lat ?? pt[0]);
+            const pLon = Number(pt.lon ?? pt[1]);
+            if (Number.isFinite(pLat) && Number.isFinite(pLon)) {
+              if (!p2) {
+                p2 = { lat: pLat, lon: pLon };
+              } else if (Math.abs(pLat - p2.lat) > 0.0001 || Math.abs(pLon - p2.lon) > 0.0001) {
+                p1 = { lat: pLat, lon: pLon };
+                break;
+              }
+            }
+          }
+          if (p1 && p2) {
+            const y = Math.sin((p2.lon - p1.lon) * Math.PI / 180.0) * Math.cos(p2.lat * Math.PI / 180.0);
+            const x = Math.cos(p1.lat * Math.PI / 180.0) * Math.sin(p2.lat * Math.PI / 180.0) -
+                      Math.sin(p1.lat * Math.PI / 180.0) * Math.cos(p2.lat * Math.PI / 180.0) * Math.cos((p2.lon - p1.lon) * Math.PI / 180.0);
             sHeading = (Math.atan2(y, x) * 180.0 / Math.PI + 360.0) % 360.0;
           }
         }
-        const sSpeed = Number(t.speed_kmh || t.speed || 200);
+        const sSpeed = Number(t.filtered_speed_kmh || t.speed_kmh || t.cruise_speed_kmh || t.speed || 200);
 
         let curLat = sLat;
         let curLon = sLon;
         let curHeading = sHeading;
-        let overshootKm = 0;
+        let glideKm = 0;
+        let hasNewServerTarget = false;
 
         const oldSim = activeThreats[tid]?.sim;
         if (oldSim && !isNaN(oldSim.curLat) && !isNaN(oldSim.curLon)) {
@@ -6100,39 +6276,24 @@
           const kmPerLon = 111.0 * Math.cos((oldSim.curLat * Math.PI) / 180.0);
           const dxKm = (sLon - oldSim.curLon) * kmPerLon;
           const dyKm = (sLat - oldSim.curLat) * kmPerLat;
-          const distKm = Math.sqrt(dxKm * dxKm + dyKm * dyKm);
+          const distKm = Math.hypot(dxKm, dyKm);
 
           if (distKm > 25.0) {
             // Teleport or radical reroute: snap immediately
             curLat = sLat;
             curLon = sLon;
             curHeading = sHeading;
-            overshootKm = 0;
+            glideKm = 0;
+            hasNewServerTarget = false;
           } else {
-            // Project delta vector onto aircraft heading vector
-            const rad = (oldSim.curHeading * Math.PI) / 180.0;
-            const ux = Math.sin(rad);
-            const uy = Math.cos(rad);
-            const dParallel = dxKm * ux + dyKm * uy;
-            const dPerp = dxKm * (-uy) + dyKm * ux;
-
-            if (dParallel < -0.04) {
-              // Delayed server packet is BEHIND client extrapolation: NEVER FLY BACKWARDS!
-              curLat = oldSim.curLat;
-              curLon = oldSim.curLon;
-              overshootKm = Math.abs(dParallel);
-              // Gently absorb lateral cross-track drift
-              curLat += (dPerp * (-uy) / kmPerLat) * 0.25;
-              curLon += (dPerp * ux / kmPerLon) * 0.25;
-            } else {
-              // Server is ahead or inline: smooth exponential catch-up (Dead Reckoning)
-              curLat = oldSim.curLat + (sLat - oldSim.curLat) * 0.25;
-              curLon = oldSim.curLon + (sLon - oldSim.curLon) * 0.25;
-              overshootKm = 0;
-            }
-            // Smooth angular turn towards server heading
-            let diffH = (sHeading - oldSim.curHeading + 540) % 360 - 180;
-            curHeading = (oldSim.curHeading + diffH * 0.3 + 360) % 360;
+            // Smooth catch-up retention: maintain current smooth visual position
+            curLat = oldSim.curLat;
+            curLon = oldSim.curLon;
+            curHeading = oldSim.curHeading;
+            glideKm = 0;
+            // Check if server coordinate actually updated (> 10 meters)
+            const srvMoved = Math.abs(sLat - (oldSim.srvLat ?? sLat)) > 0.0001 || Math.abs(sLon - (oldSim.srvLon ?? sLon)) > 0.0001;
+            hasNewServerTarget = srvMoved;
           }
         }
 
@@ -6155,9 +6316,13 @@
           sim: {
             curLat,
             curLon,
+            srvLat: sLat,
+            srvLon: sLon,
             curHeading,
+            srvHeading: sHeading,
             speedKmh: sSpeed,
-            overshootKm
+            glideKm,
+            hasNewServerTarget
           }
         };
       });
@@ -6180,13 +6345,7 @@
           }
           const grp = threat3DMeshes[tid];
           if (threeScene) threeScene.remove(grp);
-          grp.traverse(child => {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
-              else child.material.dispose();
-            }
-          });
+          disposeThreeGroup(grp);
           delete threat3DMeshes[tid];
         }
       }
@@ -6317,6 +6476,7 @@
 
       // Trigger immediate aircraft GeoJSON sync
       lastAircraftSyncTs = 0;
+      lastForecastSyncTs = 0;
       updateLiveKinematics(0, performance.now());
     }
 
@@ -6374,18 +6534,20 @@
 
     function normalizeCat(catRaw) {
       if (!catRaw) return 'unknown';
-      const c = catRaw.toLowerCase();
+      const c = String(catRaw).toLowerCase().trim();
+      if (THREAT_CATEGORIES[c]) return c;
       if (c.includes('jet') || c.includes('реактив') || c.includes('реакт') || c.includes('238')) return 'shahed_jet';
       if (c.includes('shahed') || c.includes('шахед') || c.includes('геран') || c.includes('136') || c.includes('мопед') || c.includes('гербера')) return 'shahed';
       if (c.includes('cruise') || c.includes('крилат') || c.includes('ракета') || c.includes('missile')) return 'missile';
       if (c.includes('ballistic') || c.includes('балістич') || c.includes('кинджал') || c.includes('іскандер')) return 'ballistic';
       if (c.includes('aviation') || c.includes('авіа') || c.includes('літак') || c.includes('plane')) return 'aviation';
       if (c.includes('kab') || c.includes('каб') || c.includes('бомб')) return 'kab';
+      if (c.includes('banderol') || c.includes('бандерол') || c.includes('фальш')) return 'banderol';
       if (c.includes('lancet') || c.includes('ланцет') || c.includes('куб')) return 'lancet';
       if (c.includes('recon') || c.includes('розвід') || c.includes('орлан') || c.includes('zala')) return 'recon';
       if (c.includes('artillery') || c.includes('артил') || c.includes('рсзв') || c.includes('град')) return 'artillery';
       if (c.includes('fpv') || c.includes('молнія')) return 'fpv';
-      return THREAT_CATEGORIES[c] ? c : 'unknown';
+      return 'unknown';
     }
 
     // =========================================================================
@@ -6958,7 +7120,8 @@
         }
         if (map.getLayer('threats-connectors-glow')) map.setFilter('threats-connectors-glow', filterExpr);
         if (map.getLayer('threats-connectors-core')) map.setFilter('threats-connectors-core', filterExpr);
-        if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', filterExpr);
+        if (map.getLayer('threats-forecast-layer')) map.setFilter('threats-forecast-layer', ['all', ['==', '$type', 'LineString'], filterExpr]);
+        if (map.getLayer('threats-forecast-ticks')) map.setFilter('threats-forecast-ticks', ['all', ['==', '$type', 'Point'], filterExpr]);
       }
       for (const tid in activeThreats) {
         const t = activeThreats[tid];
@@ -7540,7 +7703,7 @@
       }
     }
 
-    function ingestHistoryDataset(data, fromDate = '', toDate = '') {
+    function ingestHistoryDataset(data, fromDate = '', toDate = '', isBackgroundPreload = false) {
       let rawTargets = [];
       if (Array.isArray(data)) {
         rawTargets = data;
@@ -7583,6 +7746,13 @@
           return null;
         }).filter(p => p && Number.isFinite(p.lat) && Number.isFinite(p.lon));
 
+        // Pre-compute despiked visual coordinates once on ingest for rock-solid 60 FPS scrub performance
+        const baseCoords = timedPts.map(p => [p.lon, p.lat]);
+        let displayCoords = baseCoords;
+        if (baseCoords.length >= 3 && typeof despikeVisualTrail === 'function') {
+          displayCoords = despikeVisualTrail(baseCoords);
+        }
+
         return {
           id: item.id || `hist-${idx}`,
           cat,
@@ -7595,14 +7765,17 @@
           endTs: Math.max(startTs + 10, endTs),
           downed: !!(item.downed || item.status === 'downed' || item.status === 'lost'),
           timedPts,
+          displayCoords,
           lost_point: timedPts.length > 0 ? [timedPts[timedPts.length - 1].lat, timedPts[timedPts.length - 1].lon] : null
         };
       });
 
-      // ПЕРЕМИКАЄМО РАДАР У РЕЖИМ ІСТОРІЇ (REPLAY), ЩОБ LIVE НЕ ПЕРЕЗАПИСУВАВ МАПУ!
-      isLiveMode = false;
-      const liveBtn = document.getElementById('btnLivePill');
-      if (liveBtn) liveBtn.classList.remove('active');
+      if (!isBackgroundPreload) {
+        // ПЕРЕМИКАЄМО РАДАР У РЕЖИМ ІСТОРІЇ (REPLAY), ЩОБ LIVE НЕ ПЕРЕЗАПИСУВАВ МАПУ!
+        isLiveMode = false;
+        const liveBtn = document.getElementById('btnLivePill');
+        if (liveBtn) liveBtn.classList.remove('active');
+      }
 
       renderAnalyticsThreatFilters();
       updateAnalyticsStats();
@@ -7615,20 +7788,62 @@
           if (t.launch_time < minT) minT = t.launch_time;
           if (t.lost_time > maxT) maxT = t.lost_time;
         });
-        simMinTime = minT;
-        simMaxTime = maxT;
-        simTime = maxT;
+
+        if (isBackgroundPreload) {
+          const midnightSec = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+          const nowSec = Math.floor(Date.now() / 1000);
+          simMinTime = Math.min(minT, midnightSec);
+          simMaxTime = Math.max(maxT, nowSec);
+          simTime = simMaxTime;
+        } else {
+          simMinTime = minT;
+          simMaxTime = maxT;
+          simTime = maxT;
+        }
 
         const slider = document.getElementById('timeSlider');
         if (slider) {
-          slider.min = minT;
-          slider.max = maxT;
+          slider.min = simMinTime;
+          slider.max = simMaxTime;
           slider.value = simTime;
         }
       }
 
-      renderHistoricalStaticLayers();
-      applyHistoricalFilterToMap(true);
+      if (!isBackgroundPreload) {
+        renderHistoricalStaticLayers();
+        applyHistoricalFilterToMap(true);
+      }
+    }
+
+    let hasPreloadedTodayHistory = false;
+    let isPreloadingTodayHistory = false;
+
+    async function preloadTodayHistory(switchToReplayOnFinish = false) {
+      if (hasPreloadedTodayHistory || isPreloadingTodayHistory) return;
+      isPreloadingTodayHistory = true;
+      try {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const query = `token=${encodeURIComponent(clientToken)}&date=${encodeURIComponent(todayStr)}`;
+        const res = await fetch(`/api/v1/history?${query}`);
+        if (res.ok) {
+          const histData = await res.json();
+          hasPreloadedTodayHistory = true;
+          ingestHistoryDataset(histData, todayStr, todayStr, !switchToReplayOnFinish);
+          if (switchToReplayOnFinish) {
+            isLiveMode = false;
+            const btn = document.getElementById('btnLivePill');
+            if (btn) btn.classList.remove('active');
+            renderHistoricalStaticLayers();
+            if (typeof applyHistoricalFilterToMap === 'function') {
+              applyHistoricalFilterToMap(true);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[History] Preload today failed:', err);
+      } finally {
+        isPreloadingTodayHistory = false;
+      }
     }
 
     function renderHistoricalStaticLayers() {
@@ -7639,12 +7854,12 @@
 
       visible.forEach(t => {
         const catMeta = THREAT_CATEGORIES[t.cat] || THREAT_CATEGORIES.unknown;
-        const pts = t.timedPts || [];
+        const pts = (t.displayCoords && t.displayCoords.length >= 2) ? t.displayCoords : (t.timedPts || []).map(p => [p.lon, p.lat]);
         if (pts.length >= 2) {
           trailFeatures.push({
             type: 'Feature',
             properties: { cat: t.cat, color: catMeta.color },
-            geometry: { type: 'LineString', coordinates: pts.map(p => [p.lon, p.lat]) }
+            geometry: { type: 'LineString', coordinates: pts }
           });
         }
         if (t.lost_point) {
@@ -8017,6 +8232,11 @@
       const minVal = slider ? Number(slider.min || 0) : 0;
       const maxVal = slider ? Number(slider.max || 1000) : 1000;
 
+      // Auto-fetch today history if user scrubs before background preload completes
+      if (historicalDataset.length === 0 && !hasPreloadedTodayHistory && !isPreloadingTodayHistory) {
+        preloadTodayHistory(true);
+      }
+
       let pct = 1.0;
       let targetTimeMs = Date.now();
 
@@ -8048,8 +8268,19 @@
       if (t2) t2.innerText = timeStr;
       if (d2) d2.innerText = dateStr;
 
-      if (!isLiveMode && typeof applyHistoricalFilterToMap === 'function') {
-        applyHistoricalFilterToMap();
+      if (!isLiveMode) {
+        if (typeof renderHistoricalStaticLayers === 'function') {
+          renderHistoricalStaticLayers();
+        }
+        if (typeof applyHistoricalFilterToMap === 'function') {
+          applyHistoricalFilterToMap();
+        }
+      } else {
+        lastAircraftSyncTs = 0;
+        lastForecastSyncTs = 0;
+        if (typeof updateLiveKinematics === 'function') {
+          updateLiveKinematics(0, performance.now());
+        }
       }
     }
 
@@ -8239,6 +8470,7 @@
       loadPoiData();
       fetchUserSlots();
       initMapEngine();
+      preloadTodayHistory(false);
       checkAndStartStressMode();
     });
 
