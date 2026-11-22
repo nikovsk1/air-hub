@@ -319,11 +319,19 @@ impl TargetTrack {
                     self.cap_trajectory();
                 }
 
+                // Adaptive heading alpha: snap faster (alpha = 0.80) on sharp turns (> 40 deg)
+                // ONLY if movement delta S >= 1.0 km to prevent noise jitter on stationary reports
+                let heading_alpha = if dist_from_last >= 1.0 && h_diff >= 40.0 {
+                    0.80
+                } else {
+                    alpha
+                };
+
                 // Векторне EMA згладжування курсу (sin/cos без розривів через 0/360)
                 let target_rad = calculated_heading.to_radians();
                 let cur_rad = self.smoothed_heading.to_radians();
-                let sin_avg = (1.0 - alpha) * cur_rad.sin() + alpha * target_rad.sin();
-                let cos_avg = (1.0 - alpha) * cur_rad.cos() + alpha * target_rad.cos();
+                let sin_avg = (1.0 - heading_alpha) * cur_rad.sin() + heading_alpha * target_rad.sin();
+                let cos_avg = (1.0 - heading_alpha) * cur_rad.cos() + heading_alpha * target_rad.cos();
                 let mut smoothed = sin_avg.atan2(cos_avg).to_degrees();
                 if smoothed < 0.0 { smoothed += 360.0; }
                 self.smoothed_heading = smoothed;

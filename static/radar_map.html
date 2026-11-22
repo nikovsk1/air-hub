@@ -5942,15 +5942,28 @@
             sim.glideKm = 0;
           }
         } else if (effectiveSpeed > 5) {
-          // Bounded Glide Phase: forward motion strictly capped at maxGlideKm
-          const maxGlideKm = effectiveSpeed >= 300 ? 0.8 : 0.35;
-          if (sim.glideKm < maxGlideKm) {
-            const glideFactor = Math.max(0, 1.0 - sim.glideKm / maxGlideKm) * 0.45;
-            const stepKm = (effectiveSpeed / 3600.0) * dt * glideFactor;
+          // Bounded 18s Glide: 10s full speed + 8s smooth cubic deceleration buffer + type cap
+          const timeSinceMove = (now - (sim.lastServerMoveTs || now)) / 1000.0;
+          let speedMultiplier = 0;
+          if (timeSinceMove < 10.0) {
+            speedMultiplier = 1.0;
+          } else if (timeSinceMove < 18.0) {
+            const progress = (timeSinceMove - 10.0) / 8.0;
+            speedMultiplier = Math.pow(1.0 - progress, 2);
+          } else {
+            speedMultiplier = 0;
+          }
+
+          const isFastCat = (t.cat === 'missile' || t.cat === 'ballistic' || t.cat === 'shahed_jet');
+          const maxGlideKm = isFastCat ? 3.0 : 1.1;
+
+          if (sim.glideKm < maxGlideKm && speedMultiplier > 0) {
+            const stepKm = (effectiveSpeed / 3600.0) * dt * speedMultiplier;
+            const actualStepKm = Math.min(stepKm, maxGlideKm - sim.glideKm);
             const rad = (sim.curHeading * Math.PI) / 180.0;
-            sim.curLat += (stepKm / kmPerLat) * Math.cos(rad);
-            sim.curLon += (stepKm / kmPerLon) * Math.sin(rad);
-            sim.glideKm += stepKm;
+            sim.curLat += (actualStepKm / kmPerLat) * Math.cos(rad);
+            sim.curLon += (actualStepKm / kmPerLon) * Math.sin(rad);
+            sim.glideKm += actualStepKm;
           }
         }
 
@@ -5964,8 +5977,9 @@
           const lastPt = t.lastTrailPt;
           if (lastPt) {
             const dKm = computeDistanceKm(lastPt[1], lastPt[0], headCoord[1], headCoord[0]);
-            // Only bridge micro-glide gaps (5m up to 3.5 km). Discard jumps or detached points!
-            if (dKm > 0.005 && dKm <= 3.5) {
+            // Type-adaptive upper fuse: protects against map-wide teleport lines on ID re-use
+            const maxConnectorKm = (t.cat === 'missile' || t.cat === 'ballistic' || t.cat === 'shahed_jet') ? 15.0 : 8.0;
+            if (dKm > 0.005 && dKm <= maxConnectorKm) {
               connectorFeatures.push({
                 type: 'Feature',
                 geometry: { type: 'LineString', coordinates: [lastPt, headCoord] },
@@ -6252,7 +6266,7 @@
             ? t.raw_heading
             : (t.heading ?? t.heading_deg ?? activeThreats[tid]?.sim?.curHeading ?? 0)
         );
-        if ((!sHeading || isNaN(sHeading) || sHeading === 0) && t.trajectory && t.trajectory.length >= 2) {
+        if (t.trajectory && t.trajectory.length >= 2) {
           let p2 = null, p1 = null;
           for (let pi = t.trajectory.length - 1; pi >= 0; pi--) {
             const pt = t.trajectory[pi];
@@ -6268,10 +6282,15 @@
             }
           }
           if (p1 && p2) {
-            const y = Math.sin((p2.lon - p1.lon) * Math.PI / 180.0) * Math.cos(p2.lat * Math.PI / 180.0);
-            const x = Math.cos(p1.lat * Math.PI / 180.0) * Math.sin(p2.lat * Math.PI / 180.0) -
-                      Math.sin(p1.lat * Math.PI / 180.0) * Math.cos(p2.lat * Math.PI / 180.0) * Math.cos((p2.lon - p1.lon) * Math.PI / 180.0);
-            sHeading = (Math.atan2(y, x) * 180.0 / Math.PI + 360.0) % 360.0;
+            const dStepKm = computeDistanceKm(p1.lat, p1.lon, p2.lat, p2.lon);
+            // If physical trajectory movement is significant (>= 0.5 km) or sensor heading is missing/zero,
+            // calculate authoritative vector to guarantee alignment between aircraft icon and trajectory
+            if (dStepKm >= 0.5 || !sHeading || isNaN(sHeading) || sHeading === 0) {
+              const y = Math.sin((p2.lon - p1.lon) * Math.PI / 180.0) * Math.cos(p2.lat * Math.PI / 180.0);
+              const x = Math.cos(p1.lat * Math.PI / 180.0) * Math.sin(p2.lat * Math.PI / 180.0) -
+                        Math.sin(p1.lat * Math.PI / 180.0) * Math.cos(p2.lat * Math.PI / 180.0) * Math.cos((p2.lon - p1.lon) * Math.PI / 180.0);
+              sHeading = (Math.atan2(y, x) * 180.0 / Math.PI + 360.0) % 360.0;
+            }
           }
         }
         const sSpeed = Number(t.filtered_speed_kmh || t.speed_kmh || t.cruise_speed_kmh || t.speed || 200);
@@ -6280,6 +6299,7 @@
         let curLon = sLon;
         let curHeading = sHeading;
         let glideKm = 0;
+        let lastServerMoveTs = performance.now();
         let hasNewServerTarget = false;
 
         const oldSim = activeThreats[tid]?.sim;
@@ -6296,15 +6316,23 @@
             curLon = sLon;
             curHeading = sHeading;
             glideKm = 0;
+            lastServerMoveTs = performance.now();
             hasNewServerTarget = false;
           } else {
             // Smooth catch-up retention: maintain current smooth visual position
             curLat = oldSim.curLat;
             curLon = oldSim.curLon;
             curHeading = oldSim.curHeading;
-            glideKm = 0;
-            // Check if server coordinate actually updated (> 10 meters)
-            const srvMoved = Math.abs(sLat - (oldSim.srvLat ?? sLat)) > 0.0001 || Math.abs(sLon - (oldSim.srvLon ?? sLon)) > 0.0001;
+
+            // Check if server coordinate actually updated (> 20 meters / 0.02 km)
+            const srvDxKm = (sLon - (oldSim.srvLon ?? sLon)) * kmPerLon;
+            const srvDyKm = (sLat - (oldSim.srvLat ?? sLat)) * kmPerLat;
+            const srvDistKm = Math.hypot(srvDxKm, srvDyKm);
+            const srvMoved = srvDistKm > 0.02;
+
+            // ONLY reset glideKm and update move timestamp when server provides a fresh radar point!
+            glideKm = srvMoved ? 0 : (oldSim.glideKm || 0);
+            lastServerMoveTs = srvMoved ? performance.now() : (oldSim.lastServerMoveTs || performance.now());
             hasNewServerTarget = srvMoved;
           }
         }
@@ -6334,6 +6362,7 @@
             srvHeading: sHeading,
             speedKmh: sSpeed,
             glideKm,
+            lastServerMoveTs,
             hasNewServerTarget
           }
         };
