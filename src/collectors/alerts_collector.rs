@@ -289,6 +289,10 @@ async fn process_ukrainealarm_v3_alerts(
             .unwrap_or("")
             .to_string();
 
+        let canonical_name = detector.get_canonical_name(&reg_id)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| name.clone());
+
         let reg_type = item
             .get("regionType")
             .or_else(|| item.get("type"))
@@ -359,7 +363,7 @@ async fn process_ukrainealarm_v3_alerts(
                 reg_id.clone(),
                 OfficialAlert {
                     id: reg_id,
-                    name,
+                    name: canonical_name,
                     alert: true,
                     alert_type,
                     color,
@@ -412,18 +416,35 @@ pub async fn process_neptun_alerts(
                 .or_else(|| ob_item.get("oblast"))
                 .and_then(|n| n.as_str())
                 .unwrap_or("");
+            let ob_key = ob_item.get("key").and_then(|k| k.as_str()).unwrap_or("");
 
             let level = ob_item.get("level").and_then(|l| l.as_str()).unwrap_or("red");
             let (cat, color, _) = classify_neptun_alert(level);
 
-            let ob_id = detector.get_oblast_id_by_name(ob_name);
+            let ob_id = {
+                let by_name = detector.get_oblast_id_by_name(ob_name);
+                if by_name != "0" && !by_name.is_empty() {
+                    by_name
+                } else {
+                    detector.get_oblast_id_by_name(ob_key)
+                }
+            };
             if !ob_id.is_empty() && ob_id != "0" {
+                let canonical_name = detector.get_canonical_name(&ob_id)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| {
+                        if !ob_name.is_empty() {
+                            ob_name.to_string()
+                        } else {
+                            ob_key.to_string()
+                        }
+                    });
                 active_neptun_ids.insert(ob_id.clone());
                 state.official_alerts.insert(
                     ob_id.clone(),
                     OfficialAlert {
                         id: ob_id,
-                        name: ob_name.to_string(),
+                        name: canonical_name,
                         alert: true,
                         alert_type: cat.to_string(),
                         color: color.to_string(),
@@ -431,14 +452,15 @@ pub async fn process_neptun_alerts(
                         updated_at: now_iso.clone(),
                     },
                 );
-            } else if !ob_name.is_empty() {
+            } else if !ob_name.is_empty() || !ob_key.is_empty() {
+                let unmapped_target = if !ob_name.is_empty() { ob_name } else { ob_key };
                 exchange_mgr.record_unmapped(
                     "region",
-                    ob_name,
+                    unmapped_target,
                     None,
                     "unmapped",
                     "Neptun Alerts",
-                    Some(&format!("Область '{}' не знайдена в словнику детектора", ob_name)),
+                    Some(&format!("Область '{}' (key='{}') не знайдена в словнику детектора", ob_name, ob_key)),
                 );
             }
         }
@@ -448,17 +470,34 @@ pub async fn process_neptun_alerts(
     if let Some(ra_arr) = alerts_data.get("raions").and_then(|r| r.as_array()) {
         for r_item in ra_arr {
             let r_name = r_item.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            let r_key = r_item.get("key").and_then(|k| k.as_str()).unwrap_or("");
             let level = r_item.get("level").and_then(|l| l.as_str()).unwrap_or("yellow");
             let (cat, color, _) = classify_neptun_alert(level);
 
-            let r_id = detector.get_raion_id_by_name(r_name);
+            let r_id = {
+                let by_name = detector.get_raion_id_by_name(r_name);
+                if by_name != "0" && !by_name.is_empty() {
+                    by_name
+                } else {
+                    detector.get_raion_id_by_name(r_key)
+                }
+            };
             if !r_id.is_empty() && r_id != "0" {
+                let canonical_name = detector.get_canonical_name(&r_id)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| {
+                        if !r_name.is_empty() {
+                            r_name.to_string()
+                        } else {
+                            r_key.to_string()
+                        }
+                    });
                 active_neptun_ids.insert(r_id.clone());
                 state.official_alerts.insert(
                     r_id.clone(),
                     OfficialAlert {
                         id: r_id,
-                        name: r_name.to_string(),
+                        name: canonical_name,
                         alert: true,
                         alert_type: cat.to_string(),
                         color: color.to_string(),
@@ -466,14 +505,15 @@ pub async fn process_neptun_alerts(
                         updated_at: now_iso.clone(),
                     },
                 );
-            } else if !r_name.is_empty() {
+            } else if !r_name.is_empty() || !r_key.is_empty() {
+                let unmapped_target = if !r_name.is_empty() { r_name } else { r_key };
                 exchange_mgr.record_unmapped(
                     "region",
-                    r_name,
+                    unmapped_target,
                     None,
                     "unmapped",
                     "Neptun Alerts",
-                    Some(&format!("Район '{}' не знайдений в словнику детектора", r_name)),
+                    Some(&format!("Район '{}' (key='{}') не знайдений в словнику детектора", r_name, r_key)),
                 );
             }
         }

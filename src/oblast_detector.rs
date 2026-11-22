@@ -102,28 +102,121 @@ pub fn get_renamed_raion_aliases() -> &'static [(&'static str, &'static str)] {
         // Звягельський район (Житомирська обл., ID 60, раніше Новоград-Волинський, Постанова ВРУ № 2779-IX)
         ("звягельський район", "60"),
         ("звягельський", "60"),
+        ("звягельський р-н", "60"),
         ("звягель", "60"),
         ("м. звягель", "60"),
+        ("м.звягель", "60"),
         ("новоград-волинський район", "60"),
         ("новоград-волинський", "60"),
+        ("новоград-волинський р-н", "60"),
+        ("новоград волинський", "60"),
+        ("новоград", "60"),
+        ("м. новоград-волинський", "60"),
+        ("novohrad-volynskyi", "60"),
+        ("novohrad", "60"),
+        ("zviahel", "60"),
 
         // Володимирський район (Волинська обл., ID 38, раніше Володимир-Волинський, Постанова ВРУ № 2443-IX)
         ("володимирський район", "38"),
         ("володимирський", "38"),
+        ("володимирський р-н", "38"),
         ("володимир", "38"),
         ("м. володимир", "38"),
         ("володимир-волинський район", "38"),
         ("володимир-волинський", "38"),
+        ("володимир-волинський р-н", "38"),
+        ("володимир волинський", "38"),
+        ("м. володимир-волинський", "38"),
+        ("volodymyr-volynskyi", "38"),
+        ("volodymyr", "38"),
 
         // Шептицький район (Львівська обл., ID 92, раніше Червоноградський, Постанова ВРУ № 3984-IX)
         ("шептицький район", "92"),
         ("шептицький", "92"),
+        ("шептицький р-н", "92"),
         ("шептицького", "92"),
         ("шептицького район", "92"),
+        ("шептицького р-н", "92"),
         ("м. шептицький", "92"),
         ("червоноградський район", "92"),
         ("червоноградський", "92"),
+        ("червоноградський р-н", "92"),
+        ("червоноград", "92"),
+        ("м. червоноград", "92"),
+        ("chervonohrad", "92"),
+        ("sheptytskyi", "92"),
+
+        // Самарівський район (Дніпропетровська обл., ID 43, раніше Новомосковський, Постанова ВРУ № 3984-IX)
+        ("самарівський район", "43"),
+        ("самарівський", "43"),
+        ("самарівський р-н", "43"),
+        ("самарський район", "43"),
+        ("самарський", "43"),
+        ("самарський р-н", "43"),
+        ("самар", "43"),
+        ("м. самар", "43"),
+        ("новомосковський район", "43"),
+        ("новомосковський", "43"),
+        ("новомосковський р-н", "43"),
+        ("новомосковськ", "43"),
+        ("м. новомосковськ", "43"),
+        ("novomoskovsk", "43"),
+        ("samar", "43"),
+
+        // Сіверськодонецький район (Луганська обл., ID 84, раніше Сєвєродонецький, Постанова ВРУ № 3984-IX)
+        ("сіверськодонецький район", "84"),
+        ("сіверськодонецький", "84"),
+        ("сіверськодонецький р-н", "84"),
+        ("сіверськодонецьк", "84"),
+        ("м. сіверськодонецьк", "84"),
+        ("сєвєродонецький район", "84"),
+        ("сєвєродонецький", "84"),
+        ("сєвєродонецький р-н", "84"),
+        ("сєвєродонецьк", "84"),
+        ("м. сєвєродонецьк", "84"),
+        ("северодонецк", "84"),
+        ("severodonetsk", "84"),
+        ("sievierodonetsk", "84"),
+
+        // Берестинський район (Харківська обл., ID 127, раніше Красноградський, Постанова ВРУ № 3984-IX)
+        ("берестинський район", "127"),
+        ("берестинський", "127"),
+        ("берестинський р-н", "127"),
+        ("берестин", "127"),
+        ("м. берестин", "127"),
+        ("красноградський район", "127"),
+        ("красноградський", "127"),
+        ("красноградський р-н", "127"),
+        ("красноград", "127"),
+        ("м. красноград", "127"),
+        ("krasnohrad", "127"),
+        ("berestyn", "127"),
     ]
+}
+
+/// Повертає офіційну канонічну назву для регіону/району/громади за його числовим ID
+pub fn get_canonical_name_for_id(id: &str) -> Option<&'static str> {
+    match id {
+        // Канонічні райони (Rank 2)
+        "60" => Some("Звягельський район"),
+        "38" => Some("Володимирський район"),
+        "92" => Some("Шептицький район"),
+        "43" => Some("Самарівський район"),
+        "84" => Some("Сіверськодонецький район"),
+        "127" => Some("Берестинський район"),
+        // Канонічні міста та територіальні громади (Rank 3)
+        "471" => Some("м. Звягель та Звягельська територіальна громада"),
+        "255" => Some("м. Володимир та Володимирська територіальна громада"),
+        "832" => Some("м. Шептицький та Шептицька територіальна громада"),
+        "327" => Some("м. Самар та Самарська територіальна громада"),
+        "315" => Some("м. Шахтарське та Шахтарська територіальна громада"),
+        "950" => Some("м. Південноукраїнськ та Південноукраїнська територіальна громада"),
+        "971" => Some("м. Південне та Південнівська територіальна громада"),
+        "1324" => Some("Берестинська територіальна громада"),
+        "1476" => Some("м. Багачеве та Багачівська територіальна громада"),
+        "820" => Some("м. Сіверськодонецьк та Сіверськодонецька територіальна громада"),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -224,11 +317,14 @@ impl OblastDetector {
 
                 let rank = props.get("rank").and_then(|r| r.as_u64()).unwrap_or(0);
                 if rank == 2 {
-                    let name = props.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
                     let reg_id = props.get("regionId")
                         .or_else(|| props.get("id"))
                         .map(|v| if let Some(s) = v.as_str() { s.to_string() } else { v.to_string() })
                         .unwrap_or_default();
+                    let raw_name = props.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                    let name = get_canonical_name_for_id(&reg_id)
+                        .map(|s| s.to_string())
+                        .unwrap_or(raw_name.clone());
 
                     let polygons = extract_polygons(feat.get("geometry"));
                     if polygons.is_empty() {
@@ -265,7 +361,13 @@ impl OblastDetector {
                         let rn_lower = name.to_lowercase().trim().to_string();
                         detector.raion_name_to_id.insert(rn_lower.clone(), reg_id.clone());
                         let short = rn_lower.replace("район", "").trim().to_string();
-                        detector.raion_name_to_id.insert(short, reg_id);
+                        detector.raion_name_to_id.insert(short, reg_id.clone());
+                    }
+                    if !raw_name.is_empty() && raw_name != name {
+                        let old_lower = raw_name.to_lowercase().trim().to_string();
+                        detector.raion_name_to_id.insert(old_lower.clone(), reg_id.clone());
+                        let short_old = old_lower.replace("район", "").trim().to_string();
+                        detector.raion_name_to_id.insert(short_old, reg_id);
                     }
                 }
             }
@@ -431,10 +533,14 @@ impl OblastDetector {
                             .map(|o| o.name.clone())
                             .unwrap_or_else(|| "Невідома область".to_string());
 
+                        let raion_name = self.get_canonical_name(&ra.id)
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| ra.name.clone());
+
                         return LocationInfo {
                             oblast: ob_name.clone(),
                             oblast_id: ob_id.clone(),
-                            raion: ra.name.clone(),
+                            raion: raion_name,
                             raion_id: ra.id.clone(),
                             name: ob_name,
                             id: ob_id.clone(),
@@ -529,6 +635,10 @@ impl OblastDetector {
         "0".to_string()
     }
 
+    pub fn get_canonical_name(&self, id: &str) -> Option<&'static str> {
+        get_canonical_name_for_id(id)
+    }
+
     pub fn is_known_region(&self, reg_id: &str) -> bool {
         if reg_id.is_empty() || reg_id == "0" {
             return false;
@@ -537,6 +647,7 @@ impl OblastDetector {
             || self.raions_by_id.contains_key(reg_id)
             || self.region_to_oblast.contains_key(reg_id)
             || self.raion_regions.iter().any(|r| r.id == reg_id)
+            || get_canonical_name_for_id(reg_id).is_some()
     }
 
     pub fn is_known_region_name(&self, name: &str) -> bool {
@@ -643,18 +754,56 @@ mod tests {
         // Звягельський (60) - Постанова ВРУ № 2779-IX (колишній Новоград-Волинський)
         assert_eq!(detector.get_raion_id_by_name("Звягельський район"), "60");
         assert_eq!(detector.get_raion_id_by_name("Звягельський р-н"), "60");
+        assert_eq!(detector.get_raion_id_by_name("Звягель"), "60");
         assert_eq!(detector.get_raion_id_by_name("м. Звягель"), "60");
         assert_eq!(detector.get_raion_id_by_name("Новоград-Волинський район"), "60");
+        assert_eq!(detector.get_raion_id_by_name("новоград-волинський"), "60");
+        assert_eq!(detector.get_raion_id_by_name("новоград"), "60");
 
         // Володимирський (38) - Постанова ВРУ № 2443-IX (колишній Володимир-Волинський)
         assert_eq!(detector.get_raion_id_by_name("Володимирський район"), "38");
         assert_eq!(detector.get_raion_id_by_name("Володимирський р-н"), "38");
+        assert_eq!(detector.get_raion_id_by_name("Володимир"), "38");
+        assert_eq!(detector.get_raion_id_by_name("м. Володимир"), "38");
         assert_eq!(detector.get_raion_id_by_name("Володимир-Волинський район"), "38");
+        assert_eq!(detector.get_raion_id_by_name("володимир-волинський"), "38");
 
         // Шептицький (92) - Постанова ВРУ № 3984-IX (колишній Червоноградський)
         assert_eq!(detector.get_raion_id_by_name("Шептицький район"), "92");
         assert_eq!(detector.get_raion_id_by_name("Шептицький р-н"), "92");
+        assert_eq!(detector.get_raion_id_by_name("шептицький"), "92");
         assert_eq!(detector.get_raion_id_by_name("Червоноградський район"), "92");
+        assert_eq!(detector.get_raion_id_by_name("червоноград"), "92");
+
+        // Самарівський (43) - Постанова ВРУ № 3984-IX (колишній Новомосковський)
+        assert_eq!(detector.get_raion_id_by_name("Самарівський район"), "43");
+        assert_eq!(detector.get_raion_id_by_name("Самарський район"), "43");
+        assert_eq!(detector.get_raion_id_by_name("самар"), "43");
+        assert_eq!(detector.get_raion_id_by_name("Новомосковський район"), "43");
+        assert_eq!(detector.get_raion_id_by_name("новомосковськ"), "43");
+
+        // Сіверськодонецький (84) - Постанова ВРУ № 3984-IX (колишній Сєвєродонецький)
+        assert_eq!(detector.get_raion_id_by_name("Сіверськодонецький район"), "84");
+        assert_eq!(detector.get_raion_id_by_name("сіверськодонецьк"), "84");
+        assert_eq!(detector.get_raion_id_by_name("Сєвєродонецький район"), "84");
+        assert_eq!(detector.get_raion_id_by_name("сєвєродонецьк"), "84");
+
+        // Берестинський (127) - Постанова ВРУ № 3984-IX (колишній Красноградський)
+        assert_eq!(detector.get_raion_id_by_name("Берестинський район"), "127");
+        assert_eq!(detector.get_raion_id_by_name("берестин"), "127");
+        assert_eq!(detector.get_raion_id_by_name("Красноградський район"), "127");
+        assert_eq!(detector.get_raion_id_by_name("красноград"), "127");
+
+        // Канонічні назви
+        assert_eq!(detector.get_canonical_name("60"), Some("Звягельський район"));
+        assert_eq!(detector.get_canonical_name("38"), Some("Володимирський район"));
+        assert_eq!(detector.get_canonical_name("92"), Some("Шептицький район"));
+        assert_eq!(detector.get_canonical_name("43"), Some("Самарівський район"));
+        assert_eq!(detector.get_canonical_name("84"), Some("Сіверськодонецький район"));
+        assert_eq!(detector.get_canonical_name("127"), Some("Берестинський район"));
+        assert_eq!(detector.get_canonical_name("471"), Some("м. Звягель та Звягельська територіальна громада"));
+        assert_eq!(detector.get_canonical_name("255"), Some("м. Володимир та Володимирська територіальна громада"));
+        assert_eq!(detector.get_canonical_name("832"), Some("м. Шептицький та Шептицька територіальна громада"));
 
         // Невідомий район повертає "0"
         assert_eq!(detector.get_raion_id_by_name("Неіснуючий район"), "0");

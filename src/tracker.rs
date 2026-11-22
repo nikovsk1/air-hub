@@ -938,11 +938,15 @@ impl ThreatState {
                 }
             }
 
+            let ra_name = detector.get_canonical_name(ra_id)
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| ra.name.clone());
+
             self.raion_alerts.insert(
                 ra_id.clone(),
                 RaionAlertState {
                     id: ra_id.clone(),
-                    name: ra.name.clone(),
+                    name: ra_name,
                     oblast_id: ra.oblast_id.clone(),
                     alert: has_alert,
                     color,

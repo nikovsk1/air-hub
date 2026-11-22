@@ -1924,7 +1924,10 @@
           'carto-dark': {
             type: 'raster',
             tiles: [
-              'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
+              'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png',
+              'https://b.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png',
+              'https://c.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png',
+              'https://d.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
             ],
             tileSize: 256,
             attribution: '© CartoDB'
@@ -3618,16 +3621,16 @@
       map.addSource('threats-head-connectors-source', {
         type: 'geojson',
         lineMetrics: false,
-        buffer: 0,
-        tolerance: 0.5,
+        buffer: 64,
+        tolerance: 0.25,
         maxzoom: 14,
         data: { type: 'FeatureCollection', features: [] }
       });
       map.addSource('threats-trails-source', {
         type: 'geojson',
         lineMetrics: true,
-        buffer: 0,
-        tolerance: 0.5,
+        buffer: 64,
+        tolerance: 0.25,
         maxzoom: 14,
         data: { type: 'FeatureCollection', features: [] }
       });
@@ -4035,6 +4038,7 @@
         id: 'threats-labels-layer',
         type: 'symbol',
         source: 'threats-aircraft-source',
+        minzoom: 8.5,
         layout: {
           'text-field': ['get', 'label'],
           'text-font': ['Open Sans Regular'],
@@ -5732,7 +5736,7 @@
         // Skip redundant stationary micro-noise (< 50 meters)
         if (d1 < 0.05) continue;
 
-        if (d1 <= 8.8 && d2 <= 8.8 && d1 > 0.05 && d2 > 0.05) {
+        if (d1 <= 15.0 && d2 <= 15.0 && d1 > 0.05 && d2 > 0.05) {
           const midLat = (curr[1] + prev[1]) * 0.5;
           const cosLat = Math.cos((midLat * Math.PI) / 180.0);
           const v1x = (curr[0] - prev[0]) * cosLat, v1y = curr[1] - prev[1];
@@ -5743,10 +5747,10 @@
             const cosA = Math.max(-1, Math.min(1, dot / mag));
             const turnDeg = (Math.acos(cosA) * 180) / Math.PI;
 
-            // Condition 1: Sharp micro-jitter (< 4.5 km legs, > 110 deg)
-            const isMicroJitter = (d1 < 4.5 && d2 < 4.5 && turnDeg > 110);
-            // Condition 2: Grid-cell ping-pong reversal (1-cell jump <= 8.8 km, sharp turn > 140 deg or returning close dDirect < 2.0 km)
-            const isGridPingPong = (turnDeg > 140 || (dDirect < 2.0 && (d1 > 3.0 || d2 > 3.0)));
+            // Condition 1: Sharp micro-jitter (< 5.0 km legs, > 110 deg)
+            const isMicroJitter = (d1 < 5.0 && d2 < 5.0 && turnDeg > 110);
+            // Condition 2: Grid-cell ping-pong reversal (1-2 cell jump <= 15.0 km, sharp reversal turn > 135 deg or returning close dDirect < 2.5 km)
+            const isGridPingPong = (turnDeg > 135 || (dDirect < 2.5 && (d1 > 2.5 || d2 > 2.5)));
 
             if (isMicroJitter || isGridPingPong) {
               // Sensor triangulation artifact - skip from LIVE visual line
@@ -5769,11 +5773,13 @@
       threats.forEach(t => {
         const tid = t.id;
         const status = String(t.status || 'active').toLowerCase();
-        // Downed, eliminated, hit_target, lost, or superseded targets MUST NEVER have trails!
-        if (status === 'lost' || status === 'eliminated' || status === 'hit_target' || status === 'superseded' || status === 'downed') {
+        // Downed, eliminated, hit_target, lost, superseded, or cooldown targets MUST NEVER have trails!
+        if (status === 'lost' || status === 'eliminated' || status === 'hit_target' || status === 'superseded' || status === 'downed' || status === 'cooldown') {
+          if (activeThreats[tid]) delete activeThreats[tid].lastTrailPt;
           return;
         }
         if ((recentLostThreats && recentLostThreats[tid]) || (allReceivedLostThreats && allReceivedLostThreats[tid])) {
+          if (activeThreats[tid]) delete activeThreats[tid].lastTrailPt;
           return;
         }
 
@@ -5817,8 +5823,8 @@
           if (activeThreats[tid]) {
             activeThreats[tid].lastTrailPt = smoothed[smoothed.length - 1];
           }
-        } else if (pts.length === 1 && activeThreats[tid]) {
-          activeThreats[tid].lastTrailPt = pts[0];
+        } else if (activeThreats[tid]) {
+          delete activeThreats[tid].lastTrailPt;
         }
       });
 
@@ -5871,12 +5877,14 @@
         const sim = t.sim;
         if (!sim) continue;
 
-        // Downed, eliminated, hit_target, lost, or superseded targets MUST NEVER be displayed!
+        // Downed, eliminated, hit_target, lost, superseded, or cooldown targets MUST NEVER be displayed!
         const status = String(t.status || 'active').toLowerCase();
-        if (status === 'lost' || status === 'eliminated' || status === 'hit_target' || status === 'superseded' || status === 'downed') {
+        if (status === 'lost' || status === 'eliminated' || status === 'hit_target' || status === 'superseded' || status === 'downed' || status === 'cooldown') {
+          if (activeThreats[tid]) delete activeThreats[tid].lastTrailPt;
           continue;
         }
         if ((recentLostThreats && recentLostThreats[tid]) || (allReceivedLostThreats && allReceivedLostThreats[tid])) {
+          if (activeThreats[tid]) delete activeThreats[tid].lastTrailPt;
           continue;
         }
 
@@ -5953,17 +5961,21 @@
         // Throttled Aircraft Feature Generation (30Hz desktop / 15-20Hz mobile)
         if (shouldSyncAircraft && isCatVisible) {
           // Zero Gap Head Connector: attaches last trail point directly to aircraft head
-          const lastPt = t.lastTrailPt || headCoord;
-          if (lastPt && (Math.abs(lastPt[0] - headCoord[0]) > 0.00005 || Math.abs(lastPt[1] - headCoord[1]) > 0.00005)) {
-            connectorFeatures.push({
-              type: 'Feature',
-              geometry: { type: 'LineString', coordinates: [lastPt, headCoord] },
-              properties: {
-                id: tid,
-                cat: t.cat,
-                color: catMeta.color
-              }
-            });
+          const lastPt = t.lastTrailPt;
+          if (lastPt) {
+            const dKm = computeDistanceKm(lastPt[1], lastPt[0], headCoord[1], headCoord[0]);
+            // Only bridge micro-glide gaps (5m up to 3.5 km). Discard jumps or detached points!
+            if (dKm > 0.005 && dKm <= 3.5) {
+              connectorFeatures.push({
+                type: 'Feature',
+                geometry: { type: 'LineString', coordinates: [lastPt, headCoord] },
+                properties: {
+                  id: tid,
+                  cat: t.cat,
+                  color: catMeta.color
+                }
+              });
+            }
           }
 
           // Tactical 15-minute bead chain forecast corridor (1-15 min dotted circles with 3-phase decaying opacity)
@@ -6466,6 +6478,15 @@
       lostList.forEach(l => {
         if (l && l.id) {
           allReceivedLostThreats[l.id] = l;
+          if (activeThreats[l.id]) {
+            delete activeThreats[l.id].lastTrailPt;
+            delete activeThreats[l.id];
+          }
+          if (threat3DMeshes[l.id]) {
+            if (threeScene) threeScene.remove(threat3DMeshes[l.id]);
+            disposeThreeGroup(threat3DMeshes[l.id]);
+            delete threat3DMeshes[l.id];
+          }
         }
       });
       syncLostThreatsToSource();
@@ -7288,7 +7309,15 @@
       );
     }
 
-    let lastAppliedCartoToken = null;
+    // Global handler to catch and cleanly swallow benign fetch/MapLibre AbortErrors on basemap or tile changes
+    window.addEventListener('unhandledrejection', function(event) {
+      const reason = event.reason;
+      if (reason && (reason.name === 'AbortError' || (typeof reason.message === 'string' && (reason.message.includes('aborted') || reason.message.includes('The user aborted a request'))))) {
+        event.preventDefault();
+      }
+    });
+
+    let lastAppliedCartoToken = '';
     function applyCartoTilesWithToken(token) {
       if (!isMapLoaded || !map || !map.getSource('carto-dark')) return;
       const clean = (token || '').trim();
@@ -7751,6 +7780,9 @@
         let displayCoords = baseCoords;
         if (baseCoords.length >= 3 && typeof despikeVisualTrail === 'function') {
           displayCoords = despikeVisualTrail(baseCoords);
+          if (typeof chaikinSmooth === 'function') {
+            displayCoords = chaikinSmooth(displayCoords, 2);
+          }
         }
 
         return {
@@ -7847,58 +7879,8 @@
     }
 
     function renderHistoricalStaticLayers() {
-      if (!map) return;
-      const visible = historicalDataset.filter(t => enabledAnalyticsThreats.has(t.cat));
-      const trailFeatures = [];
-      const lostFeatures = [];
-
-      visible.forEach(t => {
-        const catMeta = THREAT_CATEGORIES[t.cat] || THREAT_CATEGORIES.unknown;
-        const pts = (t.displayCoords && t.displayCoords.length >= 2) ? t.displayCoords : (t.timedPts || []).map(p => [p.lon, p.lat]);
-        if (pts.length >= 2) {
-          trailFeatures.push({
-            type: 'Feature',
-            properties: { cat: t.cat, color: catMeta.color },
-            geometry: { type: 'LineString', coordinates: pts }
-          });
-        }
-        if (t.lost_point) {
-          recentLostThreats[t.id] = {
-            id: t.id,
-            cat: t.cat,
-            type_ua: t.name,
-            downed: t.downed,
-            status: t.downed ? 'eliminated' : 'lost',
-            outcome: t.downed ? 'eliminated' : 'lost',
-            lat: t.lost_point[0],
-            lon: t.lost_point[1],
-            lost_ts: t.lost_time
-          };
-          lostFeatures.push({
-            type: 'Feature',
-            properties: {
-              tid: t.id,
-              id: t.id,
-              cat: t.cat,
-              type_ua: t.name,
-              downed: t.downed,
-              status: t.downed ? 'eliminated' : 'lost',
-              outcome: t.downed ? 'eliminated' : 'lost',
-              is_lost: true
-            },
-            geometry: { type: 'Point', coordinates: [t.lost_point[1], t.lost_point[0]] }
-          });
-        }
-      });
-
-      if (map.getSource('threats-trails-source')) {
-        map.getSource('threats-trails-source').setData({ type: 'FeatureCollection', features: trailFeatures });
-      }
-      if (map.getSource('threats-lost-source')) {
-        map.getSource('threats-lost-source').setData({ type: 'FeatureCollection', features: lostFeatures });
-      }
-      if (map.getSource('threats-forecast-source')) {
-        map.getSource('threats-forecast-source').setData({ type: 'FeatureCollection', features: [] });
+      if (typeof applyHistoricalFilterToMap === 'function') {
+        applyHistoricalFilterToMap(true);
       }
     }
 
@@ -7951,56 +7933,65 @@
     }
 
     function applyHistoricalFilterToMap(forceSync = false) {
-      if (!map) return;
+      if (!map || isLiveMode) return;
       const visible = historicalDataset.filter(t => enabledAnalyticsThreats.has(t.cat));
-      const currentTs = Number(simTime) || Infinity;
-      const isPlayingOrScrubbed = (currentTs < simMaxTime - 2);
+      const currentTs = Number(simTime) || simMaxTime;
 
       const aircraftFeatures = [];
+      const trailFeatures = [];
+      const lostFeatures = [];
 
       visible.forEach(t => {
-        if (isPlayingOrScrubbed && t.launch_time > currentTs) return;
+        // Target has not launched yet at this time: completely skip
+        if (t.launch_time > currentTs) return;
 
         const catMeta = THREAT_CATEGORIES[t.cat] || THREAT_CATEGORIES.unknown;
-        const pts = t.timedPts || [];
-        if (pts.length === 0) return;
+        const pts = (t.displayCoords && t.displayCoords.length >= 2) ? t.displayCoords : (t.timedPts || []).map(p => [p.lon, p.lat]);
+        const timedPts = t.timedPts || [];
+        if (timedPts.length === 0) return;
 
-        let curLon = pts[0].lon;
-        let curLat = pts[0].lat;
-        let curHeading = pts[0].heading || 0;
+        const isCurrentlyFlying = (currentTs >= t.launch_time && currentTs <= t.lost_time);
+        const hasFinishedFlight = (currentTs > t.lost_time);
 
-        for (let i = 0; i < pts.length; i++) {
-          if (!isPlayingOrScrubbed || pts[i].ts <= currentTs) {
-            curLon = pts[i].lon;
-            curLat = pts[i].lat;
-            if (i > 0) {
-              const prev = pts[i - 1];
-              const dLon = (curLon - prev.lon) * Math.PI / 180;
-              const lat1 = prev.lat * Math.PI / 180;
-              const lat2 = curLat * Math.PI / 180;
+        if (isCurrentlyFlying) {
+          let curLon = timedPts[0].lon;
+          let curLat = timedPts[0].lat;
+          let curHeading = timedPts[0].heading || 0;
+          const passedPts = [];
+
+          for (let i = 0; i < timedPts.length; i++) {
+            if (timedPts[i].ts <= currentTs) {
+              curLon = timedPts[i].lon;
+              curLat = timedPts[i].lat;
+              passedPts.push([curLon, curLat]);
+              if (i > 0) {
+                const prev = timedPts[i - 1];
+                const dLon = (curLon - prev.lon) * Math.PI / 180;
+                const lat1 = prev.lat * Math.PI / 180;
+                const lat2 = curLat * Math.PI / 180;
+                const y = Math.sin(dLon) * Math.cos(lat2);
+                const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+                curHeading = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+              }
+            } else if (i > 0 && timedPts[i - 1].ts < currentTs && timedPts[i].ts > currentTs) {
+              const p0 = timedPts[i - 1];
+              const p1 = timedPts[i];
+              const ratio = Math.max(0, Math.min(1, (currentTs - p0.ts) / Math.max(1, p1.ts - p0.ts)));
+              curLon = p0.lon + (p1.lon - p0.lon) * ratio;
+              curLat = p0.lat + (p1.lat - p0.lat) * ratio;
+              passedPts.push([curLon, curLat]);
+
+              const dLon = (p1.lon - p0.lon) * Math.PI / 180;
+              const lat1 = p0.lat * Math.PI / 180;
+              const lat2 = p1.lat * Math.PI / 180;
               const y = Math.sin(dLon) * Math.cos(lat2);
               const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
               curHeading = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+              break;
             }
-          } else if (i > 0 && pts[i - 1].ts < currentTs && pts[i].ts > currentTs) {
-            const p0 = pts[i - 1];
-            const p1 = pts[i];
-            const ratio = Math.max(0, Math.min(1, (currentTs - p0.ts) / Math.max(1, p1.ts - p0.ts)));
-            curLon = p0.lon + (p1.lon - p0.lon) * ratio;
-            curLat = p0.lat + (p1.lat - p0.lat) * ratio;
-
-            const dLon = (p1.lon - p0.lon) * Math.PI / 180;
-            const lat1 = p0.lat * Math.PI / 180;
-            const lat2 = p1.lat * Math.PI / 180;
-            const y = Math.sin(dLon) * Math.cos(lat2);
-            const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-            curHeading = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-            break;
           }
-        }
 
-        const isStillFlying = !isPlayingOrScrubbed || (currentTs <= t.lost_time);
-        if (isStillFlying) {
+          // Active Aircraft Feature
           aircraftFeatures.push({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [curLon, curLat] },
@@ -8013,11 +8004,60 @@
               label: `${catMeta.name} · ${Math.round(t.speed || 185)} км/г`
             }
           });
+
+          // Active Trail Feature (sliced to current position)
+          if (passedPts.length >= 2) {
+            const clean = (typeof despikeVisualTrail === 'function') ? despikeVisualTrail(passedPts) : passedPts;
+            const smoothed = (clean.length >= 3 && typeof chaikinSmooth === 'function') ? chaikinSmooth(clean, 1) : clean;
+            trailFeatures.push({
+              type: 'Feature',
+              properties: { cat: t.cat, color: catMeta.color },
+              geometry: { type: 'LineString', coordinates: smoothed }
+            });
+          }
+        } else if (hasFinishedFlight) {
+          // Completed flight: full smoothed path
+          if (pts.length >= 2) {
+            trailFeatures.push({
+              type: 'Feature',
+              properties: { cat: t.cat, color: catMeta.color },
+              geometry: { type: 'LineString', coordinates: pts }
+            });
+          }
+          // Loss marker only after loss event
+          if (t.lost_point) {
+            lostFeatures.push({
+              type: 'Feature',
+              properties: {
+                tid: t.id,
+                id: t.id,
+                cat: t.cat,
+                type_ua: t.name,
+                downed: t.downed,
+                status: t.downed ? 'eliminated' : 'lost',
+                outcome: t.downed ? 'eliminated' : 'lost',
+                is_lost: true
+              },
+              geometry: { type: 'Point', coordinates: [t.lost_point[1], t.lost_point[0]] }
+            });
+          }
         }
       });
 
       if (map.getSource('threats-aircraft-source')) {
         map.getSource('threats-aircraft-source').setData({ type: 'FeatureCollection', features: aircraftFeatures });
+      }
+      if (map.getSource('threats-trails-source')) {
+        map.getSource('threats-trails-source').setData({ type: 'FeatureCollection', features: trailFeatures });
+      }
+      if (map.getSource('threats-lost-source')) {
+        map.getSource('threats-lost-source').setData({ type: 'FeatureCollection', features: lostFeatures });
+      }
+      if (map.getSource('threats-forecast-source')) {
+        map.getSource('threats-forecast-source').setData({ type: 'FeatureCollection', features: [] });
+      }
+      if (map.getSource('threats-head-connectors-source')) {
+        map.getSource('threats-head-connectors-source').setData({ type: 'FeatureCollection', features: [] });
       }
     }
 
@@ -8245,15 +8285,22 @@
         if (minVal > 1000000) {
           simTime = num;
           targetTimeMs = num * 1000;
-          isLiveMode = (num >= maxVal - 5);
+          if (num >= maxVal - 5) {
+            activateLiveMode();
+            return;
+          }
         } else {
-          isLiveMode = (pct >= 0.99);
           targetTimeMs = Date.now() - (1.0 - pct) * 86400000;
+          if (pct >= 0.99) {
+            activateLiveMode();
+            return;
+          }
         }
       }
 
+      isLiveMode = false;
       const btn = document.getElementById('btnLivePill');
-      if (btn) btn.classList.toggle('active', isLiveMode);
+      if (btn) btn.classList.remove('active');
 
       const scrubDate = new Date(targetTimeMs);
       const timeStr = scrubDate.toTimeString().split(' ')[0];
@@ -8268,29 +8315,32 @@
       if (t2) t2.innerText = timeStr;
       if (d2) d2.innerText = dateStr;
 
-      if (!isLiveMode) {
-        if (typeof renderHistoricalStaticLayers === 'function') {
-          renderHistoricalStaticLayers();
-        }
-        if (typeof applyHistoricalFilterToMap === 'function') {
-          applyHistoricalFilterToMap();
-        }
-      } else {
-        lastAircraftSyncTs = 0;
-        lastForecastSyncTs = 0;
-        if (typeof updateLiveKinematics === 'function') {
-          updateLiveKinematics(0, performance.now());
-        }
+      if (typeof applyHistoricalFilterToMap === 'function') {
+        applyHistoricalFilterToMap(true);
       }
     }
 
     function activateLiveMode() {
       isLiveMode = true;
+      isReplayPlaying = false;
+      const playBtn = document.getElementById('btnPlayPause');
+      const replayBtn = document.getElementById('btnReplayPlay');
+      if (playBtn) playBtn.innerText = '▶';
+      if (replayBtn) replayBtn.innerText = '▶';
+
       const btn = document.getElementById('btnLivePill');
       if (btn) btn.classList.add('active');
+
       const slider = document.getElementById('timeSlider');
       if (slider) slider.value = slider.max || 1000;
+
+      // Resync live state and layers cleanly
       lastAircraftSyncTs = 0;
+      lastForecastSyncTs = 0;
+      if (window._cachedLatestIncomingThreats) {
+        syncThreatTrailsToSource(window._cachedLatestIncomingThreats);
+      }
+      syncLostThreatsToSource();
       if (typeof updateLiveKinematics === 'function') {
         updateLiveKinematics(0, performance.now());
       }
@@ -8340,13 +8390,10 @@
         simTime += deltaSec * replaySpeed * 60;
       }
 
-      if (simTime >= simMaxTime) {
+      if (simTime >= simMaxTime - 5) {
         simTime = simMaxTime;
-        isReplayPlaying = false;
-        const playBtn = document.getElementById('btnPlayPause');
-        const replayBtn = document.getElementById('btnReplayPlay');
-        if (playBtn) playBtn.innerText = '▶';
-        if (replayBtn) replayBtn.innerText = '▶';
+        activateLiveMode();
+        return;
       }
 
       const slider = document.getElementById('timeSlider');
