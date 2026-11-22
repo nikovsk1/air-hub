@@ -67,6 +67,7 @@ fn check_admin(headers: &HeaderMap, query: &AdminQuery, addr: Option<SocketAddr>
 pub fn admin_routes() -> Router<AppState> {
     Router::new()
         .route("/admin", get(handle_admin_ui))
+        .route("/api/v1/admin/health", get(handle_admin_health))
         .route("/api/v1/admin/verify", get(handle_verify).post(handle_verify))
         .route("/api/v1/admin/keys", get(handle_list_keys).post(handle_create_key))
         .route("/api/v1/admin/keys/:key", put(handle_update_key).delete(handle_delete_key))
@@ -118,6 +119,79 @@ async fn handle_admin_ui(
         content,
     )
         .into_response()
+}
+
+async fn handle_admin_health(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Response {
+    if let Err(status) = check_admin(&headers, &query, Some(addr), &state.config.admin_secret_key) {
+        return status.into_response();
+    }
+
+    let st = state.threat_state.read().await;
+    let obl_count = st.official_alerts.values().filter(|a| a.alert && a.level == "State").count();
+    let raion_count = st.official_alerts.values().filter(|a| a.alert && a.level != "State").count();
+    let total_sirens = st.official_alerts.values().filter(|a| a.alert).count();
+    let active_threats = st.tracker.tracks.len();
+
+    let sk = state.storage.get_service_keys();
+    let ua_configured = sk.ukrainealarm_api_token.as_ref().map(|t| !t.trim().is_empty()).unwrap_or(false)
+        || std::env::var("UKRAINEALARM_API_TOKEN").map(|t| !t.trim().is_empty()).unwrap_or(false)
+        || std::env::var("UKRAINEALARM_API_KEY").map(|t| !t.trim().is_empty()).unwrap_or(false);
+
+    let ex_summary = state.exchange_mgr.get_summary();
+    let unmapped_threats = ex_summary.get("unmapped_threats_count").and_then(|v| v.as_u64()).unwrap_or(0);
+    let recent_unmapped_threats: Vec<_> = ex_summary.get("recent_entries")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter(|e| e.get("category").and_then(|c| c.as_str()) == Some("threat"))
+                .map(|e| json!({
+                    "type_identifier": e.get("raw_value").and_then(|r| r.as_str()).unwrap_or("unknown"),
+                    "raw_code": e.get("raw_code").and_then(|c| c.as_i64()).unwrap_or(0),
+                    "count": 1
+                }))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Json(json!({
+        "status": "online",
+        "app": "Air Alert Radar Hub (Rust)",
+        "version": "1.0.0",
+        "ukrainealarm_configured": ua_configured,
+        "alarms_provider": st.alarms_provider,
+        "targets_provider": st.targets_provider,
+        "upstream_provider": st.upstream_provider,
+        "alarms_status": st.last_alarms_provider_status,
+        "targets_status": st.last_targets_provider_status,
+        "last_alarms_ts": st.last_alerts_update_ts,
+        "last_targets_ts": st.last_targets_update_ts,
+        "sources": {
+            "alarms": st.alarms_provider,
+            "targets": st.targets_provider,
+            "alarms_status": st.last_alarms_provider_status,
+            "targets_status": st.last_targets_provider_status,
+            "last_alarms_ts": st.last_alerts_update_ts,
+            "last_targets_ts": st.last_targets_update_ts
+        },
+        "active_threats": active_threats,
+        "active_threats_count": active_threats,
+        "active_oblasts_count": obl_count,
+        "active_raions_count": raion_count,
+        "official_sirens_count": total_sirens,
+        "total_official_sirens": total_sirens,
+        "recent_lost_2min": st.tracker.recent_lost.len(),
+        "mig31k_active": st.mig_active,
+        "last_update_ts": st.last_update_ts,
+        "update_seq": st.update_seq,
+        "registered_users": state.storage.get_all_users().len(),
+        "unknown_target_types_count": unmapped_threats,
+        "unknown_target_types": recent_unmapped_threats
+    })).into_response()
 }
 
 async fn handle_verify(

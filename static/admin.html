@@ -1012,7 +1012,7 @@
 
     async function updateTelemetry() {
       try {
-        const hRes = await fetch("/api/v1/health");
+        const hRes = await adminFetch("/api/v1/admin/health");
         if (!hRes.ok) return;
         const hData = await hRes.json();
         window.__lastHealthData = hData;

@@ -197,7 +197,9 @@ pub async fn run_mapa_targets_collector(
             let now = now_sec();
 
             // Чи активне UkraineAlarm WS?
-            let ua_alive = ua_enabled && ua_priority < mapa_priority && (now - state_read.last_primary_targets_ts) <= ua_failover_timeout;
+            let ua_status = state_read.last_targets_provider_status.as_str();
+            let ua_authorized = ua_status != "unauthorized" && ua_status != "disabled" && ua_status != "offline";
+            let ua_alive = ua_enabled && ua_priority < mapa_priority && ua_authorized && (now - state_read.last_primary_targets_ts) <= ua_failover_timeout;
             // Чи активне Neptun?
             let neptun_alive = neptun_enabled && neptun_priority < mapa_priority
                 && state_read.targets_provider.contains("Neptun")

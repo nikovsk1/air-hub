@@ -5526,20 +5526,25 @@
       const nowSec = Date.now() / 1000.0;
       let evaluated = 'primary';
 
-      // 1. Upstream status string evaluation
-      if (newRawStatus === 'failover' || newRawStatus.includes('failover') || newRawStatus === 'backup') {
-        evaluated = 'failover';
-      } else if (newRawStatus === 'offline' || newRawStatus.includes('err') || newRawStatus.includes('down') || newRawStatus.includes('disable')) {
-        evaluated = 'offline';
-      } else {
-        // Upstream reported normal. Check silence limit strictly using the 3-miss rule:
-        // Wait for 1 missed packet, then 2 next packets; if 3rd not received (elapsed >= 3 * T), switch to offline.
+      // Inverted Rule: Only explicitly healthy streams are allowed (primary or failover).
+      // Any error, 401, timeout, or failure code from UkraineAlarm / Neptun / MAPA.UA = OFFLINE!
+      if (newRawStatus === 'primary' || newRawStatus === 'live' || newRawStatus === 'ok') {
         const threeMissTimeoutSec = 3.0 * expectedIntervalSec;
         if (hasActiveItems && lastUpdateTs > 0 && (nowSec - lastUpdateTs >= threeMissTimeoutSec)) {
           evaluated = 'offline';
         } else {
           evaluated = 'primary';
         }
+      } else if (newRawStatus === 'failover' || newRawStatus.includes('failover') || newRawStatus === 'backup') {
+        const threeMissTimeoutSec = 3.0 * expectedIntervalSec;
+        if (hasActiveItems && lastUpdateTs > 0 && (nowSec - lastUpdateTs >= threeMissTimeoutSec)) {
+          evaluated = 'offline';
+        } else {
+          evaluated = 'failover';
+        }
+      } else {
+        // Anything that does not provide an active healthy stream = offline
+        evaluated = 'offline';
       }
 
       // Fast recovery: if healthy primary packet received, reset strikes immediately

@@ -433,11 +433,7 @@ pub async fn run_ukrainealarm_collector(
         }
 
         info!("Connected to Centrifugo WebSocket. Awaiting client ID...");
-        {
-            let mut state = threat_state.write().await;
-            state.last_primary_targets_ts = now_sec();
-            state.last_ws_targets_ts = now_sec();
-        }
+        // Do NOT refresh last_primary_targets_ts on raw TCP connection before Diia authentication succeeds.
 
         loop {
             let ua_stream = storage.get_stream("ukrainealarm_ws");
@@ -539,6 +535,8 @@ pub async fn run_ukrainealarm_collector(
                                         {
                                             let mut state = threat_state.write().await;
                                             state.last_targets_provider_status = "unauthorized".to_string();
+                                            state.last_primary_targets_ts = 0.0;
+                                            state.last_ws_targets_ts = 0.0;
                                         }
                                         sleep(Duration::from_secs(30)).await;
                                     }

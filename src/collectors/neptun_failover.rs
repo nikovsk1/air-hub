@@ -470,7 +470,9 @@ async fn run_neptun_targets_arbiter(
             }
 
             let state_read = threat_state.read().await;
-            let ua_alive = ua_enabled && ua_priority < neptun_priority
+            let ua_status = state_read.last_targets_provider_status.as_str();
+            let ua_authorized = ua_status != "unauthorized" && ua_status != "disabled" && ua_status != "offline";
+            let ua_alive = ua_enabled && ua_priority < neptun_priority && ua_authorized
                 && (now - state_read.last_primary_targets_ts) <= failover_timeout_sec;
             let mapa_alive = mapa_enabled && mapa_priority < neptun_priority
                 && state_read.targets_provider.contains("MAPA")
