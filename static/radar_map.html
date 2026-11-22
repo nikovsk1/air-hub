@@ -2010,6 +2010,22 @@
 
     for (const key in THREAT_CATEGORIES) enabledThreatCategories.add(key);
 
+    // Aerodynamic kinematic limits per target category (max glide forward ceiling & connector safety fuse)
+    const CATEGORY_KINEMATIC_LIMITS = {
+      ballistic:  { maxGlideKm: 6.0, maxConnectorKm: 18.0 },
+      missile:    { maxGlideKm: 4.5, maxConnectorKm: 15.0 },
+      aviation:   { maxGlideKm: 4.5, maxConnectorKm: 15.0 },
+      shahed_jet: { maxGlideKm: 3.2, maxConnectorKm: 12.0 },
+      kab:        { maxGlideKm: 2.5, maxConnectorKm: 10.0 },
+      shahed:     { maxGlideKm: 1.8, maxConnectorKm: 8.0 },
+      banderol:   { maxGlideKm: 1.8, maxConnectorKm: 8.0 },
+      unknown:    { maxGlideKm: 1.8, maxConnectorKm: 8.0 },
+      lancet:     { maxGlideKm: 1.2, maxConnectorKm: 6.0 },
+      recon:      { maxGlideKm: 1.0, maxConnectorKm: 5.0 },
+      fpv:        { maxGlideKm: 0.6, maxConnectorKm: 3.0 },
+      artillery:  { maxGlideKm: 0.5, maxConnectorKm: 3.0 }
+    };
+
     // Vector sprite generation for canvas textures (Crisp mapa.ua style silhouettes)
     function createThreatSprite(cat, color) {
       const canvas = document.createElement('canvas');
@@ -5942,20 +5958,27 @@
             sim.glideKm = 0;
           }
         } else if (effectiveSpeed > 5) {
-          // Bounded 18s Glide: 10s full speed + 8s smooth cubic deceleration buffer + type cap
+          // Continuous Aviation Coasting (Cruise Creep):
+          // 0-12s: 100% full speed
+          // 12-30s: smooth deceleration 100% -> 25%
+          // 30-60s: constant gentle cruise creep at 25% (never freezes!)
+          // >60s: fade to zero if radar plot missing for over 1 minute
           const timeSinceMove = (now - (sim.lastServerMoveTs || now)) / 1000.0;
-          let speedMultiplier = 0;
-          if (timeSinceMove < 10.0) {
+          let speedMultiplier = 0.25;
+          if (timeSinceMove < 12.0) {
             speedMultiplier = 1.0;
-          } else if (timeSinceMove < 18.0) {
-            const progress = (timeSinceMove - 10.0) / 8.0;
-            speedMultiplier = Math.pow(1.0 - progress, 2);
+          } else if (timeSinceMove < 30.0) {
+            const p = (timeSinceMove - 12.0) / 18.0;
+            speedMultiplier = 0.25 + 0.75 * Math.pow(1.0 - p, 2);
+          } else if (timeSinceMove < 60.0) {
+            speedMultiplier = 0.25;
           } else {
-            speedMultiplier = 0;
+            const p = Math.min(1.0, (timeSinceMove - 60.0) / 15.0);
+            speedMultiplier = 0.25 * (1.0 - p);
           }
 
-          const isFastCat = (t.cat === 'missile' || t.cat === 'ballistic' || t.cat === 'shahed_jet');
-          const maxGlideKm = isFastCat ? 3.0 : 1.1;
+          const limits = CATEGORY_KINEMATIC_LIMITS[t.cat] || CATEGORY_KINEMATIC_LIMITS.unknown;
+          const maxGlideKm = limits.maxGlideKm;
 
           if (sim.glideKm < maxGlideKm && speedMultiplier > 0) {
             const stepKm = (effectiveSpeed / 3600.0) * dt * speedMultiplier;
@@ -5978,7 +6001,8 @@
           if (lastPt) {
             const dKm = computeDistanceKm(lastPt[1], lastPt[0], headCoord[1], headCoord[0]);
             // Type-adaptive upper fuse: protects against map-wide teleport lines on ID re-use
-            const maxConnectorKm = (t.cat === 'missile' || t.cat === 'ballistic' || t.cat === 'shahed_jet') ? 15.0 : 8.0;
+            const limits = CATEGORY_KINEMATIC_LIMITS[t.cat] || CATEGORY_KINEMATIC_LIMITS.unknown;
+            const maxConnectorKm = limits.maxConnectorKm;
             if (dKm > 0.005 && dKm <= maxConnectorKm) {
               connectorFeatures.push({
                 type: 'Feature',
