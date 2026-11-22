@@ -349,13 +349,19 @@ impl TargetTrack {
 
         if let (Some(rt), Some(rc)) = (raw_type, raw_code) {
             let (cat, meta) = classify_target(rt, rc);
-            self.category = cat.to_string();
-            self.type_ua = meta.name_ua.to_string();
-            self.type_en = meta.name_en.to_string();
-            self.ha_icon = meta.ha_icon.to_string();
-            self.esp_code = meta.esp_code;
-            self.color_hex = meta.color_hex.to_string();
-            self.is_drone = meta.is_drone;
+            // Оновлюємо тип, опис та іконку цілі, якщо категорія змінилась або уточнилась
+            // Захист: відома ідентифікована ціль не скидається в "unknown", якщо прийшла порожня/загальна засічка
+            if cat != "unknown" || self.category == "unknown" {
+                self.category = cat.to_string();
+                self.type_ua = meta.name_ua.to_string();
+                self.type_en = meta.name_en.to_string();
+                self.ha_icon = meta.ha_icon.to_string();
+                self.esp_code = meta.esp_code;
+                self.color_hex = meta.color_hex.to_string();
+                self.is_drone = meta.is_drone;
+                self.raw_type = rt.to_string();
+                self.raw_code = rc;
+            }
         }
     }
 
@@ -1083,6 +1089,81 @@ mod tests {
         // Кінематичний alpha-beta фільтр плавно згладжує прискорення: швидкість зростає у напрямку 220, не перевищуючи max
         assert!(track.speed_kmh > 175.0 && track.speed_kmh <= 220.0);
         assert!(track.filtered_speed_kmh > 175.0 && track.filtered_speed_kmh <= 220.0);
+    }
+
+    #[test]
+    fn test_target_reclassification_and_anti_downgrade() {
+        let mut track = TargetTrack::new(
+            "reclass_test_1".to_string(),
+            "unknown".to_string(),
+            0,
+            50.0,
+            30.0,
+            90.0,
+            0.0,
+            "Київська".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+        );
+
+        assert_eq!(track.category, "unknown");
+        assert_eq!(track.type_ua, "Неідентифікована ціль");
+
+        // 1. Уточнення джерелом: ціль розпізнана як поршневий Шахед
+        track.update(
+            50.01,
+            30.02,
+            90.0,
+            185.0,
+            "Київська".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+            Some("Шахед-136"),
+            Some(1),
+        );
+
+        assert_eq!(track.category, "shahed");
+        assert_eq!(track.type_ua, "Шахед");
+        assert_eq!(track.color_hex, "#FACC15");
+        assert_eq!(track.esp_code, 1);
+        assert_eq!(track.ha_icon, "mdi:navigation-variant");
+
+        // 2. Перекваліфікація (виявлено реактивний двигун -> Реактивний шахед)
+        track.update(
+            50.02,
+            30.05,
+            90.0,
+            450.0,
+            "Київська".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+            Some("Реакт.уд.дрон"),
+            Some(8),
+        );
+
+        assert_eq!(track.category, "shahed_jet");
+        assert_eq!(track.type_ua, "Реактивний шахед");
+        assert_eq!(track.color_hex, "#00E5FF");
+        assert_eq!(track.esp_code, 2);
+        assert_eq!(track.ha_icon, "mdi:rocket-outline");
+
+        // 3. Захист від деградації: наступний пакет прийшов з порожньою назвою/кодом 0
+        track.update(
+            50.03,
+            30.08,
+            90.0,
+            450.0,
+            "Київська".to_string(),
+            "10".to_string(),
+            "101".to_string(),
+            Some("Ціль"),
+            Some(0),
+        );
+
+        // Ціль зберігає вже підтверджений статус "shahed_jet", не скидаючись в "unknown"
+        assert_eq!(track.category, "shahed_jet");
+        assert_eq!(track.type_ua, "Реактивний шахед");
+        assert_eq!(track.color_hex, "#00E5FF");
     }
 
     #[test]

@@ -405,6 +405,69 @@
       display: flex;
     }
 
+    /* Connection & Provider Update Statuses (Top of Radar tab) */
+    .radar-status-section {
+      padding: 0 0 4px 0;
+    }
+    .radar-status-card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 9px 12px;
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(56, 189, 248, 0.18);
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(8px);
+    }
+    .radar-status-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .radar-status-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #94A3B8;
+      letter-spacing: 0.15px;
+      white-space: nowrap;
+    }
+    .radar-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2.5px 8px;
+      border-radius: 5px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.25px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .radar-status-badge .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 6px currentColor;
+    }
+    .radar-status-badge.status-primary {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #10B981;
+    }
+    .radar-status-badge.status-failover {
+      background: rgba(245, 158, 11, 0.18);
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      color: #F59E0B;
+    }
+    .radar-status-badge.status-offline {
+      background: rgba(239, 68, 68, 0.18);
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      color: #EF4444;
+    }
+
     /* Section Cards inside Sidebar */
     .panel-section {
       background: var(--bg-card);
@@ -719,26 +782,66 @@
       background: rgba(255, 255, 255, 0.15);
     }
 
+    .playback-speed-select,
     .speed-select {
       height: 26px;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid var(--border-subtle);
+      min-width: 58px;
+      background-color: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.35);
       border-radius: 6px;
-      padding: 0 6px;
-      color: var(--text-main);
-      font-size: 10.5px;
+      padding: 0 22px 0 8px;
+      color: #38BDF8;
+      font-family: inherit;
+      font-size: 11px;
       font-weight: 700;
       cursor: pointer;
       outline: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2338BDF8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 6px center;
+      background-size: 10px;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    }
+    .playback-speed-select:hover,
+    .speed-select:hover,
+    .playback-speed-select:focus,
+    .speed-select:focus {
+      border-color: #38BDF8;
+      color: #FFFFFF;
+      background-color: rgba(15, 23, 42, 0.95);
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+    }
+    .playback-speed-select option,
+    .speed-select option {
+      background: #0B0E14;
+      color: #F1F5F9;
+      font-weight: 600;
+      padding: 4px 8px;
     }
 
+    .timeline-scrubber-wrap,
     .scrubber-container {
       flex: 1;
       display: flex;
-      flex-direction: column;
+      align-items: center;
       justify-content: center;
-      height: 100%;
+      height: 26px;
       position: relative;
+      min-width: 60px;
+      user-select: none;
+    }
+    .timeline-density-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 26px;
+      pointer-events: none;
+      z-index: 1;
     }
     .volume-canvas {
       position: absolute;
@@ -749,16 +852,59 @@
       pointer-events: none;
       opacity: 0.6;
     }
+    .timeline-slider,
     .timeline-range {
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 26px;
+      background: transparent !important;
+      border: none !important;
+      outline: none !important;
+      margin: 0;
+      padding: 0;
       position: relative;
       z-index: 2;
-      width: 100%;
-      height: 4px;
-      accent-color: #60A5FA;
-      background: rgba(255, 255, 255, 0.15);
-      border-radius: 2px;
-      cursor: pointer;
-      margin-top: 14px;
+      cursor: ew-resize;
+    }
+    .timeline-slider::-webkit-slider-runnable-track,
+    .timeline-range::-webkit-slider-runnable-track {
+      -webkit-appearance: none;
+      background: transparent !important;
+      border: none !important;
+      height: 100%;
+    }
+    .timeline-slider::-moz-range-track,
+    .timeline-range::-moz-range-track {
+      background: transparent !important;
+      border: none !important;
+      height: 100%;
+    }
+    .timeline-slider::-moz-range-progress,
+    .timeline-range::-moz-range-progress {
+      background: transparent !important;
+      border: none !important;
+    }
+    .timeline-slider::-webkit-slider-thumb,
+    .timeline-range::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 26px;
+      background: transparent !important;
+      border: none !important;
+      cursor: ew-resize;
+      box-shadow: none !important;
+    }
+    .timeline-slider::-moz-range-thumb,
+    .timeline-range::-moz-range-thumb {
+      width: 18px;
+      height: 26px;
+      background: transparent !important;
+      border: none !important;
+      cursor: ew-resize;
+      box-shadow: none !important;
     }
 
     .timestamp-box {
@@ -987,7 +1133,25 @@
         right: 6px;
         height: 38px;
         padding: 0 6px;
-        gap: 6px;
+        gap: 5px;
+      }
+      .bottom-timeline-bar .live-pill-btn {
+        padding: 0 8px;
+        font-size: 10px;
+        height: 26px;
+      }
+      .bottom-timeline-bar .playback-speed-select {
+        min-width: 48px;
+        padding: 0 18px 0 6px;
+        font-size: 10px;
+        height: 26px;
+      }
+      .bottom-timeline-bar .timeline-scrubber-wrap {
+        min-width: 40px;
+      }
+      .bottom-timeline-bar .timeline-clock-box {
+        min-width: 56px;
+        font-size: 10px;
       }
       .nav-cluster {
         bottom: calc(52px + env(safe-area-inset-bottom, 0px));
@@ -1266,11 +1430,6 @@
       </div>
     </div>
 
-    <!-- Connection Status Pill -->
-    <div class="hud-pill" id="liveStatusPill" style="font-weight:700; font-family:monospace; font-size:10.5px; display:inline-flex; align-items:center; gap:5px; border-color:rgba(16,185,129,0.4); cursor:default;" title="Статус з'єднання">
-      <span class="dot-indicator" id="liveStatusDot" style="background:#10B981; width:7px; height:7px; border-radius:50%; box-shadow:0 0 6px #10B981;"></span>
-      <span id="liveStatusText" style="color:#10B981;">● LIVE</span>
-    </div>
   </header>
 
 
@@ -1288,6 +1447,26 @@
 
     <!-- TAB 1: RADAR -->
     <div class="sidebar-content-pane active" id="paneRadar">
+      <!-- Connection & Provider Update Statuses -->
+      <section class="radar-status-section" id="radarStatusSection">
+        <div class="radar-status-card">
+          <div class="radar-status-item" id="statusRowTargets">
+            <span class="radar-status-label">Статус оновлення цілей</span>
+            <div class="radar-status-badge status-primary" id="statusBadgeTargets">
+              <span class="status-dot"></span>
+              <span class="status-text" id="statusTextTargets">Основний</span>
+            </div>
+          </div>
+          <div class="radar-status-item" id="statusRowAlarms">
+            <span class="radar-status-label">Статус оновлення тривог</span>
+            <div class="radar-status-badge status-primary" id="statusBadgeAlarms">
+              <span class="status-dot"></span>
+              <span class="status-text" id="statusTextAlarms">Основний</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Active Threats List -->
       <section class="panel-section">
         <div class="section-title-row">
@@ -1676,10 +1855,10 @@
       <option value="10">10x</option>
     </select>
 
-    <div class="timeline-scrubber-wrap" id="timelineScrubberWrap" style="flex:1; display:flex; flex-direction:column; justify-content:center; position:relative;">
-      <canvas class="timeline-density-canvas" id="timelineDensityCanvas" style="position:absolute; top:2px; left:0; width:100%; height:16px; pointer-events:none; opacity:0.85;"></canvas>
+    <div class="timeline-scrubber-wrap" id="timelineScrubberWrap">
+      <canvas class="timeline-density-canvas" id="timelineDensityCanvas"></canvas>
       <canvas class="volume-canvas" id="timelineVolumeCanvas" style="display:none;"></canvas>
-      <input type="range" class="timeline-slider" id="timeSlider" min="0" max="1000" value="1000" oninput="scrubTimeline(this.value)" style="width:100%; position:relative; z-index:2; cursor:pointer;">
+      <input type="range" class="timeline-slider" id="timeSlider" min="0" max="1000" value="1000" oninput="scrubTimeline(this.value)">
       <input type="range" id="timelineScrubber" min="0" max="1000" value="1000" style="display:none;">
     </div>
 
@@ -3864,9 +4043,9 @@
         filter: ['==', '$type', 'Point'],
         paint: {
           'circle-color': ['get', 'color'],
-          'circle-radius': ['coalesce', ['get', 'radius'], 3.0],
+          'circle-radius': ['coalesce', ['get', 'radius'], 2.0],
           'circle-opacity': ['coalesce', ['get', 'opacity'], 0.85],
-          'circle-stroke-width': ['coalesce', ['get', 'stroke_width'], 1.0],
+          'circle-stroke-width': ['coalesce', ['get', 'stroke_width'], 0.7],
           'circle-stroke-color': '#0B132B',
           'circle-stroke-opacity': ['coalesce', ['get', 'stroke_opacity'], 0.7]
         }
@@ -4992,7 +5171,11 @@
           threeRenderer.state.reset();
           threeRenderer.render(threeScene, threeCamera);
           if (is3DModeActive || activeExplosions.length > 0 || (map && map.getPitch() > 0)) {
-            map.triggerRepaint();
+            const now3d = performance.now();
+            if (!window._last3DRepaintTs || (now3d - window._last3DRepaintTs >= 32.0)) {
+              window._last3DRepaintTs = now3d;
+              map.triggerRepaint();
+            }
           }
         }
       };
@@ -5312,25 +5495,110 @@
       closeTargetInspector();
     }
 
-    function updateLiveStatus(status, source, latencySec) {
-      const dot = document.getElementById('liveStatusDot');
-      const text = document.getElementById('liveStatusText');
-      const pill = document.getElementById('liveStatusPill');
-      if (!dot || !text) return;
+    function setProviderBadge(badgeId, textId, status) {
+      const badge = document.getElementById(badgeId);
+      const text = document.getElementById(textId);
+      if (!badge || !text) return;
 
-      if (status === 'live' || status === 'failover' || status === 'http') {
-        dot.style.background = '#10B981';
-        dot.style.boxShadow = '0 0 6px #10B981';
-        text.style.color = '#10B981';
-        text.textContent = `● LIVE`;
-        if (pill) pill.style.borderColor = 'rgba(16,185,129,0.4)';
+      badge.classList.remove('status-primary', 'status-failover', 'status-offline');
+      if (status === 'primary') {
+        badge.classList.add('status-primary');
+        text.innerText = 'Основний';
+      } else if (status === 'failover') {
+        badge.classList.add('status-failover');
+        text.innerText = 'Резерв';
       } else {
-        dot.style.background = '#EF4444';
-        dot.style.boxShadow = '0 0 6px #EF4444';
-        text.style.color = '#EF4444';
-        text.textContent = `● ОФЛАЙН`;
-        if (pill) pill.style.borderColor = 'rgba(239,68,68,0.4)';
+        badge.classList.add('status-offline');
+        text.innerText = 'Оффлайн';
       }
+    }
+
+    // Sliding-window confirmation for status degradation (Three-strike rule / 3 Missed Packets)
+    // Prevents UI badge flickering / flapping: requires 3 consecutive misses before switching to failover/offline.
+    // Recovery to 'primary' is instant on the first fresh valid packet.
+    const streamStatusTracker = {
+      targets: { currentDisplay: 'primary', candidate: 'primary', strikes: 0 },
+      alarms: { currentDisplay: 'primary', candidate: 'primary', strikes: 0 }
+    };
+
+    function resolveStreamStatusWith3Strike(streamKey, newRawStatus, lastUpdateTs, expectedIntervalSec, hasActiveItems) {
+      const tracker = streamStatusTracker[streamKey];
+      const nowSec = Date.now() / 1000.0;
+      let evaluated = 'primary';
+
+      // 1. Upstream status string evaluation
+      if (newRawStatus === 'failover' || newRawStatus.includes('failover') || newRawStatus === 'backup') {
+        evaluated = 'failover';
+      } else if (newRawStatus === 'offline' || newRawStatus.includes('err') || newRawStatus.includes('down') || newRawStatus.includes('disable')) {
+        evaluated = 'offline';
+      } else {
+        // Upstream reported normal. Check silence limit strictly using the 3-miss rule:
+        // Wait for 1 missed packet, then 2 next packets; if 3rd not received (elapsed >= 3 * T), switch to offline.
+        const threeMissTimeoutSec = 3.0 * expectedIntervalSec;
+        if (hasActiveItems && lastUpdateTs > 0 && (nowSec - lastUpdateTs >= threeMissTimeoutSec)) {
+          evaluated = 'offline';
+        } else {
+          evaluated = 'primary';
+        }
+      }
+
+      // Fast recovery: if healthy primary packet received, reset strikes immediately
+      if (evaluated === 'primary') {
+        tracker.candidate = 'primary';
+        tracker.strikes = 0;
+        tracker.currentDisplay = 'primary';
+        return 'primary';
+      }
+
+      // If status degraded (failover or offline): require 3 consecutive strikes/checks to confirm
+      if (tracker.candidate === evaluated) {
+        tracker.strikes++;
+      } else {
+        tracker.candidate = evaluated;
+        tracker.strikes = 1;
+      }
+
+      // Only switch after 3 consecutive unreceived packets / confirmations
+      if (tracker.strikes >= 3) {
+        tracker.currentDisplay = evaluated;
+      }
+
+      return tracker.currentDisplay;
+    }
+
+    function updateStreamStatuses(snapshot) {
+      const isWsConnected = (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN);
+      // Client-to-Hub silence threshold: 3 missed pings (3 * 15s = 45s)
+      const isRecentMessage = (Date.now() - (typeof lastWsMessageTs !== 'undefined' ? lastWsMessageTs : 0) <= 45000);
+      const isHttpActive = (typeof fallbackPollerInterval !== 'undefined' && fallbackPollerInterval !== null);
+
+      // If client is totally disconnected from backend (3 missed heartbeats)
+      if (!isWsConnected && !isRecentMessage && !isHttpActive) {
+        setProviderBadge('statusBadgeTargets', 'statusTextTargets', 'offline');
+        setProviderBadge('statusBadgeAlarms', 'statusTextAlarms', 'offline');
+        return;
+      }
+
+      const sources = (snapshot && snapshot.sources) ? snapshot.sources : {};
+
+      // 1. Targets Status («Статус оновлення цілей») - Expected cadence ~25s -> 3-miss timeout = 75s
+      const rawTargets = (sources.targets_status || (snapshot && snapshot.targets_status) || 'primary').toLowerCase();
+      const lastTargetsTs = Number(sources.last_targets_ts || (snapshot && snapshot.last_targets_ts) || 0);
+      const hasActiveThreats = (snapshot && snapshot.threats && Object.keys(snapshot.threats).length > 0)
+        || (typeof activeThreats !== 'undefined' && Object.keys(activeThreats).length > 0);
+      const targetsStatus = resolveStreamStatusWith3Strike('targets', rawTargets, lastTargetsTs, 25.0, hasActiveThreats);
+
+      // 2. Alarms Status («Статус оновлення тривог») - Expected cadence ~60s -> 3-miss timeout = 180s (3 min)
+      const rawAlarms = (sources.alarms_status || (snapshot && snapshot.alarms_status) || 'primary').toLowerCase();
+      const lastAlarmsTs = Number(sources.last_alarms_ts || (snapshot && snapshot.last_alarms_ts) || 0);
+      const alarmsStatus = resolveStreamStatusWith3Strike('alarms', rawAlarms, lastAlarmsTs, 60.0, true);
+
+      setProviderBadge('statusBadgeTargets', 'statusTextTargets', targetsStatus);
+      setProviderBadge('statusBadgeAlarms', 'statusTextAlarms', alarmsStatus);
+    }
+
+    function updateLiveStatus(status, source, latencySec) {
+      updateStreamStatuses(window._cachedLatestSnapshot);
     }
 
     function checkAndStartStressMode() {
@@ -5705,14 +5973,42 @@
     // KINEMATICS & ZERO-GAP GEOMETRIC RECKONING ENGINE
     // =========================================================================
     let lastAnimTs = performance.now();
+    let lastFrameTs = performance.now();
     let lastAircraftSyncTs = 0;
     let lastForecastSyncTs = 0;
 
     let isDocumentVisible = !document.hidden;
     document.addEventListener('visibilitychange', () => {
       isDocumentVisible = !document.hidden;
-      if (isDocumentVisible && map) {
-        map.triggerRepaint();
+      if (isDocumentVisible) {
+        lastFrameTs = performance.now();
+        lastAnimTs = performance.now();
+        // Snap all live targets to their authoritative server coordinates upon un-minimizing
+        for (const tid in activeThreats) {
+          const t = activeThreats[tid];
+          if (t && t.sim) {
+            t.sim.curLat = t.sim.srvLat;
+            t.sim.curLon = t.sim.srvLon;
+            t.sim.curHeading = t.sim.srvHeading;
+            t.sim.glideKm = 0;
+            t.sim.hasNewServerTarget = false;
+            t.sim.lastServerMoveTs = performance.now();
+          }
+        }
+        if (window._cachedLatestIncomingThreats && typeof syncThreatTrailsToSource === 'function') {
+          syncThreatTrailsToSource(window._cachedLatestIncomingThreats);
+        }
+        lastAircraftSyncTs = 0;
+        lastForecastSyncTs = 0;
+        if (typeof updateLiveKinematics === 'function') {
+          updateLiveKinematics(0, performance.now());
+        }
+        if (map) {
+          map.triggerRepaint();
+        }
+        if (typeof fetchLiveThreats === 'function') {
+          fetchLiveThreats();
+        }
       }
     });
 
@@ -5851,9 +6147,9 @@
     }
 
     function initLiveKinematicsLoop() {
-      const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768;
-      const minFrameInterval = isMobileDevice ? 32.0 : 16.0;
-      let lastFrameTs = 0;
+      // Unified 30 FPS throttle (33.3ms interval): cuts CPU/GPU usage by 50% on PC & saves phone battery while preserving smooth tactical radar motion
+      const minFrameInterval = 33.3;
+      lastFrameTs = performance.now();
 
       function frame(now) {
         if (document.hidden) {
@@ -5879,9 +6175,7 @@
 
       const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768;
       const targetCount = Object.keys(activeThreats).length;
-      const aircraftSyncInterval = isMobileDevice
-        ? (targetCount > 150 ? 66.0 : 50.0) // 15-20 Hz on mobile
-        : 33.3; // 30 Hz on desktop
+      const aircraftSyncInterval = (isMobileDevice && targetCount > 150) ? 50.0 : 33.3; // 30 Hz unified
 
       const shouldSyncAircraft = (now - lastAircraftSyncTs) >= aircraftSyncInterval;
       const aircraftFeatures = [];
@@ -6033,9 +6327,9 @@
                   cat: t.cat,
                   color: catMeta.color,
                   mins: mins,
-                  radius: isPhase1 ? 3.5 : (isPhase2 ? 2.8 : 2.2),
+                  radius: isPhase1 ? 2.3 : (isPhase2 ? 1.8 : 1.4),
                   opacity: isPhase1 ? 0.95 : (isPhase2 ? 0.55 : 0.22),
-                  stroke_width: isPhase1 ? 1.0 : (isPhase2 ? 0.5 : 0.0),
+                  stroke_width: isPhase1 ? 0.7 : (isPhase2 ? 0.35 : 0.0),
                   stroke_opacity: isPhase1 ? 0.85 : (isPhase2 ? 0.4 : 0.0)
                 }
               });
@@ -6220,6 +6514,7 @@
           dot.style.background = '';
           dot.classList.remove('offline');
         }
+        updateStreamStatuses(window._cachedLatestSnapshot);
 
         // Heartbeat ping every 15s to maintain active TCP connection through NAT/firewalls
         wsPingInterval = setInterval(() => {
@@ -6253,12 +6548,14 @@
 
       ws.onerror = () => {
         startHttpFallbackPoller();
+        updateStreamStatuses(null);
       };
 
       ws.onclose = () => {
         if (wsPingInterval) clearInterval(wsPingInterval);
         if (wsWatchdogInterval) clearInterval(wsWatchdogInterval);
         startHttpFallbackPoller();
+        updateStreamStatuses(null);
 
         const dot = document.getElementById('hudThreatsDot');
         if (dot) {
@@ -6274,6 +6571,7 @@
     function processSnapshot(data) {
       window._cachedLatestSnapshot = data;
       updateActiveAlertsFromSnapshot(data);
+      updateStreamStatuses(data);
       const incoming = data.threats || data.active_threats || [];
       const fresh = {};
       const catCounts = {};
@@ -6334,7 +6632,15 @@
           const dyKm = (sLat - oldSim.curLat) * kmPerLat;
           const distKm = Math.hypot(dxKm, dyKm);
 
-          if (distKm > 25.0) {
+          if (document.hidden) {
+            // Window is minimized / hidden: keep visual marker strictly synchronized with server
+            curLat = sLat;
+            curLon = sLon;
+            curHeading = sHeading;
+            glideKm = 0;
+            lastServerMoveTs = performance.now();
+            hasNewServerTarget = false;
+          } else if (distKm > 25.0) {
             // Teleport or radical reroute: snap immediately
             curLat = sLat;
             curLon = sLon;
@@ -6357,7 +6663,8 @@
             // ONLY reset glideKm and update move timestamp when server provides a fresh radar point!
             glideKm = srvMoved ? 0 : (oldSim.glideKm || 0);
             lastServerMoveTs = srvMoved ? performance.now() : (oldSim.lastServerMoveTs || performance.now());
-            hasNewServerTarget = srvMoved;
+            // Preserve catch-up state if visual marker hasn't caught up to server point yet!
+            hasNewServerTarget = srvMoved || (oldSim.hasNewServerTarget && distKm > 0.05);
           }
         }
 
@@ -8143,13 +8450,36 @@
       if (durEl) durEl.innerText = total > 0 ? `${avgDurationMin} хв` : '—';
     }
 
-    function drawTimelineDensity() {
+    function drawTimelineDensity(progressFrac) {
       const canvas = document.getElementById('timelineDensityCanvas');
       if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const w = Math.floor(rect.width || canvas.parentElement.clientWidth || 320);
+      const h = 26;
+      if (w <= 0) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+      }
       const ctx = canvas.getContext('2d');
-      const w = canvas.width = canvas.parentElement.clientWidth || 320;
-      const h = canvas.height = 18;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
+
+      if (typeof progressFrac !== 'number' || isNaN(progressFrac)) {
+        if (typeof window._currentTimelineProgress === 'number') {
+          progressFrac = window._currentTimelineProgress;
+        } else if (isLiveMode) {
+          progressFrac = 1.0;
+        } else if (simMaxTime > simMinTime && typeof simTime === 'number') {
+          progressFrac = (simTime - simMinTime) / (simMaxTime - simMinTime);
+        } else {
+          progressFrac = 1.0;
+        }
+      }
+      progressFrac = Math.max(0, Math.min(1, progressFrac));
+      window._currentTimelineProgress = progressFrac;
 
       const list = historicalDataset.filter(t => enabledAnalyticsThreats.has(t.cat));
       const points = 40;
@@ -8176,50 +8506,111 @@
           });
           const maxB = Math.max(...rawBuckets, 1);
           for (let i = 0; i <= points; i++) {
-            data[i] = Math.max(0.08, Math.min(0.95, (rawBuckets[i] / maxB) * 0.87 + 0.08));
+            data[i] = Math.max(0.08, Math.min(0.92, (rawBuckets[i] / maxB) * 0.84 + 0.08));
           }
         }
       }
 
-      // Gradient area fill with smooth spline curve
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, 'rgba(56, 189, 248, 0.65)');
-      grad.addColorStop(1, 'rgba(14, 165, 233, 0.05)');
-
-      ctx.beginPath();
-      ctx.moveTo(0, h);
-      for (let i = 0; i <= points; i++) {
-        const x = (i / points) * w;
-        const y = h - (data[i] * (h - 3));
-        if (i === 0) ctx.lineTo(x, y);
-        else {
-          const prevX = ((i - 1) / points) * w;
-          const prevY = h - (data[i - 1] * (h - 3));
-          const cx = (prevX + x) / 2;
-          ctx.quadraticCurveTo(prevX, prevY, cx, (prevY + y) / 2);
+      function traceCurve(isArea) {
+        ctx.beginPath();
+        if (isArea) ctx.moveTo(0, h);
+        for (let i = 0; i <= points; i++) {
+          const x = (i / points) * w;
+          const y = h - (data[i] * (h - 4));
+          if (i === 0) {
+            if (isArea) ctx.lineTo(x, y);
+            else ctx.moveTo(x, y);
+          } else {
+            const prevX = ((i - 1) / points) * w;
+            const prevY = h - (data[i - 1] * (h - 4));
+            const cx = (prevX + x) / 2;
+            ctx.quadraticCurveTo(prevX, prevY, cx, (prevY + y) / 2);
+          }
+        }
+        if (isArea) {
+          ctx.lineTo(w, h);
+          ctx.closePath();
         }
       }
-      ctx.lineTo(w, h);
-      ctx.closePath();
-      ctx.fillStyle = grad;
+
+      const xNeedle = Math.max(0, Math.min(w, w * progressFrac));
+
+      // 1. Played time (0 <= x <= xNeedle) -> 100% full vibrant color
+      if (xNeedle > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, xNeedle, h);
+        ctx.clip();
+
+        // Area gradient fill
+        const vibrantGrad = ctx.createLinearGradient(0, 0, 0, h);
+        vibrantGrad.addColorStop(0, 'rgba(0, 229, 255, 0.70)');
+        vibrantGrad.addColorStop(0.5, 'rgba(14, 165, 233, 0.35)');
+        vibrantGrad.addColorStop(1, 'rgba(14, 165, 233, 0.05)');
+        traceCurve(true);
+        ctx.fillStyle = vibrantGrad;
+        ctx.fill();
+
+        // Glowing crisp top stroke
+        traceCurve(false);
+        ctx.strokeStyle = '#00E5FF';
+        ctx.lineWidth = 1.8;
+        ctx.shadowColor = 'rgba(0, 229, 255, 0.8)';
+        ctx.shadowBlur = 6;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 2. Future / Remaining time (xNeedle < x <= w) -> Semi-transparent / dimmed
+      if (xNeedle < w) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(xNeedle, 0, w - xNeedle, h);
+        ctx.clip();
+
+        // Dimmed area gradient fill
+        const dimGrad = ctx.createLinearGradient(0, 0, 0, h);
+        dimGrad.addColorStop(0, 'rgba(56, 189, 248, 0.16)');
+        dimGrad.addColorStop(1, 'rgba(14, 165, 233, 0.02)');
+        traceCurve(true);
+        ctx.fillStyle = dimGrad;
+        ctx.fill();
+
+        // Dimmed top stroke (no glow)
+        traceCurve(false);
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.28)';
+        ctx.lineWidth = 1.2;
+        ctx.shadowBlur = 0;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 3. Vertical Scrubber Needle Line & Pin Head Locator Dot
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(xNeedle, 0);
+      ctx.lineTo(xNeedle, h);
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1.8;
+      ctx.shadowColor = 'rgba(0, 229, 255, 0.85)';
+      ctx.shadowBlur = 4;
+      ctx.stroke();
+
+      // Locator dot at the top of needle
+      ctx.beginPath();
+      ctx.arc(xNeedle, 3.5, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.shadowColor = '#00E5FF';
+      ctx.shadowBlur = 6;
       ctx.fill();
 
-      // Top crisp waveform line
+      // Outer locator ring
       ctx.beginPath();
-      for (let i = 0; i <= points; i++) {
-        const x = (i / points) * w;
-        const y = h - (data[i] * (h - 3));
-        if (i === 0) ctx.moveTo(x, y);
-        else {
-          const prevX = ((i - 1) / points) * w;
-          const prevY = h - (data[i - 1] * (h - 3));
-          const cx = (prevX + x) / 2;
-          ctx.quadraticCurveTo(prevX, prevY, cx, (prevY + y) / 2);
-        }
-      }
-      ctx.strokeStyle = '#38BDF8';
-      ctx.lineWidth = 1.5;
+      ctx.arc(xNeedle, 3.5, 4.2, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.9)';
+      ctx.lineWidth = 1.0;
       ctx.stroke();
+      ctx.restore();
     }
 
     function renderHourlyChart() {
@@ -8368,6 +8759,9 @@
       if (t2) t2.innerText = timeStr;
       if (d2) d2.innerText = dateStr;
 
+      window._currentTimelineProgress = pct;
+      drawTimelineDensity(pct);
+
       if (typeof applyHistoricalFilterToMap === 'function') {
         applyHistoricalFilterToMap(true);
       }
@@ -8386,6 +8780,9 @@
 
       const slider = document.getElementById('timeSlider');
       if (slider) slider.value = slider.max || 1000;
+
+      window._currentTimelineProgress = 1.0;
+      drawTimelineDensity(1.0);
 
       // Resync live state and layers cleanly
       lastAircraftSyncTs = 0;
@@ -8414,6 +8811,8 @@
           simTime = simMinTime || 0;
           const slider = document.getElementById('timeSlider');
           if (slider) slider.value = simTime;
+          window._currentTimelineProgress = 0.0;
+          drawTimelineDensity(0.0);
         }
       }
       isReplayPlaying = !isReplayPlaying;
@@ -8433,9 +8832,15 @@
     }
 
     let lastHistGeoJsonSync = 0;
+    let lastReplayFrameTs = 0;
 
     function historyPlaybackLoop(now) {
       if (!isReplayPlaying) return;
+      if (now - lastReplayFrameTs < 33.0) {
+        requestAnimationFrame(historyPlaybackLoop);
+        return;
+      }
+      lastReplayFrameTs = now;
       const deltaSec = (now - lastReplayTick) / 1000.0;
       lastReplayTick = now;
 
@@ -8451,6 +8856,10 @@
 
       const slider = document.getElementById('timeSlider');
       if (slider) slider.value = simTime;
+
+      const progress = (simMaxTime > simMinTime) ? Math.max(0, Math.min(1, (simTime - simMinTime) / (simMaxTime - simMinTime))) : 1.0;
+      window._currentTimelineProgress = progress;
+      drawTimelineDensity(progress);
 
       // Update clocks
       const date = new Date(simTime * 1000);
@@ -8526,11 +8935,12 @@
 
     function initTimeSliderTouch() {
       const slider = document.getElementById('timeSlider');
+      const wrap = document.getElementById('timelineScrubberWrap') || slider;
       if (!slider) return;
       const handleTouch = (e) => {
         if (!e.touches || e.touches.length === 0) return;
         const touch = e.touches[0];
-        const rect = slider.getBoundingClientRect();
+        const rect = (wrap || slider).getBoundingClientRect();
         if (rect.width <= 0) return;
         const ratio = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
         const minVal = Number(slider.min || 0);
@@ -8539,8 +8949,19 @@
         slider.value = val;
         scrubTimeline(val);
       };
+      if (wrap && wrap !== slider) {
+        wrap.addEventListener('touchstart', handleTouch, { passive: true });
+        wrap.addEventListener('touchmove', handleTouch, { passive: true });
+      }
       slider.addEventListener('touchstart', handleTouch, { passive: true });
       slider.addEventListener('touchmove', handleTouch, { passive: true });
+      window.addEventListener('resize', () => {
+        drawTimelineDensity();
+      });
+      window.addEventListener('orientationchange', () => {
+        setTimeout(drawTimelineDensity, 100);
+      });
+      drawTimelineDensity(1.0);
     }
 
     // Initialize DOM & Map on Startup
@@ -8572,6 +8993,14 @@
       initMapEngine();
       preloadTodayHistory(false);
       checkAndStartStressMode();
+
+      // 4. Memory-only watchdog for connection & provider update statuses (zero network traffic, 15s interval)
+      if (typeof setInterval !== 'undefined') {
+        setInterval(() => {
+          updateStreamStatuses(window._cachedLatestSnapshot);
+        }, 15000);
+      }
+      updateStreamStatuses(window._cachedLatestSnapshot);
     });
 
     // Close HUD panels on outer click

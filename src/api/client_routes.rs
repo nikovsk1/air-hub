@@ -157,16 +157,11 @@ async fn handle_health(
         "app": "Air Alert Radar Hub (Rust)",
         "version": "1.0.0",
         "ukrainealarm_configured": ua_configured,
-        "upstream_provider": st.upstream_provider,
-        "alarms_provider": st.alarms_provider,
-        "targets_provider": st.targets_provider,
         "alarms_status": st.last_alarms_provider_status,
         "targets_status": st.last_targets_provider_status,
         "last_alarms_ts": st.last_alerts_update_ts,
         "last_targets_ts": st.last_targets_update_ts,
         "sources": {
-            "alarms": st.alarms_provider,
-            "targets": st.targets_provider,
             "alarms_status": st.last_alarms_provider_status,
             "targets_status": st.last_targets_provider_status,
             "last_alarms_ts": st.last_alerts_update_ts,
@@ -1044,10 +1039,7 @@ pub fn build_user_snapshot(
     json!({
         "timestamp": (st.last_update_ts * 1000.0) as i64,
         "owner": user.owner,
-        "upstream_provider": st.upstream_provider,
         "sources": {
-            "alarms": st.alarms_provider,
-            "targets": st.targets_provider,
             "alarms_status": st.last_alarms_provider_status,
             "targets_status": st.last_targets_provider_status,
             "last_alarms_ts": st.last_alerts_update_ts,
