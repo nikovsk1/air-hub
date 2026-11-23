@@ -13,7 +13,6 @@ use tracing::{debug, info, warn};
 
 use crate::canonical_registry::ExchangeLogManager;
 use crate::collectors::alerts_collector::process_neptun_alerts;
-use crate::config::TARGETS_STARTUP_GRACE_PERIOD_SEC;
 use crate::crypto_decoder::RawExtractedTarget;
 use crate::geo_math::calculate_bearing;
 use crate::history::HistoryManager;
@@ -157,6 +156,8 @@ pub fn parse_neptun_threats_list(val: &Value) -> Vec<RawExtractedTarget> {
 async fn run_neptun_ws_dispatcher(
     alerts_buf: Arc<RwLock<NeptunAlertsBuffer>>,
     targets_buf: Arc<RwLock<NeptunTargetsBuffer>>,
+    threat_state: Arc<RwLock<ThreatState>>,
+    storage: Arc<StorageManager>,
 ) {
     let ws_url = "wss://neptun.in.ua/api/v1/stream";
     info!("Neptun Split-Stream Arbiter: initializing WebSocket stream dispatcher ({})", ws_url);
@@ -177,11 +178,31 @@ async fn run_neptun_ws_dispatcher(
         let ws_stream = match connect_async(req).await {
             Ok((stream, _)) => {
                 info!("Neptun Split-Stream Arbiter: successfully connected to wss://neptun.in.ua/api/v1/stream");
+                {
+                    let mut st = threat_state.write().await;
+                    st.report_stream_success("neptun_alerts");
+                    st.report_stream_success("neptun_targets");
+                    let all_streams = storage.get_streams();
+                    st.recompute_all_stream_statuses(&all_streams);
+                }
                 stream
             }
             Err(e) => {
-                debug!("Neptun WS connect failed (REST Fallback active): {}. Reconnecting in 10s...", e);
-                sleep(Duration::from_secs(10)).await;
+                debug!("Neptun WS connect failed (REST Fallback active): {}. Reconnecting with backoff...", e);
+                {
+                    let mut st = threat_state.write().await;
+                    st.report_stream_failure("neptun_alerts", &format!("WS Connect: {}", e));
+                    st.report_stream_failure("neptun_targets", &format!("WS Connect: {}", e));
+                    let all_streams = storage.get_streams();
+                    st.recompute_all_stream_statuses(&all_streams);
+                }
+                let sleep_secs = {
+                    let st = threat_state.read().await;
+                    st.get_stream_runtime_status("neptun_targets")
+                        .map(|s| (s.next_probe_ts - now_sec()).max(5.0) as u64)
+                        .unwrap_or(60)
+                };
+                sleep(Duration::from_secs(sleep_secs)).await;
                 continue;
             }
         };
@@ -304,7 +325,20 @@ async fn run_neptun_ws_dispatcher(
             }
         }
 
-        sleep(Duration::from_secs(5)).await;
+        {
+            let mut st = threat_state.write().await;
+            st.report_stream_failure("neptun_alerts", "З'єднання розірвано");
+            st.report_stream_failure("neptun_targets", "З'єднання розірвано");
+            let all_streams = storage.get_streams();
+            st.recompute_all_stream_statuses(&all_streams);
+        }
+        let sleep_secs = {
+            let st = threat_state.read().await;
+            st.get_stream_runtime_status("neptun_targets")
+                .map(|s| (s.next_probe_ts - now_sec()).max(5.0) as u64)
+                .unwrap_or(60)
+        };
+        sleep(Duration::from_secs(sleep_secs)).await;
     }
 }
 
@@ -318,7 +352,7 @@ async fn run_neptun_alerts_arbiter(
     alerts_buf: Arc<RwLock<NeptunAlertsBuffer>>,
 ) {
     let mut was_active = false;
-    let process_start_ts = now_sec();
+    let _process_start_ts = now_sec();
 
     loop {
         let neptun_alerts_cfg = storage.get_stream("neptun_alerts");
@@ -331,7 +365,7 @@ async fn run_neptun_alerts_arbiter(
         let ua_priority = ua_alerts_cfg.as_ref().map(|s| s.priority).unwrap_or(1);
 
         let poll_interval_sec = neptun_alerts_cfg.as_ref().map(|s| s.poll_interval_sec).unwrap_or(6).max(3);
-        let failover_timeout_sec = neptun_alerts_cfg.as_ref().map(|s| s.failover_timeout_sec).unwrap_or(15.0).max(5.0);
+        let _failover_timeout_sec = neptun_alerts_cfg.as_ref().map(|s| s.failover_timeout_sec).unwrap_or(15.0).max(5.0);
 
         sleep(Duration::from_secs(poll_interval_sec)).await;
 
@@ -346,40 +380,28 @@ async fn run_neptun_alerts_arbiter(
         let is_neptun_primary = !ua_enabled || neptun_priority < ua_priority;
         let now = now_sec();
 
-        let should_run = if is_neptun_primary {
-            true
-        } else {
-            let state_read = threat_state.read().await;
-            let in_cooldown = now < state_read.ua_alerts_cooldown_until;
-            let is_silent = (now - process_start_ts) > TARGETS_STARTUP_GRACE_PERIOD_SEC
-                && (now - state_read.last_alerts_update_ts) > failover_timeout_sec;
-            let service_keys = storage.get_service_keys();
-            let has_token = service_keys.ukrainealarm_api_token.as_ref().map(|t| !t.trim().is_empty()).unwrap_or(false)
-                || std::env::var("UKRAINEALARM_API_TOKEN").is_ok()
-                || std::env::var("UKRAINEALARM_API_KEY").is_ok();
-
-            in_cooldown || is_silent || !has_token
+        let is_active = {
+            let st = threat_state.read().await;
+            st.get_stream_runtime_status("neptun_alerts").map(|s| s.status == "active").unwrap_or(false)
         };
+
+        let should_run = is_active;
 
         if !should_run {
             if was_active {
-                info!("Primary UkraineAlarm alerts stream active. Neptun alerts arbiter in standby.");
+                info!("Neptun alerts arbiter in standby (status is suspended).");
                 was_active = false;
             }
             continue;
         }
 
         if !was_active {
-            if is_neptun_primary {
-                info!("Neptun Alerts configured as PRIMARY stream (Priority #{}). Starting arbiter.", neptun_priority);
-            } else {
-                warn!("UkraineAlarm alerts inactive / cooling down. Activating Neptun Alerts arbiter...");
-            }
+            info!("Neptun Alerts is now ACTIVE stream. Starting alerts arbiter.");
             was_active = true;
         }
 
         let provider_name = if is_neptun_primary { "Neptun Alerts (Primary)" } else { "Neptun (Резервний)" };
-        let status_str = if is_neptun_primary { "primary" } else { "failover" };
+        let status_str = "active";
 
         // 1. Спроба застосувати свіжі тривоги з буфера WebSocket (вік <= 25 секунд)
         let ws_alerts_opt = {
@@ -427,7 +449,7 @@ async fn run_neptun_targets_arbiter(
 ) {
     let mut was_active = false;
     let mut last_logged_count: Option<usize> = None;
-    let process_start_ts = now_sec();
+    let _process_start_ts = now_sec();
 
     loop {
         let neptun_tgt_cfg = storage.get_stream("neptun_targets");
@@ -443,7 +465,7 @@ async fn run_neptun_targets_arbiter(
         let mapa_priority = mapa_cfg.as_ref().map(|s| s.priority).unwrap_or(3);
 
         let poll_interval_sec = neptun_tgt_cfg.as_ref().map(|s| s.poll_interval_sec).unwrap_or(5).max(3);
-        let failover_timeout_sec = neptun_tgt_cfg.as_ref().map(|s| s.failover_timeout_sec).unwrap_or(15.0).max(5.0);
+        let _failover_timeout_sec = neptun_tgt_cfg.as_ref().map(|s| s.failover_timeout_sec).unwrap_or(15.0).max(5.0);
 
         sleep(Duration::from_secs(poll_interval_sec)).await;
 
@@ -459,49 +481,27 @@ async fn run_neptun_targets_arbiter(
             && (!mapa_enabled || neptun_priority < mapa_priority);
         let now = now_sec();
 
-        if !is_neptun_primary {
-            let uptime = now - process_start_ts;
-            if uptime < TARGETS_STARTUP_GRACE_PERIOD_SEC {
-                debug!(
-                    "Neptun failover: startup grace period active ({:.1}s / {:.0}s), awaiting higher-priority targets stream stabilization",
-                    uptime, TARGETS_STARTUP_GRACE_PERIOD_SEC
-                );
-                continue;
-            }
+        let is_active = {
+            let st = threat_state.read().await;
+            st.get_stream_runtime_status("neptun_targets").map(|s| s.status == "active").unwrap_or(false)
+        };
 
-            let state_read = threat_state.read().await;
-            let ua_status = state_read.last_targets_provider_status.as_str();
-            let ua_authorized = ua_status != "unauthorized" && ua_status != "disabled" && ua_status != "offline";
-            let ua_alive = ua_enabled && ua_priority < neptun_priority && ua_authorized
-                && (now - state_read.last_primary_targets_ts) <= failover_timeout_sec;
-            let mapa_alive = mapa_enabled && mapa_priority < neptun_priority
-                && state_read.targets_provider.contains("MAPA")
-                && (now - state_read.last_targets_update_ts) <= failover_timeout_sec;
-            drop(state_read);
-
-            if ua_alive || mapa_alive {
-                if was_active {
-                    info!("Higher priority targets stream active. Neptun targets arbiter in standby.");
-                    was_active = false;
-                    last_logged_count = None;
-                }
-                continue;
+        if !is_active {
+            if was_active {
+                info!("Neptun targets arbiter in standby (status is suspended).");
+                was_active = false;
+                last_logged_count = None;
             }
+            continue;
+        }
 
-            if !was_active {
-                warn!(
-                    "Higher priority target streams silent >{:.0}s. Switching to Neptun pure WebSocket stream...",
-                    failover_timeout_sec
-                );
-                was_active = true;
-            }
-        } else if !was_active {
-            info!("Neptun Targets configured as PRIMARY stream (Priority #{}). Starting direct radar polling.", neptun_priority);
+        if !was_active {
+            info!("Neptun Targets is now ACTIVE stream. Starting direct radar feeding.");
             was_active = true;
         }
 
         let provider_name = if is_neptun_primary { "Neptun (Основний)" } else { "Neptun (Резервний)" };
-        let status_str = if is_neptun_primary { "primary" } else { "failover" };
+        let status_str = "active";
 
         // 1. Спроба взяти цілі з буфера WebSocket (вік <= 25 секунд)
         let (ws_extracted_opt, pending_removals) = {
@@ -616,8 +616,10 @@ pub async fn run_failover_neptun_collector(
     {
         let ab = alerts_buf.clone();
         let tb = targets_buf.clone();
+        let ts = threat_state.clone();
+        let stor = storage.clone();
         tokio::spawn(async move {
-            run_neptun_ws_dispatcher(ab, tb).await;
+            run_neptun_ws_dispatcher(ab, tb, ts, stor).await;
         });
     }
 

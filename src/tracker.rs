@@ -804,6 +804,35 @@ pub struct RaionAlertState {
     pub targets_count: usize,
 }
 
+/// 3-етапний тайм-аут для опитування (пробудження) джерел у стані offline:
+/// 1-й етап: 60 сек (1 хв)
+/// 2-й етап: 120 сек (2 хв)
+/// 3-й етап: 300 сек (5 хв) і далі залишається 300 сек.
+pub fn calculate_offline_backoff_secs(consecutive_failures: u32) -> u64 {
+    match consecutive_failures {
+        0 => 0,
+        1 => 60,
+        2 => 120,
+        _ => 300,
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamRuntimeStatus {
+    pub id: String,
+    pub status: String, // "active" | "suspended" | "offline"
+    #[serde(default)]
+    pub error_reason: Option<String>,
+    #[serde(default)]
+    pub consecutive_failures: u32,
+    #[serde(default)]
+    pub next_probe_ts: f64,
+    #[serde(default)]
+    pub last_success_ts: f64,
+    #[serde(default)]
+    pub last_attempt_ts: f64,
+}
+
 pub struct ThreatState {
     pub tracker: TargetTracker,
     pub official_alerts: HashMap<String, OfficialAlert>,
@@ -824,30 +853,95 @@ pub struct ThreatState {
     pub last_alarms_provider_status: String,
     pub last_targets_provider_status: String,
     pub alert_reasons: Vec<String>,
+    pub stream_runtime_statuses: HashMap<String, StreamRuntimeStatus>,
 }
 
 impl Default for ThreatState {
     fn default() -> Self {
+        let now = now_sec();
+        let mut statuses = HashMap::new();
+        statuses.insert(
+            "ukrainealarm_alerts".to_string(),
+            StreamRuntimeStatus {
+                id: "ukrainealarm_alerts".to_string(),
+                status: "active".to_string(),
+                error_reason: None,
+                consecutive_failures: 0,
+                next_probe_ts: 0.0,
+                last_success_ts: now,
+                last_attempt_ts: now,
+            },
+        );
+        statuses.insert(
+            "neptun_alerts".to_string(),
+            StreamRuntimeStatus {
+                id: "neptun_alerts".to_string(),
+                status: "suspended".to_string(),
+                error_reason: None,
+                consecutive_failures: 0,
+                next_probe_ts: 0.0,
+                last_success_ts: now,
+                last_attempt_ts: now,
+            },
+        );
+        statuses.insert(
+            "ukrainealarm_ws".to_string(),
+            StreamRuntimeStatus {
+                id: "ukrainealarm_ws".to_string(),
+                status: "active".to_string(),
+                error_reason: None,
+                consecutive_failures: 0,
+                next_probe_ts: 0.0,
+                last_success_ts: now,
+                last_attempt_ts: now,
+            },
+        );
+        statuses.insert(
+            "neptun_targets".to_string(),
+            StreamRuntimeStatus {
+                id: "neptun_targets".to_string(),
+                status: "suspended".to_string(),
+                error_reason: None,
+                consecutive_failures: 0,
+                next_probe_ts: 0.0,
+                last_success_ts: now,
+                last_attempt_ts: now,
+            },
+        );
+        statuses.insert(
+            "mapa_targets".to_string(),
+            StreamRuntimeStatus {
+                id: "mapa_targets".to_string(),
+                status: "suspended".to_string(),
+                error_reason: None,
+                consecutive_failures: 0,
+                next_probe_ts: 0.0,
+                last_success_ts: now,
+                last_attempt_ts: now,
+            },
+        );
+
         Self {
             tracker: TargetTracker::default(),
             official_alerts: HashMap::new(),
             oblast_alerts: HashMap::new(),
             raion_alerts: HashMap::new(),
             mig_active: false,
-            last_update_ts: now_sec(),
-            last_targets_update_ts: now_sec(),
-            last_primary_targets_ts: now_sec(),
-            last_ws_targets_ts: now_sec(),
-            last_alerts_update_ts: now_sec(),
+            last_update_ts: now,
+            last_targets_update_ts: now,
+            last_primary_targets_ts: now,
+            last_ws_targets_ts: now,
+            last_alerts_update_ts: now,
             ua_alerts_cooldown_until: 0.0,
             update_seq: 1,
             notifier: None,
             upstream_provider: "Centrifugo (ws.ukrainealarm.com)".to_string(),
             alarms_provider: "UkraineAlarm (API v3)".to_string(),
             targets_provider: "WS UkraineAlarm".to_string(),
-            last_alarms_provider_status: "primary".to_string(),
-            last_targets_provider_status: "primary".to_string(),
+            last_alarms_provider_status: "active".to_string(),
+            last_targets_provider_status: "active".to_string(),
             alert_reasons: Vec::new(),
+            stream_runtime_statuses: statuses,
         }
     }
 }
@@ -859,6 +953,122 @@ impl ThreatState {
         if let Some(ref tx) = self.notifier {
             let _ = tx.send_replace(self.update_seq);
         }
+    }
+
+    pub fn get_stream_runtime_status(&self, id: &str) -> Option<&StreamRuntimeStatus> {
+        self.stream_runtime_statuses.get(id)
+    }
+
+    pub fn report_stream_success(&mut self, stream_id: &str) {
+        let now = now_sec();
+        let entry = self.stream_runtime_statuses.entry(stream_id.to_string()).or_insert_with(|| StreamRuntimeStatus {
+            id: stream_id.to_string(),
+            status: "suspended".to_string(),
+            error_reason: None,
+            consecutive_failures: 0,
+            next_probe_ts: 0.0,
+            last_success_ts: now,
+            last_attempt_ts: now,
+        });
+        entry.error_reason = None;
+        entry.consecutive_failures = 0;
+        entry.next_probe_ts = 0.0;
+        entry.last_success_ts = now;
+        entry.last_attempt_ts = now;
+    }
+
+    pub fn report_stream_failure(&mut self, stream_id: &str, reason: &str) {
+        let now = now_sec();
+        let entry = self.stream_runtime_statuses.entry(stream_id.to_string()).or_insert_with(|| StreamRuntimeStatus {
+            id: stream_id.to_string(),
+            status: "offline".to_string(),
+            error_reason: Some(reason.to_string()),
+            consecutive_failures: 0,
+            next_probe_ts: 0.0,
+            last_success_ts: 0.0,
+            last_attempt_ts: now,
+        });
+        entry.consecutive_failures = entry.consecutive_failures.saturating_add(1);
+        let backoff = calculate_offline_backoff_secs(entry.consecutive_failures);
+        entry.next_probe_ts = now + (backoff as f64);
+        entry.error_reason = Some(reason.to_string());
+        entry.status = "offline".to_string();
+        entry.last_attempt_ts = now;
+    }
+
+    pub fn can_probe_stream(&self, stream_id: &str) -> bool {
+        if let Some(st) = self.stream_runtime_statuses.get(stream_id) {
+            if st.status != "offline" {
+                return true;
+            }
+            let now = now_sec();
+            now >= st.next_probe_ts
+        } else {
+            true
+        }
+    }
+
+    /// Перераховує статуси active / suspended / offline для всіх потоків за їхніми пріоритетами
+    /// Правила:
+    /// - active має рівно 1 потік на кожен тип (alerts / targets)
+    /// - Зміна на active може потік тільки з найвищого справного рівня (1 -> 2 -> 3)
+    /// - Всі інші справні потоки цього типу стають suspended
+    /// - Всі несправні потоки залишаються offline(reason)
+    pub fn recompute_all_stream_statuses(&mut self, configs: &[crate::storage::StreamSourceConfig]) {
+        for stream_type in &["alerts", "targets"] {
+            let mut eligible: Vec<&crate::storage::StreamSourceConfig> = configs
+                .iter()
+                .filter(|s| s.stream_type == *stream_type)
+                .collect();
+            eligible.sort_by_key(|s| s.priority);
+
+            let mut assigned_active = false;
+
+            for cfg in eligible {
+                let entry = self.stream_runtime_statuses.entry(cfg.id.clone()).or_insert_with(|| StreamRuntimeStatus {
+                    id: cfg.id.clone(),
+                    status: if cfg.enabled { "suspended".to_string() } else { "offline".to_string() },
+                    error_reason: if !cfg.enabled { Some("Вимкнено в налаштуваннях".to_string()) } else { None },
+                    consecutive_failures: 0,
+                    next_probe_ts: 0.0,
+                    last_success_ts: 0.0,
+                    last_attempt_ts: 0.0,
+                });
+
+                if !cfg.enabled {
+                    entry.status = "offline".to_string();
+                    entry.error_reason = Some("Вимкнено в налаштуваннях".to_string());
+                    continue;
+                }
+
+                // Якщо потік у стані failure
+                if entry.consecutive_failures > 0 || (entry.status == "offline" && entry.error_reason.is_some()) {
+                    entry.status = "offline".to_string();
+                    continue;
+                }
+
+                // Перший справний потік стає active
+                if !assigned_active {
+                    entry.status = "active".to_string();
+                    entry.error_reason = None;
+                    assigned_active = true;
+                } else {
+                    entry.status = "suspended".to_string();
+                    entry.error_reason = None;
+                }
+            }
+        }
+
+        // Оновлюємо публічні/клієнтські маркери alarms_status та targets_status
+        let has_active_alerts = self.stream_runtime_statuses.values().any(|s| {
+            configs.iter().any(|c| c.id == s.id && c.stream_type == "alerts") && s.status == "active"
+        });
+        self.last_alarms_provider_status = if has_active_alerts { "active".to_string() } else { "offline".to_string() };
+
+        let has_active_targets = self.stream_runtime_statuses.values().any(|s| {
+            configs.iter().any(|c| c.id == s.id && c.stream_type == "targets") && s.status == "active"
+        });
+        self.last_targets_provider_status = if has_active_targets { "active".to_string() } else { "offline".to_string() };
     }
 
     /// Суворий перерахунок тривог: колір визначається сиренами та цілями (Red / Yellow)
@@ -1719,5 +1929,61 @@ mod tests {
         let zap_city = threat_state.raion_alerts.get("564").unwrap();
         assert!(zap_city.alert, "Запоріжжя має успадкувати тривогу від області/району!");
         assert_eq!(zap_city.color, "yellow");
+    }
+
+    #[test]
+    fn test_3_stage_offline_backoff_and_cascade_recompute() {
+        use crate::storage::default_stream_sources;
+
+        // 1. Перевірка 3-етапного бекофу: 1 -> 60s, 2 -> 120s, 3 -> 300s, 4 -> 300s
+        assert_eq!(calculate_offline_backoff_secs(0), 0);
+        assert_eq!(calculate_offline_backoff_secs(1), 60);
+        assert_eq!(calculate_offline_backoff_secs(2), 120);
+        assert_eq!(calculate_offline_backoff_secs(3), 300);
+        assert_eq!(calculate_offline_backoff_secs(4), 300);
+
+        let mut st = ThreatState::default();
+        let configs = default_stream_sources();
+
+        // 2. Початковий стан: primary потоки активні (рівно 1 active на тип)
+        st.recompute_all_stream_statuses(&configs);
+        let s_ua_ws = st.get_stream_runtime_status("ukrainealarm_ws").unwrap();
+        let s_nep_tgt = st.get_stream_runtime_status("neptun_targets").unwrap();
+        let s_mapa_tgt = st.get_stream_runtime_status("mapa_targets").unwrap();
+
+        assert_eq!(s_ua_ws.status, "active");
+        assert_eq!(s_nep_tgt.status, "suspended");
+        assert_eq!(s_mapa_tgt.status, "suspended");
+
+        // 3. Відмова Рівня #1 (UkraineAlarm WS -> 401 Unauthorized)
+        st.report_stream_failure("ukrainealarm_ws", "Сесію Дії вичерпано (HTTP 401)");
+        st.recompute_all_stream_statuses(&configs);
+
+        let s_ua_ws2 = st.get_stream_runtime_status("ukrainealarm_ws").unwrap();
+        let s_nep_tgt2 = st.get_stream_runtime_status("neptun_targets").unwrap();
+        let s_mapa_tgt2 = st.get_stream_runtime_status("mapa_targets").unwrap();
+
+        assert_eq!(s_ua_ws2.status, "offline");
+        assert!(s_ua_ws2.error_reason.as_ref().unwrap().contains("401"));
+        assert_eq!(s_nep_tgt2.status, "active", "Рівень #2 Neptun має стати active!");
+        assert_eq!(s_mapa_tgt2.status, "suspended", "Рівень #3 MAPA має залишатись suspended!");
+
+        // 4. Відмова Рівня #2 (Neptun targets -> disconnect)
+        st.report_stream_failure("neptun_targets", "Помилка підключення до сокету");
+        st.recompute_all_stream_statuses(&configs);
+
+        let s_nep_tgt3 = st.get_stream_runtime_status("neptun_targets").unwrap();
+        let s_mapa_tgt3 = st.get_stream_runtime_status("mapa_targets").unwrap();
+        assert_eq!(s_nep_tgt3.status, "offline");
+        assert_eq!(s_mapa_tgt3.status, "active", "Рівень #3 MAPA має стати active!");
+
+        // 5. Відновлення Рівня #1
+        st.report_stream_success("ukrainealarm_ws");
+        st.recompute_all_stream_statuses(&configs);
+
+        let s_ua_ws4 = st.get_stream_runtime_status("ukrainealarm_ws").unwrap();
+        let s_mapa_tgt4 = st.get_stream_runtime_status("mapa_targets").unwrap();
+        assert_eq!(s_ua_ws4.status, "active", "Рівень #1 знову має стати active!");
+        assert_eq!(s_mapa_tgt4.status, "suspended", "Рівень #3 знову має повернутись у suspended!");
     }
 }

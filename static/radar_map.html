@@ -5501,61 +5501,51 @@
       if (!badge || !text) return;
 
       badge.classList.remove('status-primary', 'status-failover', 'status-offline');
-      if (status === 'primary') {
+      if (status === 'active' || status === 'primary') {
         badge.classList.add('status-primary');
-        text.innerText = 'Основний';
-      } else if (status === 'failover') {
-        badge.classList.add('status-failover');
-        text.innerText = 'Резерв';
+        text.innerText = 'Активний';
       } else {
         badge.classList.add('status-offline');
-        text.innerText = 'Оффлайн';
+        text.innerText = 'Офлайн';
       }
     }
 
     // Sliding-window confirmation for status degradation (Three-strike rule / 3 Missed Packets)
-    // Prevents UI badge flickering / flapping: requires 3 consecutive misses before switching to failover/offline.
-    // Recovery to 'primary' is instant on the first fresh valid packet.
+    // Prevents UI badge flickering / flapping: requires 3 consecutive misses before switching to offline.
+    // Recovery to 'active' is instant on the first fresh valid packet.
     const streamStatusTracker = {
-      targets: { currentDisplay: 'primary', candidate: 'primary', strikes: 0 },
-      alarms: { currentDisplay: 'primary', candidate: 'primary', strikes: 0 }
+      targets: { currentDisplay: 'active', candidate: 'active', strikes: 0 },
+      alarms: { currentDisplay: 'active', candidate: 'active', strikes: 0 }
     };
 
     function resolveStreamStatusWith3Strike(streamKey, newRawStatus, lastUpdateTs, expectedIntervalSec, hasActiveItems) {
       const tracker = streamStatusTracker[streamKey];
       const nowSec = Date.now() / 1000.0;
-      let evaluated = 'primary';
+      let evaluated = 'active';
 
-      // Inverted Rule: Only explicitly healthy streams are allowed (primary or failover).
+      // Rule: Only active streams are online.
       // Any error, 401, timeout, or failure code from UkraineAlarm / Neptun / MAPA.UA = OFFLINE!
-      if (newRawStatus === 'primary' || newRawStatus === 'live' || newRawStatus === 'ok') {
+      if (newRawStatus === 'active' || newRawStatus === 'primary' || newRawStatus === 'live' || newRawStatus === 'ok') {
         const threeMissTimeoutSec = 3.0 * expectedIntervalSec;
         if (hasActiveItems && lastUpdateTs > 0 && (nowSec - lastUpdateTs >= threeMissTimeoutSec)) {
           evaluated = 'offline';
         } else {
-          evaluated = 'primary';
-        }
-      } else if (newRawStatus === 'failover' || newRawStatus.includes('failover') || newRawStatus === 'backup') {
-        const threeMissTimeoutSec = 3.0 * expectedIntervalSec;
-        if (hasActiveItems && lastUpdateTs > 0 && (nowSec - lastUpdateTs >= threeMissTimeoutSec)) {
-          evaluated = 'offline';
-        } else {
-          evaluated = 'failover';
+          evaluated = 'active';
         }
       } else {
         // Anything that does not provide an active healthy stream = offline
         evaluated = 'offline';
       }
 
-      // Fast recovery: if healthy primary packet received, reset strikes immediately
-      if (evaluated === 'primary') {
-        tracker.candidate = 'primary';
+      // Fast recovery: if healthy active packet received, reset strikes immediately
+      if (evaluated === 'active') {
+        tracker.candidate = 'active';
         tracker.strikes = 0;
-        tracker.currentDisplay = 'primary';
-        return 'primary';
+        tracker.currentDisplay = 'active';
+        return 'active';
       }
 
-      // If status degraded (failover or offline): require 3 consecutive strikes/checks to confirm
+      // If status degraded to offline: require 3 consecutive strikes/checks to confirm
       if (tracker.candidate === evaluated) {
         tracker.strikes++;
       } else {
@@ -5587,14 +5577,14 @@
       const sources = (snapshot && snapshot.sources) ? snapshot.sources : {};
 
       // 1. Targets Status («Статус оновлення цілей») - Expected cadence ~25s -> 3-miss timeout = 75s
-      const rawTargets = (sources.targets_status || (snapshot && snapshot.targets_status) || 'primary').toLowerCase();
+      const rawTargets = (sources.targets_status || (snapshot && snapshot.targets_status) || 'active').toLowerCase();
       const lastTargetsTs = Number(sources.last_targets_ts || (snapshot && snapshot.last_targets_ts) || 0);
       const hasActiveThreats = (snapshot && snapshot.threats && Object.keys(snapshot.threats).length > 0)
         || (typeof activeThreats !== 'undefined' && Object.keys(activeThreats).length > 0);
       const targetsStatus = resolveStreamStatusWith3Strike('targets', rawTargets, lastTargetsTs, 25.0, hasActiveThreats);
 
       // 2. Alarms Status («Статус оновлення тривог») - Expected cadence ~60s -> 3-miss timeout = 180s (3 min)
-      const rawAlarms = (sources.alarms_status || (snapshot && snapshot.alarms_status) || 'primary').toLowerCase();
+      const rawAlarms = (sources.alarms_status || (snapshot && snapshot.alarms_status) || 'active').toLowerCase();
       const lastAlarmsTs = Number(sources.last_alarms_ts || (snapshot && snapshot.last_alarms_ts) || 0);
       const alarmsStatus = resolveStreamStatusWith3Strike('alarms', rawAlarms, lastAlarmsTs, 60.0, true);
 

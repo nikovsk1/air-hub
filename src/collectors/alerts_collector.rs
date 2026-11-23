@@ -109,7 +109,11 @@ pub async fn run_alerts_collector(
         // ЯКЩО UKRAINEALARM УВІМКНЕНО
         if ua_enabled {
             if let Some(token) = ua_token {
-                let should_try_ua = now >= ua_cooldown_until;
+                let can_probe = {
+                    let st = threat_state.read().await;
+                    st.can_probe_stream("ukrainealarm_alerts")
+                };
+                let should_try_ua = now >= ua_cooldown_until && can_probe;
 
                 if should_try_ua {
                     // =========================================================================
@@ -142,6 +146,9 @@ pub async fn run_alerts_collector(
                             {
                                 let mut st = threat_state.write().await;
                                 st.ua_alerts_cooldown_until = 0.0;
+                                st.report_stream_success("ukrainealarm_alerts");
+                                let all_streams = storage.get_streams();
+                                st.recompute_all_stream_statuses(&all_streams);
                             }
                             used_primary = true;
 
@@ -188,12 +195,16 @@ pub async fn run_alerts_collector(
                             {
                                 let mut st = threat_state.write().await;
                                 st.ua_alerts_cooldown_until = ua_cooldown_until;
+                                st.report_stream_failure("ukrainealarm_alerts", "HTTP 429 Too Many Requests");
+                                let all_streams = storage.get_streams();
+                                st.recompute_all_stream_statuses(&all_streams);
                             }
                         }
                         Ok(resp) => {
+                            let status_code = resp.status();
                             warn!(
                                 "UkraineAlarm API v3 returned HTTP status: {} (failures={})",
-                                resp.status(),
+                                status_code,
                                 consecutive_ua_failures + 1
                             );
                             consecutive_ua_failures += 1;
@@ -202,6 +213,9 @@ pub async fn run_alerts_collector(
                             {
                                 let mut st = threat_state.write().await;
                                 st.ua_alerts_cooldown_until = ua_cooldown_until;
+                                st.report_stream_failure("ukrainealarm_alerts", &format!("HTTP {}", status_code));
+                                let all_streams = storage.get_streams();
+                                st.recompute_all_stream_statuses(&all_streams);
                             }
                         }
                         Err(e) => {
@@ -216,6 +230,9 @@ pub async fn run_alerts_collector(
                             {
                                 let mut st = threat_state.write().await;
                                 st.ua_alerts_cooldown_until = ua_cooldown_until;
+                                st.report_stream_failure("ukrainealarm_alerts", &format!("Помилка мережі: {}", e));
+                                let all_streams = storage.get_streams();
+                                st.recompute_all_stream_statuses(&all_streams);
                             }
                         }
                     }
@@ -225,6 +242,11 @@ pub async fn run_alerts_collector(
                         ua_cooldown_until - now
                     );
                 }
+            } else {
+                let mut st = threat_state.write().await;
+                st.report_stream_failure("ukrainealarm_alerts", "Немає API токена");
+                let all_streams = storage.get_streams();
+                st.recompute_all_stream_statuses(&all_streams);
             }
         }
 
@@ -389,7 +411,7 @@ async fn process_ukrainealarm_v3_alerts(
     state.recompute_oblast_alerts(detector);
     state.last_alerts_update_ts = now_sec();
     state.alarms_provider = provider_name.to_string();
-    state.last_alarms_provider_status = "primary".to_string();
+    state.last_alarms_provider_status = "active".to_string();
     state.bump_seq();
 }
 
@@ -400,7 +422,7 @@ pub async fn process_neptun_alerts(
     detector: &Arc<OblastDetector>,
     exchange_mgr: &Arc<ExchangeLogManager>,
     provider_name: &str,
-    status_str: &str,
+    _status_str: &str,
 ) {
     let mut state = threat_state.write().await;
     let mut active_neptun_ids = HashSet::new();
@@ -547,6 +569,6 @@ pub async fn process_neptun_alerts(
     state.recompute_oblast_alerts(detector);
     state.last_alerts_update_ts = now_sec();
     state.alarms_provider = provider_name.to_string();
-    state.last_alarms_provider_status = status_str.to_string();
+    state.last_alarms_provider_status = "active".to_string();
     state.bump_seq();
 }

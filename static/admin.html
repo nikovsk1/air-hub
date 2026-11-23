@@ -1499,35 +1499,43 @@
       const relations = carto.available_relations || ["Загальна мапа"];
       const userRelations = relations.filter(r => r !== "Загальна мапа");
 
-      // Допоміжна функція для статусу: Працює / Помилка / Вимкнений
-      function renderStatusCell(s, isUaAlert, uaVal, purposeText) {
+      // Допоміжна функція для статусу: active / suspended / offline
+      function renderStatusCell(s, purposeText) {
         let badgeHtml = "";
+        const rStatus = s.runtime_status || (!s.enabled ? "offline" : (s.priority === 1 ? "active" : "suspended"));
+        const reason = s.runtime_reason || "";
+        const retryIn = s.next_probe_in_sec ? ` (повтор через ${s.next_probe_in_sec}с)` : "";
+
         if (!s.enabled) {
           badgeHtml = `
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-semibold bg-gray-900 text-gray-400 border border-gray-700">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold bg-gray-900 text-gray-400 border border-gray-700">
               <span class="w-2 h-2 rounded-full bg-gray-500"></span>
-              <span>Вимкнений</span>
+              <span>offline (Вимкнено)</span>
             </span>
           `;
-        } else if (isUaAlert && !uaVal) {
+        } else if (rStatus === "active") {
           badgeHtml = `
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-semibold bg-red-950/70 text-red-300 border border-red-800">
-              <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-              <span>Помилка (немає токена)</span>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-700 shadow-sm">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span class="font-mono font-bold">active</span>
             </span>
           `;
-        } else if (isUaAlert && window.__lastHealthData && window.__lastHealthData.ukrainealarm_configured === false) {
+        } else if (rStatus === "suspended") {
           badgeHtml = `
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-semibold bg-red-950/70 text-red-300 border border-red-800">
-              <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-              <span>Помилка</span>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold bg-sky-950/80 text-sky-300 border border-sky-700 shadow-sm">
+              <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+              <span class="font-mono font-bold">suspended</span>
+              <span class="text-[11px] text-sky-400/80 font-normal">(режим очікування)</span>
             </span>
           `;
         } else {
+          // offline with short description
+          const desc = reason ? `${reason}${retryIn}` : `Помилка з'єднання${retryIn}`;
           badgeHtml = `
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-950/70 text-emerald-300 border border-emerald-800">
-              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span>Працює</span>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold bg-red-950/80 text-red-300 border border-red-700 shadow-sm" title="${escapeHtml(reason)}">
+              <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+              <span class="font-mono font-bold">offline</span>
+              <span class="text-[11px] text-red-300 font-normal">(${escapeHtml(desc)})</span>
             </span>
           `;
         }
@@ -1565,8 +1573,8 @@
               </div>
               <div class="flex items-center gap-1.5 mt-1">
                 ${isUa
-                  ? `<span class="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🚨 ПОТІК ТРИВОГ</span><span class="text-[11px] text-gray-400">api.ukrainealarm.com/api/v3/alerts</span>`
-                  : `<span class="bg-amber-950 text-amber-400 border border-amber-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🚨 РЕЗЕРВ ТРИВОГ</span><span class="text-[11px] text-gray-400">wss://neptun.in.ua/api/v1/stream (Чистий WebSocket замість REST neptun.in.ua/api/v1/alerts)</span>`
+                  ? `<span class="text-[11px] text-gray-400">api.ukrainealarm.com/api/v3/alerts</span>`
+                  : `<span class="text-[11px] text-gray-400">wss://neptun.in.ua/api/v1/stream</span>`
                 }
               </div>
             </td>
@@ -1596,14 +1604,14 @@
                   <span class="text-[10px] text-gray-400 font-mono">Чистий WebSocket</span>
                 </div>
                 <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
-                  <span>Опитування буфера:</span>
+                  <span>Опитування:</span>
                   <input type="number" id="streamPoll_${s.id}" min="3" max="60" value="${s.poll_interval_sec}" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
                   <span>сек</span>
                 </div>
               `}
             </td>
             <td class="p-3">
-              ${renderStatusCell(s, isUa, uaVal, isUa ? 'Офіційні тривоги та сирени' : 'Резервне опитування буфера при 429/тиші')}
+              ${renderStatusCell(s, isUa ? 'Офіційні тривоги та сирени' : 'Резервний потік тривог')}
             </td>
             <td class="p-3 text-right whitespace-nowrap">
               <div class="flex items-center justify-end gap-3">
@@ -1643,7 +1651,7 @@
         let purposeText = "";
 
         if (isUa) {
-          tagHtml = `<span class="bg-sky-950 text-sky-400 border border-sky-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🎯 ПОТІК ЦІЛЕЙ</span><span class="text-[11px] text-gray-400">map.ukrainealarm.com (WebSocket)</span>`;
+          tagHtml = `<span class="text-[11px] text-gray-400">map.ukrainealarm.com (Centrifugo WebSocket)</span>`;
 
           let diiaBadgeHtml = '';
           const dStatus = currentDiiaSession ? currentDiiaSession.status : 'not_configured';
@@ -1667,32 +1675,26 @@
                   <span>📲</span><span>Авторизуватись</span>
                 </button>
               </div>
-              <div class="flex items-center gap-1 text-xs text-gray-400">
-                <span>Тиша WS:</span>
-                <input type="number" id="streamTimeout_${s.id}" min="5" max="120" value="${s.failover_timeout_sec}" class="w-12 bg-gray-950 border border-gray-700 px-1 py-0.5 rounded text-center text-white text-xs font-mono">
-                <span>сек</span>
-              </div>
+              <span class="text-[11px] text-gray-500 font-mono">Потік реального часу (Push)</span>
             </div>
           `;
           purposeText = "Радарні онлайн загрози";
         } else if (isNeptun) {
-          tagHtml = `<span class="bg-amber-950 text-amber-400 border border-amber-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🔄 FAILOVER РЕЗЕРВ</span><span class="text-[11px] text-gray-400">wss://neptun.in.ua/api/v1/stream (Чистий WebSocket замість REST neptun.in.ua/api/v1/threats)</span>`;
+          tagHtml = `<span class="text-[11px] text-gray-400">wss://neptun.in.ua/api/v1/stream</span>`;
           midHtml = `
             <div class="bg-gray-950 border border-gray-800 px-3 py-1.5 rounded-lg flex items-center justify-between text-xs max-w-md">
               <span class="text-amber-300 font-mono">wss://neptun.in.ua/api/v1/stream</span>
               <span class="text-[10px] text-gray-400 font-mono">Чистий WebSocket</span>
             </div>
             <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
-              <span>Опитування буфера:</span>
+              <span>Опитування:</span>
               <input type="number" id="streamPoll_${s.id}" min="3" max="60" value="${s.poll_interval_sec}" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
-              <span>сек | Поріг тиші:</span>
-              <input type="number" id="streamTimeout_${s.id}" min="5" max="120" value="${s.failover_timeout_sec}" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
               <span>сек</span>
             </div>
           `;
           purposeText = "Резервний радарний потік";
         } else if (isMapa) {
-          tagHtml = `<span class="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">🛰️ OPENDATA ЦІЛІ</span><span class="text-[11px] text-gray-400">mapa.ua/api/v1/current</span>`;
+          tagHtml = `<span class="text-[11px] text-gray-400">mapa.ua/api/v1/current</span>`;
           midHtml = `
             <div class="bg-gray-950 border border-gray-800 px-3 py-1.5 rounded-lg flex items-center justify-between text-xs max-w-md">
               <span class="text-emerald-300 font-mono">mapa.ua/api/v1/current</span>
@@ -1701,8 +1703,6 @@
             <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
               <span>Опитування:</span>
               <input type="number" id="streamPoll_${s.id}" min="3" max="60" value="${s.poll_interval_sec}" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
-              <span>сек | Поріг тиші:</span>
-              <input type="number" id="streamTimeout_${s.id}" min="5" max="120" value="${s.failover_timeout_sec}" class="w-14 bg-gray-950 border border-gray-700 px-1.5 py-0.5 rounded text-center text-white text-xs font-mono">
               <span>сек</span>
             </div>
           `;
@@ -1735,7 +1735,7 @@
               ${midHtml}
             </td>
             <td class="p-3">
-              ${renderStatusCell(s, false, "", purposeText)}
+              ${renderStatusCell(s, purposeText)}
             </td>
             <td class="p-3 text-right whitespace-nowrap">
               <div class="flex items-center justify-end gap-3">

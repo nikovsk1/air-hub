@@ -557,6 +557,37 @@ pub struct ServiceKeyPayload {
     pub key: Option<String>,
 }
 
+fn enrich_streams_with_runtime(
+    streams: &[crate::storage::StreamSourceConfig],
+    st: &crate::tracker::ThreatState,
+) -> Vec<serde_json::Value> {
+    let now = crate::tracker::now_sec();
+    streams.iter().map(|s| {
+        let mut val = serde_json::to_value(s).unwrap_or(serde_json::Value::Null);
+        if let Some(rt) = st.get_stream_runtime_status(&s.id) {
+            let next_in = if rt.status == "offline" && rt.next_probe_ts > now {
+                Some((rt.next_probe_ts - now).ceil() as u64)
+            } else {
+                None
+            };
+            if let Some(obj) = val.as_object_mut() {
+                obj.insert("runtime_status".to_string(), serde_json::json!(rt.status));
+                obj.insert("runtime_reason".to_string(), serde_json::json!(rt.error_reason));
+                obj.insert("consecutive_failures".to_string(), serde_json::json!(rt.consecutive_failures));
+                obj.insert("next_probe_in_sec".to_string(), serde_json::json!(next_in));
+            }
+        } else {
+            if let Some(obj) = val.as_object_mut() {
+                obj.insert("runtime_status".to_string(), serde_json::json!(if s.enabled { "suspended" } else { "offline" }));
+                obj.insert("runtime_reason".to_string(), serde_json::Value::Null);
+                obj.insert("consecutive_failures".to_string(), serde_json::json!(0));
+                obj.insert("next_probe_in_sec".to_string(), serde_json::Value::Null);
+            }
+        }
+        val
+    }).collect()
+}
+
 async fn handle_get_service_keys(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -577,15 +608,15 @@ async fn handle_get_service_keys(
         }
     }
 
-    let last_tgt_st = {
+    let (last_tgt_st, enriched_streams) = {
         let ts = state.threat_state.read().await;
-        ts.last_targets_provider_status.clone()
+        (ts.last_targets_provider_status.clone(), enrich_streams_with_runtime(&streams, &ts))
     };
     let diia_session = crate::diia_relay::get_diia_session_info(&state.storage, &state.diia_bridge, &last_tgt_st);
 
     Json(json!({
         "status": "ok",
-        "streams": streams,
+        "streams": enriched_streams,
         "diia_session": diia_session,
         "service_keys": {
             "ukrainealarm": {
@@ -643,7 +674,28 @@ async fn handle_save_service_key(
 
     let rel = payload.relation.unwrap_or_else(|| "Загальна мапа".to_string());
     match state.storage.set_service_key(&payload.service, &rel, payload.key) {
-        Ok(_) => Json(json!({"status": "ok", "message": "saved"})).into_response(),
+        Ok(_) => {
+            if payload.service.to_lowercase().contains("diia") || payload.service.to_lowercase().contains("cookie") {
+                {
+                    let mut guard = state.diia_bridge.write();
+                    guard.status = "authorized".to_string();
+                    guard.last_error = None;
+                    guard.last_updated_ts = crate::storage::now_ts();
+                }
+                {
+                    let all_streams = state.storage.get_streams();
+                    let mut ts = state.threat_state.write().await;
+                    ts.report_stream_success("ukrainealarm_ws");
+                    ts.recompute_all_stream_statuses(&all_streams);
+                }
+            } else if payload.service.to_lowercase().contains("ukrainealarm") {
+                let all_streams = state.storage.get_streams();
+                let mut ts = state.threat_state.write().await;
+                ts.report_stream_success("ukrainealarm_alerts");
+                ts.recompute_all_stream_statuses(&all_streams);
+            }
+            Json(json!({"status": "ok", "message": "saved"})).into_response()
+        }
         Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"status": "error", "message": e}))).into_response(),
     }
 }
@@ -661,7 +713,20 @@ async fn handle_delete_service_key(
 
     let rel = payload.relation.unwrap_or_else(|| "Загальна мапа".to_string());
     match state.storage.delete_service_key(&payload.service, &rel) {
-        Ok(_) => Json(json!({"status": "ok", "message": "deleted"})).into_response(),
+        Ok(_) => {
+            if payload.service.to_lowercase().contains("diia") || payload.service.to_lowercase().contains("cookie") {
+                let all_streams = state.storage.get_streams();
+                let mut ts = state.threat_state.write().await;
+                ts.report_stream_failure("ukrainealarm_ws", "Сесію Дії видалено");
+                ts.recompute_all_stream_statuses(&all_streams);
+            } else if payload.service.to_lowercase().contains("ukrainealarm") {
+                let all_streams = state.storage.get_streams();
+                let mut ts = state.threat_state.write().await;
+                ts.report_stream_failure("ukrainealarm_alerts", "API токен видалено");
+                ts.recompute_all_stream_statuses(&all_streams);
+            }
+            Json(json!({"status": "ok", "message": "deleted"})).into_response()
+        }
         Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"status": "error", "message": e}))).into_response(),
     }
 }
@@ -686,9 +751,13 @@ async fn handle_get_streams(
         return status.into_response();
     }
     let streams = state.storage.get_streams();
+    let enriched = {
+        let st = state.threat_state.read().await;
+        enrich_streams_with_runtime(&streams, &st)
+    };
     Json(json!({
         "status": "ok",
-        "streams": streams
+        "streams": enriched
     })).into_response()
 }
 
@@ -721,54 +790,22 @@ async fn handle_save_streams(
         return (StatusCode::BAD_REQUEST, Json(json!({"status": "error", "message": "Missing streams array or stream id"}))).into_response();
     }
 
-    // Миттєва синхронізація активних провайдерів у ThreatState відповідно до оновлених пріоритетів
+    // Миттєва синхронізація статусів у ThreatState відповідно до оновлених пріоритетів
     {
         let all_streams = state.storage.get_streams();
         let mut st = state.threat_state.write().await;
-
-        let mut alerts_streams: Vec<_> = all_streams.iter().filter(|s| s.stream_type == "alerts" && s.enabled).collect();
-        alerts_streams.sort_by_key(|s| s.priority);
-        if let Some(top_alert) = alerts_streams.first() {
-            if top_alert.id == "neptun_alerts" {
-                st.alarms_provider = "Neptun Alerts (Primary)".to_string();
-                st.last_alarms_provider_status = "primary".to_string();
-            } else if top_alert.id == "ukrainealarm_alerts" {
-                st.alarms_provider = "UkraineAlarm (API v3)".to_string();
-                st.last_alarms_provider_status = "primary".to_string();
-            }
-        } else {
-            st.alarms_provider = "none".to_string();
-            st.last_alarms_provider_status = "disabled".to_string();
-        }
-
-        let mut targets_streams: Vec<_> = all_streams.iter().filter(|s| s.stream_type == "targets" && s.enabled).collect();
-        targets_streams.sort_by_key(|s| s.priority);
-        if let Some(top_target) = targets_streams.first() {
-            if top_target.id == "neptun_targets" {
-                st.targets_provider = "Neptun (Основний)".to_string();
-                st.last_targets_provider_status = "primary".to_string();
-                st.upstream_provider = "Neptun (Основний)".to_string();
-            } else if top_target.id == "mapa_targets" {
-                st.targets_provider = "MAPA.UA (Основний)".to_string();
-                st.last_targets_provider_status = "primary".to_string();
-                st.upstream_provider = "MAPA.UA (Основний)".to_string();
-            } else if top_target.id == "ukrainealarm_ws" {
-                st.targets_provider = "WS UkraineAlarm".to_string();
-                st.last_targets_provider_status = "primary".to_string();
-                st.upstream_provider = "WS UkraineAlarm".to_string();
-            }
-        } else {
-            st.targets_provider = "none".to_string();
-            st.last_targets_provider_status = "disabled".to_string();
-            st.upstream_provider = "none".to_string();
-        }
+        st.recompute_all_stream_statuses(&all_streams);
     }
 
     let streams = state.storage.get_streams();
+    let enriched = {
+        let st = state.threat_state.read().await;
+        enrich_streams_with_runtime(&streams, &st)
+    };
     Json(json!({
         "status": "ok",
         "message": "saved",
-        "streams": streams
+        "streams": enriched
     })).into_response()
 }
 

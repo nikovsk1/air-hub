@@ -4,10 +4,9 @@ use reqwest::header::{ACCEPT, USER_AGENT};
 use serde_json::Value;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 use crate::canonical_registry::ExchangeLogManager;
-use crate::config::TARGETS_STARTUP_GRACE_PERIOD_SEC;
 use crate::crypto_decoder::RawExtractedTarget;
 use crate::geo_math::calculate_bearing;
 use crate::history::HistoryManager;
@@ -147,7 +146,6 @@ pub async fn run_mapa_targets_collector(
     storage: Arc<StorageManager>,
     http_client: reqwest::Client,
 ) {
-    let process_start_ts = now_sec();
     let mut was_active = false;
     let mut last_logged_count: Option<usize> = None;
 
@@ -158,7 +156,6 @@ pub async fn run_mapa_targets_collector(
 
         let mapa_enabled = mapa_cfg.as_ref().map(|s| s.enabled).unwrap_or(true);
         let poll_interval_sec = mapa_cfg.as_ref().map(|s| s.poll_interval_sec).unwrap_or(10).max(3);
-        let failover_timeout_sec = mapa_cfg.as_ref().map(|s| s.failover_timeout_sec).unwrap_or(20.0).max(5.0);
         let mapa_priority = mapa_cfg.as_ref().map(|s| s.priority).unwrap_or(3);
 
         sleep(Duration::from_secs(poll_interval_sec)).await;
@@ -171,61 +168,41 @@ pub async fn run_mapa_targets_collector(
             continue;
         }
 
-        // Перевіряємо, чи є вищі за пріоритетом джерела, які активні та не мовчать
         let ua_enabled = ua_ws_cfg.as_ref().map(|s| s.enabled).unwrap_or(true);
         let ua_priority = ua_ws_cfg.as_ref().map(|s| s.priority).unwrap_or(1);
-        let ua_failover_timeout = ua_ws_cfg.as_ref().map(|s| s.failover_timeout_sec).unwrap_or(15.0).max(5.0);
 
         let neptun_enabled = neptun_cfg.as_ref().map(|s| s.enabled).unwrap_or(true);
         let neptun_priority = neptun_cfg.as_ref().map(|s| s.priority).unwrap_or(2);
-        let neptun_failover_timeout = neptun_cfg.as_ref().map(|s| s.failover_timeout_sec).unwrap_or(15.0).max(5.0);
 
         let is_mapa_primary = (!ua_enabled || mapa_priority < ua_priority)
             && (!neptun_enabled || mapa_priority < neptun_priority);
 
-        if !is_mapa_primary {
-            let uptime = now_sec() - process_start_ts;
-            if uptime < TARGETS_STARTUP_GRACE_PERIOD_SEC {
-                debug!(
-                    "MAPA.UA collector: startup grace period active ({:.1}s / {:.0}s), waiting for higher-priority streams",
-                    uptime, TARGETS_STARTUP_GRACE_PERIOD_SEC
-                );
-                continue;
+        let is_active = {
+            let st = threat_state.read().await;
+            st.get_stream_runtime_status("mapa_targets").map(|s| s.status == "active").unwrap_or(false)
+        };
+
+        if !is_active {
+            if was_active {
+                info!("MAPA.UA collector in standby (status is suspended).");
+                was_active = false;
+                last_logged_count = None;
             }
+            continue;
+        }
 
-            let state_read = threat_state.read().await;
-            let now = now_sec();
-
-            // Чи активне UkraineAlarm WS?
-            let ua_status = state_read.last_targets_provider_status.as_str();
-            let ua_authorized = ua_status != "unauthorized" && ua_status != "disabled" && ua_status != "offline";
-            let ua_alive = ua_enabled && ua_priority < mapa_priority && ua_authorized && (now - state_read.last_primary_targets_ts) <= ua_failover_timeout;
-            // Чи активне Neptun?
-            let neptun_alive = neptun_enabled && neptun_priority < mapa_priority
-                && state_read.targets_provider.contains("Neptun")
-                && (now - state_read.last_targets_update_ts) <= neptun_failover_timeout;
-
-            drop(state_read);
-
-            if ua_alive || neptun_alive {
-                if was_active {
-                    info!("Higher priority targets stream active. MAPA.UA standby.");
-                    was_active = false;
-                    last_logged_count = None;
-                }
-                continue;
-            }
-
-            if !was_active {
-                warn!(
-                    "Higher priority target streams silent >{:.0}s. Engaging MAPA.UA (mapa.ua) as active targets provider...",
-                    failover_timeout_sec
-                );
-                was_active = true;
-            }
-        } else if !was_active {
-            info!("MAPA.UA configured as PRIMARY targets stream (Priority #{}). Starting direct radar polling.", mapa_priority);
+        if !was_active {
+            info!("MAPA.UA is now ACTIVE targets stream. Starting direct radar polling.");
             was_active = true;
+        }
+
+        let can_probe = {
+            let st = threat_state.read().await;
+            st.can_probe_stream("mapa_targets")
+        };
+
+        if !can_probe {
+            continue;
         }
 
         // Опитування MAPA.UA API
@@ -252,11 +229,14 @@ pub async fn run_mapa_targets_collector(
                     } else {
                         "MAPA.UA (Резервний)"
                     };
-                    let status_str = if is_mapa_primary { "primary" } else { "failover" };
+                    let status_str = "active";
 
                     state.targets_provider = provider_name.to_string();
                     state.last_targets_provider_status = status_str.to_string();
                     state.last_targets_update_ts = now_sec();
+                    state.report_stream_success("mapa_targets");
+                    let all_streams = storage.get_streams();
+                    state.recompute_all_stream_statuses(&all_streams);
                     state.bump_seq();
 
                     let lost = state.tracker.update_batch(
@@ -299,10 +279,23 @@ pub async fn run_mapa_targets_collector(
                 }
             }
             Ok(resp) => {
-                warn!("MAPA.UA API returned non-success HTTP status: {}", resp.status());
+                let status_code = resp.status();
+                warn!("MAPA.UA API returned non-success HTTP status: {}", status_code);
+                {
+                    let mut st = threat_state.write().await;
+                    st.report_stream_failure("mapa_targets", &format!("HTTP {}", status_code));
+                    let all_streams = storage.get_streams();
+                    st.recompute_all_stream_statuses(&all_streams);
+                }
             }
             Err(e) => {
                 warn!("MAPA.UA API request failed: {}", e);
+                {
+                    let mut st = threat_state.write().await;
+                    st.report_stream_failure("mapa_targets", &format!("Помилка мережі: {}", e));
+                    let all_streams = storage.get_streams();
+                    st.recompute_all_stream_statuses(&all_streams);
+                }
             }
         }
     }

@@ -218,7 +218,7 @@ async fn process_ukrainealarm_payload_inner(
         state.bump_seq();
         state.upstream_provider = format!("{} ({})", source_label, stream_type);
         state.targets_provider = "WS UkraineAlarm".to_string();
-        state.last_targets_provider_status = "primary".to_string();
+        state.last_targets_provider_status = "active".to_string();
         info!("Updated radar snapshot via {} ({} active targets)", state.upstream_provider, extracted.len());
 
         // Перевірка прапорця history_recording: уникати зайвих операцій диск/пам'ять при вимкненій історії
@@ -295,6 +295,30 @@ pub async fn run_ukrainealarm_collector(
         let ua_stream = storage.get_stream("ukrainealarm_ws");
         if !ua_stream.as_ref().map(|s| s.enabled).unwrap_or(true) {
             sleep(Duration::from_secs(5)).await;
+            continue;
+        }
+
+        let can_probe = {
+            let st = threat_state.read().await;
+            st.can_probe_stream("ukrainealarm_ws")
+        };
+        if !can_probe {
+            sleep(Duration::from_secs(5)).await;
+            continue;
+        }
+
+        let configured_diia_cookie = storage.get_service_keys().ukrainealarm_diia_cookie
+            .or_else(|| std::env::var("UKRAINEALARM_DIIA_COOKIE").ok())
+            .filter(|s| !s.trim().is_empty());
+
+        if configured_diia_cookie.is_none() {
+            {
+                let mut state = threat_state.write().await;
+                state.report_stream_failure("ukrainealarm_ws", "Немає авторизаційної куки Дії");
+                let all_streams = storage.get_streams();
+                state.recompute_all_stream_statuses(&all_streams);
+            }
+            sleep(Duration::from_secs(10)).await;
             continue;
         }
 
@@ -529,16 +553,28 @@ pub async fn run_ukrainealarm_collector(
                                         warn!("Diia authorization session expired or rejected on {}. Please re-authorize via Admin Panel.", sub_ep);
                                         {
                                             let mut d_guard = diia_bridge.write();
-                                            d_guard.status = "expired".to_string();
-                                            d_guard.last_error = Some(format!("Сесію Дії вичерпано або відхилено сервером (HTTP {})", status));
+                                            // Не затирати статус, якщо прямо зараз користувач сканує новий QR-код (pending)!
+                                            if d_guard.status != "pending" {
+                                                d_guard.status = "expired".to_string();
+                                                d_guard.last_error = Some(format!("Сесію Дії вичерпано або відхилено сервером (HTTP {})", status));
+                                            }
                                         }
                                         {
                                             let mut state = threat_state.write().await;
-                                            state.last_targets_provider_status = "unauthorized".to_string();
+                                            state.last_targets_provider_status = "offline".to_string();
                                             state.last_primary_targets_ts = 0.0;
                                             state.last_ws_targets_ts = 0.0;
+                                            state.report_stream_failure("ukrainealarm_ws", &format!("Сесію Дії вичерпано або відхилено (HTTP {})", status));
+                                            let all_streams = storage.get_streams();
+                                            state.recompute_all_stream_statuses(&all_streams);
                                         }
-                                        sleep(Duration::from_secs(30)).await;
+                                        let sleep_secs = {
+                                            let state = threat_state.read().await;
+                                            state.get_stream_runtime_status("ukrainealarm_ws")
+                                                .map(|s| (s.next_probe_ts - now_sec()).max(5.0) as u64)
+                                                .unwrap_or(60)
+                                        };
+                                        sleep(Duration::from_secs(sleep_secs)).await;
                                     }
                                 } else if let Ok(sub_data) = resp.json::<Value>().await {
                                     {
@@ -587,9 +623,11 @@ pub async fn run_ukrainealarm_collector(
                                             let mut state = threat_state.write().await;
                                             state.last_primary_targets_ts = now_sec();
                                             state.last_ws_targets_ts = now_sec();
+                                            state.report_stream_success("ukrainealarm_ws");
+                                            let all_streams = storage.get_streams();
+                                            state.recompute_all_stream_statuses(&all_streams);
                                             if is_ua_primary {
                                                 state.targets_provider = "WS UkraineAlarm".to_string();
-                                                state.last_targets_provider_status = "primary".to_string();
                                             }
                                         }
                                     } else {
@@ -631,6 +669,18 @@ pub async fn run_ukrainealarm_collector(
             }
         }
 
-        sleep(Duration::from_secs(5)).await;
+        {
+            let mut state = threat_state.write().await;
+            state.report_stream_failure("ukrainealarm_ws", "З'єднання розірвано");
+            let all_streams = storage.get_streams();
+            state.recompute_all_stream_statuses(&all_streams);
+        }
+        let sleep_secs = {
+            let state = threat_state.read().await;
+            state.get_stream_runtime_status("ukrainealarm_ws")
+                .map(|s| (s.next_probe_ts - now_sec()).max(5.0) as u64)
+                .unwrap_or(60)
+        };
+        sleep(Duration::from_secs(sleep_secs)).await;
     }
 }
