@@ -75,6 +75,61 @@ pub fn approach_angle(target_lat: f64, target_lon: f64, heading: f64, slot_lat: 
     }
 }
 
+/// Оцінка статусу цілі відносно точки спостереження та її зони безпеки (допрацьований Варіант 1:
+/// аналітичний перетин променя з колом).
+///
+/// Логіка:
+/// - Для D <= R:
+///     theta > 90° => "Віддаляється від «[Точка]»", інакше "Курс на точку «[Точка]»"
+/// - Для D > R (при theta < 90° і V >= 5 км/г):
+///     d_perp = D * sin(theta_rad)
+///     якщо d_perp > R => "Поза радіусом безпеки"
+///     s_entry = D * cos(theta_rad) - sqrt(R^2 - d_perp^2)
+///     ETA_zone = (s_entry / V) * 60 хв
+///     якщо ETA_zone <= 15.0 => "Курс на точку «[Точка]»", інакше "Поза радіусом безпеки"
+pub fn compute_point_approach_status(
+    dist_km: f64,
+    danger_radius_km: f64,
+    approach_angle_deg: f64,
+    speed_kmh: f64,
+    point_name: &str,
+) -> (String, &'static str) {
+    let clean_name = if point_name.trim().is_empty() {
+        "Точка"
+    } else {
+        point_name.trim()
+    };
+
+    if dist_km <= danger_radius_km {
+        if approach_angle_deg > 90.0 {
+            (format!("Віддаляється від «{}»", clean_name), "moving_away")
+        } else {
+            (format!("Курс на точку «{}»", clean_name), "direct")
+        }
+    } else {
+        if approach_angle_deg >= 90.0 || speed_kmh < 5.0 {
+            return ("Поза радіусом безпеки".to_string(), "outside");
+        }
+
+        let theta_rad = approach_angle_deg.to_radians();
+        let d_perp = dist_km * theta_rad.sin();
+
+        if d_perp > danger_radius_km {
+            return ("Поза радіусом безпеки".to_string(), "outside");
+        }
+
+        let under_sqrt = (danger_radius_km * danger_radius_km - d_perp * d_perp).max(0.0);
+        let s_entry = dist_km * theta_rad.cos() - under_sqrt.sqrt();
+
+        let eta_zone = (s_entry / speed_kmh) * 60.0;
+        if eta_zone <= 15.0 {
+            (format!("Курс на точку «{}»", clean_name), "direct")
+        } else {
+            ("Поза радіусом безпеки".to_string(), "outside")
+        }
+    }
+}
+
 /// Проєкція полярних координат у пікселі для Waveshare ESP32-S3 AMOLED (368x448)
 pub fn project_radar_point(
     center_x: f64,
@@ -187,5 +242,35 @@ mod tests {
         assert_eq!(px, 184);
         assert_eq!(py, 224);
         assert!(d < 0.001);
+    }
+
+    #[test]
+    fn test_point_approach_status_analytical_cases() {
+        let point_name = "Київ";
+
+        // Кейс 1: Проліт повз (D=60, R=35, theta=60°, V=400) -> d_perp = 60 * sin(60°) = 51.96 > 35 -> Поза радіусом безпеки
+        let (desc1, code1) = compute_point_approach_status(60.0, 35.0, 60.0, 400.0, point_name);
+        assert_eq!(desc1, "Поза радіусом безпеки");
+        assert_eq!(code1, "outside");
+
+        // Кейс 2: Швидка ракета наскрізь (D=40, R=35, V=850, theta=0°) -> s_entry = 40 - 35 = 5 км, ETA = 0.35 хв <= 15 -> Курс на точку «Київ»
+        let (desc2, code2) = compute_point_approach_status(40.0, 35.0, 0.0, 850.0, point_name);
+        assert_eq!(desc2, "Курс на точку «Київ»");
+        assert_eq!(code2, "direct");
+
+        // Кейс 3: Віддалення всередині зони (D=20, R=35, theta=120°, V=300) -> D <= R, theta > 90° -> Віддаляється від «Київ»
+        let (desc3, code3) = compute_point_approach_status(20.0, 35.0, 120.0, 300.0, point_name);
+        assert_eq!(desc3, "Віддаляється від «Київ»");
+        assert_eq!(code3, "moving_away");
+
+        // Додатковий кейс 4: Наближення всередині зони (D=20, R=35, theta=30°, V=300) -> Курс на точку «Київ»
+        let (desc4, code4) = compute_point_approach_status(20.0, 35.0, 30.0, 300.0, point_name);
+        assert_eq!(desc4, "Курс на точку «Київ»");
+        assert_eq!(code4, "direct");
+
+        // Додатковий кейс 5: Повільний шахед за 120 км строго курсом на точку (D=120, R=35, theta=0°, V=180) -> s_entry = 85 км, ETA = 28.3 хв > 15 -> Поза радіусом безпеки
+        let (desc5, code5) = compute_point_approach_status(120.0, 35.0, 0.0, 180.0, point_name);
+        assert_eq!(desc5, "Поза радіусом безпеки");
+        assert_eq!(code5, "outside");
     }
 }

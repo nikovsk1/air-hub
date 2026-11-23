@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 use crate::api::admin_routes::AppState;
 use crate::api::middleware::{extract_client_api_key, is_admin, is_external_request};
 use crate::canonical_registry::*;
-use crate::geo_math::{approach_angle, bearing_to_compass, calculate_bearing, calculate_haversine_distance, format_eta_ua, project_radar_point};
+use crate::geo_math::{approach_angle, bearing_to_compass, calculate_bearing, calculate_haversine_distance, compute_point_approach_status, format_eta_ua, project_radar_point};
 use crate::storage::User;
 
 #[derive(Deserialize)]
@@ -801,6 +801,7 @@ pub fn build_user_snapshot(
         let mut best_eta = None;
         let mut trk_closest_slot_id = "".to_string();
         let mut trk_closest_slot_name = "".to_string();
+        let mut trk_slot_danger_radius = eff_danger_km;
 
         if target_slots.is_empty() {
             let d = calculate_haversine_distance(center_lat, center_lon, trk.lat, trk.lon);
@@ -813,6 +814,8 @@ pub fn build_user_snapshot(
             } else {
                 None
             };
+            trk_closest_slot_name = if slot_name.is_empty() { "Точка".to_string() } else { slot_name.clone() };
+            trk_slot_danger_radius = eff_danger_km;
         } else {
             for s in &target_slots {
                 let d = calculate_haversine_distance(s.lat, s.lon, trk.lat, trk.lon);
@@ -831,26 +834,19 @@ pub fn build_user_snapshot(
                     };
                     trk_closest_slot_id = s.id.clone();
                     trk_closest_slot_name = s.name.clone();
+                    trk_slot_danger_radius = s.danger_zone;
                 }
             }
         }
 
         let compass = bearing_to_compass(best_bearing);
-        let approach_status = if best_app_angle <= 45.0 {
-            "direct"
-        } else if best_app_angle <= 85.0 {
-            "approaching"
-        } else {
-            "passing"
-        };
-
-        let approach_desc = if best_app_angle <= 45.0 {
-            "Прямий курс на точку"
-        } else if best_app_angle <= 85.0 {
-            "Наближається"
-        } else {
-            "Рухається повз / віддаляється"
-        };
+        let (approach_desc, approach_status) = compute_point_approach_status(
+            min_trk_dist,
+            trk_slot_danger_radius,
+            best_app_angle,
+            trk.speed_kmh,
+            &trk_closest_slot_name,
+        );
 
         let corridor = trk.get_extrapolated_corridor();
         let (_, meta) = classify_target(&trk.raw_type, trk.raw_code);

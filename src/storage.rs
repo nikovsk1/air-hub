@@ -155,7 +155,7 @@ pub fn default_stream_sources() -> Vec<StreamSourceConfig> {
         },
         StreamSourceConfig {
             id: "neptun_alerts".to_string(),
-            name: "Neptun Stream (Резерв тривог)".to_string(),
+            name: "Neptun API".to_string(),
             stream_type: "alerts".to_string(),
             enabled: true,
             priority: 2,
@@ -167,7 +167,7 @@ pub fn default_stream_sources() -> Vec<StreamSourceConfig> {
         },
         StreamSourceConfig {
             id: "ukrainealarm_ws".to_string(),
-            name: "WS UkraineAlarm (Парсер цілей)".to_string(),
+            name: "WS UkraineAlarm".to_string(),
             stream_type: "targets".to_string(),
             enabled: true,
             priority: 1,
@@ -179,7 +179,7 @@ pub fn default_stream_sources() -> Vec<StreamSourceConfig> {
         },
         StreamSourceConfig {
             id: "neptun_targets".to_string(),
-            name: "Neptun Stream (Парсер цілей)".to_string(),
+            name: "Neptun Hub API".to_string(),
             stream_type: "targets".to_string(),
             enabled: true,
             priority: 2,
@@ -191,7 +191,7 @@ pub fn default_stream_sources() -> Vec<StreamSourceConfig> {
         },
         StreamSourceConfig {
             id: "mapa_targets".to_string(),
-            name: "MAPA.UA API (Цілі/загрози)".to_string(),
+            name: "MAPA.UA API".to_string(),
             stream_type: "targets".to_string(),
             enabled: true,
             priority: 3,

@@ -377,7 +377,7 @@ async fn run_neptun_alerts_arbiter(
             continue;
         }
 
-        let is_neptun_primary = !ua_enabled || neptun_priority < ua_priority;
+        let _is_neptun_primary = !ua_enabled || neptun_priority < ua_priority;
         let now = now_sec();
 
         let is_active = {
@@ -400,7 +400,7 @@ async fn run_neptun_alerts_arbiter(
             was_active = true;
         }
 
-        let provider_name = if is_neptun_primary { "Neptun Alerts (Primary)" } else { "Neptun (Резервний)" };
+        let provider_name = "Neptun API";
         let status_str = "active";
 
         // 1. Спроба застосувати свіжі тривоги з буфера WebSocket (вік <= 25 секунд)
@@ -477,7 +477,7 @@ async fn run_neptun_targets_arbiter(
             continue;
         }
 
-        let is_neptun_primary = (!ua_enabled || neptun_priority < ua_priority)
+        let _is_neptun_primary = (!ua_enabled || neptun_priority < ua_priority)
             && (!mapa_enabled || neptun_priority < mapa_priority);
         let now = now_sec();
 
@@ -500,7 +500,7 @@ async fn run_neptun_targets_arbiter(
             was_active = true;
         }
 
-        let provider_name = if is_neptun_primary { "Neptun (Основний)" } else { "Neptun (Резервний)" };
+        let provider_name = "Neptun Hub API";
         let status_str = "active";
 
         // 1. Спроба взяти цілі з буфера WebSocket (вік <= 25 секунд)

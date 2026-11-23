@@ -833,6 +833,7 @@
       position: relative;
       min-width: 60px;
       user-select: none;
+      margin-right: 6px;
     }
     .timeline-density-canvas {
       position: absolute;
@@ -863,7 +864,8 @@
       border: none !important;
       outline: none !important;
       margin: 0;
-      padding: 0;
+      padding: 0 14px 0 8px;
+      box-sizing: border-box;
       position: relative;
       z-index: 2;
       cursor: ew-resize;
@@ -998,52 +1000,130 @@
        RESPONSIVE MOBILE BREAKPOINT (< 640px)
        ========================================================================= */
     /* Tactical Target Context Popup & 3D Flightradar Button */
+    .target-context-popup {
+      z-index: 1200;
+    }
     .target-context-popup .maplibregl-popup-content {
-      background: rgba(15, 23, 42, 0.96) !important;
-      backdrop-filter: blur(14px) !important;
-      -webkit-backdrop-filter: blur(14px) !important;
-      border: 1px solid rgba(245, 158, 11, 0.45) !important;
+      background: rgba(13, 17, 23, 0.96) !important;
+      backdrop-filter: blur(16px) !important;
+      -webkit-backdrop-filter: blur(16px) !important;
+      border: 1px solid rgba(56, 189, 248, 0.35) !important;
       border-radius: 10px !important;
       padding: 10px 12px !important;
       color: #F8FAFC !important;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.75) !important;
-      min-width: 215px !important;
-      font-family: var(--font-stack) !important;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 0, 0, 0.5) !important;
+      width: 280px !important;
+      max-width: 300px !important;
+      box-sizing: border-box !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .target-context-popup .maplibregl-popup-close-button {
+      top: 7px !important;
+      right: 7px !important;
+      width: 20px !important;
+      height: 20px !important;
+      border-radius: 5px !important;
+      background: rgba(255, 255, 255, 0.06) !important;
+      border: 1px solid rgba(255, 255, 255, 0.12) !important;
+      color: #94A3B8 !important;
+      font-size: 13px !important;
+      line-height: 18px !important;
+      text-align: center !important;
+      padding: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      cursor: pointer !important;
+      transition: all 0.15s ease !important;
+      outline: none !important;
+      z-index: 5 !important;
+    }
+    .target-context-popup .maplibregl-popup-close-button:hover {
+      background: rgba(239, 68, 68, 0.25) !important;
+      border-color: rgba(239, 68, 68, 0.6) !important;
+      color: #FFFFFF !important;
     }
     .target-context-popup .maplibregl-popup-tip {
-      border-top-color: rgba(245, 158, 11, 0.45) !important;
+      border-top-color: rgba(13, 17, 23, 0.96) !important;
     }
     .target-popup-header {
+      padding-right: 22px; /* Clearance for close button */
+      padding-bottom: 7px;
+      margin-bottom: 7px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .target-popup-title-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
-      padding-bottom: 6px;
-      margin-bottom: 6px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      gap: 6px;
+      min-width: 0;
+    }
+    .target-popup-title {
+      font-size: 12.5px;
       font-weight: 800;
-      font-size: 12px;
+      letter-spacing: 0.1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .target-popup-glyph {
+      font-size: 10px;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .target-popup-header .badge-count {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+      font-size: 10px !important;
+      font-weight: 600 !important;
+      padding: 1.5px 6px !important;
+      border-radius: 4px !important;
+      max-width: 95px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
     }
     .target-popup-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 4px 10px;
-      font-size: 10.5px;
-      margin-bottom: 8px;
+      grid-template-columns: auto 1fr;
+      row-gap: 4.5px;
+      column-gap: 10px;
+      align-items: center;
+      font-size: 11px;
+      line-height: 1.35;
+      margin-bottom: 9px;
     }
     .target-popup-grid span.lbl {
-      color: var(--text-muted);
+      color: #94A3B8;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
     }
     .target-popup-grid span.val {
-      color: #FFFFFF;
-      font-weight: 700;
+      color: #F8FAFC;
+      font-size: 11px;
+      font-weight: 600;
       text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .btn-3d-chase {
       width: 100%;
       height: 30px;
       background: linear-gradient(135deg, #F59E0B, #D97706);
-      border: none;
+      border: 1px solid rgba(255, 255, 255, 0.15);
       border-radius: 6px;
       color: #0B0E14;
       font-weight: 800;
@@ -1054,19 +1134,45 @@
       justify-content: center;
       gap: 6px;
       box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
-      transition: transform 0.15s ease, filter 0.15s ease;
+      transition: all 0.15s ease;
+      outline: none;
     }
     .btn-3d-chase:hover {
       filter: brightness(1.1);
       transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(245, 158, 11, 0.5);
+    }
+    .btn-3d-chase:active {
+      transform: translateY(0);
+      filter: brightness(0.96);
     }
 
     .lost-target-popup .maplibregl-popup-content {
-      border: 1px solid rgba(239, 68, 68, 0.6) !important;
-      box-shadow: 0 12px 32px rgba(239, 68, 68, 0.25), 0 4px 16px rgba(0, 0, 0, 0.8) !important;
+      border: 1px solid rgba(239, 68, 68, 0.5) !important;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.8), 0 0 16px rgba(239, 68, 68, 0.25) !important;
     }
     .lost-target-popup .maplibregl-popup-tip {
-      border-top-color: rgba(239, 68, 68, 0.6) !important;
+      border-top-color: rgba(13, 17, 23, 0.96) !important;
+    }
+    .lost-target-status-bar {
+      width: 100%;
+      height: 30px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 6px;
+      color: #FCA5A5;
+      font-weight: 700;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+      box-sizing: border-box;
+      letter-spacing: 0.1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     #pillClosestThreat .hud-dropdown-panel {
@@ -1862,7 +1968,7 @@
       <input type="range" id="timelineScrubber" min="0" max="1000" value="1000" style="display:none;">
     </div>
 
-    <div class="timeline-clock-box" style="display:flex; flex-direction:column; align-items:flex-end; min-width:65px; font-family:monospace; line-height:1.15;">
+    <div class="timeline-clock-box" style="display:flex; flex-direction:column; align-items:flex-end; min-width:65px; font-family:monospace; line-height:1.15; padding-left:8px; border-left:1px solid rgba(255, 255, 255, 0.12); flex-shrink:0;">
       <div class="timeline-clock-time" id="barClockTime">--:--:--</div>
       <div id="timelineCurrentTime" style="display:none;">--:--:--</div>
       <div class="timeline-clock-date" id="barClockDate">--.--.--</div>
@@ -2017,6 +2123,8 @@
               outcome: l.outcome || 'eliminated',
               heading: l.heading || 0,
               lost_ts: l.lost_ts || 0,
+              lon: lon,
+              lat: lat,
               is_lost: true
             }
           };
@@ -2995,6 +3103,34 @@
           e._targetClicked = true;
           if (e.originalEvent) e.originalEvent.cancelBubble = true;
           openTargetContextMenu(bestThreatHit.tid, bestThreatHit.coord);
+          return;
+        }
+
+        // 0.1 Downed / Lost Targets Screen-Space Hit Testing (24px radius for red crosses)
+        let bestLostHit = null;
+        let bestLostDist = 24.0;
+        const lostCandidates = isLiveMode
+          ? Object.values(recentLostThreats || {})
+          : (historicalDataset || []).filter(t => t.lost_point && (Number(simTime) || simMaxTime) > t.lost_time);
+
+        for (let i = 0; i < lostCandidates.length; i++) {
+          const l = lostCandidates[i];
+          const lLon = Number(l.lon || (l.coords && l.coords[1]) || (l.lost_point && l.lost_point[1]));
+          const lLat = Number(l.lat || (l.coords && l.coords[0]) || (l.lost_point && l.lost_point[0]));
+          if (!Number.isFinite(lLon) || !Number.isFinite(lLat)) continue;
+          const p = map.project([lLon, lLat]);
+          const dx = p.x - e.point.x;
+          const dy = p.y - e.point.y;
+          const dPx = Math.sqrt(dx * dx + dy * dy);
+          if (dPx <= 24.0 && dPx < bestLostDist) {
+            bestLostDist = dPx;
+            bestLostHit = { tid: l.id || l.tid, coord: [lLon, lLat], props: l };
+          }
+        }
+        if (bestLostHit) {
+          e._targetClicked = true;
+          if (e.originalEvent) e.originalEvent.cancelBubble = true;
+          openTargetContextMenu(bestLostHit.tid, bestLostHit.coord, bestLostHit.props);
           return;
         }
 
@@ -4178,16 +4314,8 @@
             7.5, 0.65,
             11, 0.85
           ],
-          'icon-allow-overlap': [
-            'step', ['zoom'],
-            false,
-            7.5, true
-          ],
-          'icon-ignore-placement': [
-            'step', ['zoom'],
-            false,
-            7.5, true
-          ]
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true
         }
       });
 
@@ -5205,10 +5333,48 @@
 
     // activeTargetPopup is declared and managed centrally in map scope
 
+    function computeBearingDeg(lat1, lon1, lat2, lon2) {
+      const phi1 = lat1 * Math.PI / 180.0;
+      const phi2 = lat2 * Math.PI / 180.0;
+      const dLon = (lon2 - lon1) * Math.PI / 180.0;
+      const y = Math.sin(dLon) * Math.cos(phi2);
+      const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLon);
+      return (Math.atan2(y, x) * 180.0 / Math.PI + 360.0) % 360.0;
+    }
+
+    function computePointApproachStatusJs(distKm, dangerRadiusKm, approachAngleDeg, speedKmh, pointName) {
+      const cleanName = (pointName && String(pointName).trim()) ? String(pointName).trim() : "Точка";
+      if (distKm <= dangerRadiusKm) {
+        if (approachAngleDeg > 90.0) {
+          return `Віддаляється від «${cleanName}»`;
+        } else {
+          return `Курс на точку «${cleanName}»`;
+        }
+      }
+      if (approachAngleDeg >= 90.0 || speedKmh < 5.0) {
+        return 'Поза радіусом безпеки';
+      }
+      const rad = approachAngleDeg * Math.PI / 180.0;
+      const dPerp = distKm * Math.sin(rad);
+      if (dPerp > dangerRadiusKm) {
+        return 'Поза радіусом безпеки';
+      }
+      const underSqrt = Math.max(0, dangerRadiusKm * dangerRadiusKm - dPerp * dPerp);
+      const sEntry = distKm * Math.cos(rad) - Math.sqrt(underSqrt);
+      const etaZone = (sEntry / speedKmh) * 60.0;
+      if (etaZone <= 15.0) {
+        return `Курс на точку «${cleanName}»`;
+      }
+      return 'Поза радіусом безпеки';
+    }
+
     function openTargetContextMenu(tid, lngLat, extraProps) {
       const t = activeThreats[tid];
-      const lost = (extraProps && (extraProps.is_lost || extraProps.status === 'lost' || extraProps.status === 'eliminated' || extraProps.downed)) ? extraProps : (recentLostThreats ? recentLostThreats[tid] : null);
-      if (!t && !lost) return;
+      const lostObj = (extraProps && (extraProps.is_lost || extraProps.status === 'lost' || extraProps.status === 'eliminated' || extraProps.downed))
+        ? extraProps
+        : ((recentLostThreats && recentLostThreats[tid]) || (allReceivedLostThreats && allReceivedLostThreats[tid]) || null);
+
+      if (!t && !lostObj) return;
 
       // Mutual exclusivity: selecting any target dismisses active region selection and outline!
       deselectRegion();
@@ -5216,18 +5382,37 @@
       // Close previous target popup if open (ensuring direct click on another target smoothly replaces it)
       closeTargetPopup();
 
+      const isLost = Boolean(
+        (extraProps && (extraProps.is_lost || extraProps.status === 'lost' || extraProps.status === 'eliminated' || extraProps.downed)) ||
+        (!t && lostObj) ||
+        (lostObj && (!t || t.status === 'lost' || t.status === 'eliminated' || t.downed || t.status === 'hit_target'))
+      );
+
       // 1. Handling for DOWNED / LOST TARGET (Збита / Втрачена ціль)
-      if (!t && lost) {
-        const catKey = lost.category || lost.cat || 'unknown';
+      if (isLost && lostObj) {
+        const catKey = lostObj.category || lostObj.cat || (t ? t.cat : 'unknown');
         const catMeta = THREAT_CATEGORIES[catKey] || THREAT_CATEGORIES.unknown;
-        const typeName = lost.type_ua || catMeta.name || 'Повітряна ціль';
-        const coords = lngLat || [Number(lost.lon || (lost.coords && lost.coords[1])), Number(lost.lat || (lost.coords && lost.coords[0]))];
-        const heading = Math.round(Number(lost.heading || 0));
+        const typeName = lostObj.type_ua || lostObj.name || (t ? (t.type_ua || catMeta.name) : catMeta.name) || 'Повітряна ціль';
+
+        let coords = [30.52, 50.45];
+        if (lngLat) {
+          coords = Array.isArray(lngLat) ? [Number(lngLat[0]), Number(lngLat[1])] : [Number(lngLat.lng), Number(lngLat.lat)];
+        } else if (lostObj.lon !== undefined && lostObj.lat !== undefined) {
+          coords = [Number(lostObj.lon), Number(lostObj.lat)];
+        } else if (lostObj.coords && lostObj.coords.length >= 2) {
+          coords = [Number(lostObj.coords[1]), Number(lostObj.coords[0])];
+        } else if (lostObj.lost_point && lostObj.lost_point.length >= 2) {
+          coords = [Number(lostObj.lost_point[1]), Number(lostObj.lost_point[0])];
+        } else if (t && t.sim) {
+          coords = [t.sim.curLon, t.sim.curLat];
+        }
+
+        const heading = Math.round(Number(lostObj.heading || (t && t.sim ? t.sim.curHeading : 0) || 0));
 
         let statusBadge = '<span class="badge-count danger" style="font-size:10px;">💥 Збито (ППО)</span>';
-        const outcome = String(lost.outcome || lost.status || '').toLowerCase();
+        const outcome = String(lostObj.outcome || lostObj.status || (t ? t.status : '') || '').toLowerCase();
         if (outcome.includes('elim') || outcome.includes('down') || outcome.includes('збит')) {
-          statusBadge = '<span class="badge-count" style="background:rgba(34,197,94,0.22); color:#4ADE80; border:1px solid rgba(34,197,94,0.45); font-size:10px;">💥 Збито / Знешкоджено</span>';
+          statusBadge = '<span class="badge-count" style="background:rgba(34,197,94,0.22); color:#4ADE80; border:1px solid rgba(34,197,94,0.45); font-size:10px;">💥 Збито (ППО)</span>';
         } else if (outcome.includes('hit') || outcome.includes('влуч')) {
           statusBadge = '<span class="badge-count danger" style="font-size:10px;">⚠️ Влучання / Падіння</span>';
         } else if (outcome.includes('lost') || outcome.includes('disapp') || outcome.includes('втрач') || outcome.includes('зник')) {
@@ -5235,8 +5420,9 @@
         }
 
         let timeStr = '--:--:--';
-        if (lost.lost_ts) {
-          const d = new Date(Number(lost.lost_ts) * 1000);
+        const rawTs = lostObj.lost_ts || lostObj.ts || (t ? t.lastTelemetryTs : null);
+        if (rawTs) {
+          const d = new Date(Number(rawTs) * 1000);
           timeStr = d.toLocaleTimeString('uk-UA');
         }
 
@@ -5251,25 +5437,24 @@
         const holdText = formatLostHoldDurationText(holdSec);
 
         const html = `
-          <div class="target-popup-header" style="border-bottom: 1px solid rgba(239,68,68,0.35);">
-            <span style="color:#EF4444; font-weight:800; display:flex; align-items:center; gap:5px;">
-              ✖ ${typeName}
-            </span>
-            <span class="badge-count danger" style="font-size:9.5px;">#${tid}</span>
+          <div class="target-popup-header" style="border-bottom: 1px solid rgba(239, 68, 68, 0.35);">
+            <div class="target-popup-title-row">
+              <span class="target-popup-title" style="color:${catMeta.color || '#EF4444'};" title="${escapeHtml(typeName)}">
+                <span class="target-popup-glyph" style="color:#EF4444;">✖</span>${escapeHtml(typeName)}
+              </span>
+              <span class="badge-count danger" title="ID цілі: #${escapeHtml(tid)}">#${escapeHtml(tid)}</span>
+            </div>
           </div>
-          <div style="margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:10px; color:var(--text-muted);">Результат:</span>
-            ${statusBadge}
-          </div>
-          <div class="target-popup-grid" style="margin-bottom:6px;">
-            <span class="lbl">Категорія:</span><span class="val" style="color:${catMeta.color};">${catMeta.name}</span>
-            <span class="lbl">Час збиття / фіксації:</span><span class="val">${timeStr}</span>
+          <div class="target-popup-grid" style="margin-bottom:8px;">
+            <span class="lbl">Результат:</span><span class="val">${statusBadge}</span>
+            <span class="lbl">Категорія:</span><span class="val" style="color:${catMeta.color};">${escapeHtml(catMeta.name)}</span>
+            <span class="lbl">Час фіксації:</span><span class="val">${timeStr}</span>
             <span class="lbl">Останній курс:</span><span class="val">${heading}°</span>
-            <span class="lbl">До точки спостереження:</span><span class="val" style="color:#EF4444;">${distStr}</span>
-            <span class="lbl">Координати:</span><span class="val" style="font-size:9.5px; font-family:monospace;">${coords[1].toFixed(3)}, ${coords[0].toFixed(3)}</span>
+            <span class="lbl">До точки:</span><span class="val" style="color:#F59E0B;">${distStr}</span>
+            <span class="lbl">Координати:</span><span class="val" style="font-family:ui-monospace, monospace; font-size:10.5px;">${coords[1].toFixed(3)}°, ${coords[0].toFixed(3)}°</span>
           </div>
-          <div id="lostTargetFooterNote" style="font-size:9.5px; color:var(--text-muted); text-align:center; padding-top:4px; border-top:1px solid rgba(255,255,255,0.08);">
-            Мітка точки ураження (фіксується до ${holdText})
+          <div id="lostTargetFooterNote" class="lost-target-status-bar">
+            <span>💥 Мітка точки ураження (фіксується до ${holdText})</span>
           </div>
         `;
 
@@ -5277,7 +5462,7 @@
           closeButton: true,
           closeOnClick: true,
           className: 'target-context-popup lost-target-popup',
-          maxWidth: '260px',
+          maxWidth: '300px',
           offset: 14
         })
           .setLngLat(coords)
@@ -5291,16 +5476,43 @@
       const speed = Math.round(t.sim ? (t.sim.speedKmh || 0) : 0);
       const heading = Math.round(((((t.sim ? t.sim.curHeading : 0) % 360) + 360) % 360));
       const altM = Math.round(t.altitudeM || getNominalAltitudeMeters(t.cat));
-      const coords = lngLat || (t.sim ? [t.sim.curLon, t.sim.curLat] : [30.52, 50.45]);
+      const coords = lngLat ? (Array.isArray(lngLat) ? [Number(lngLat[0]), Number(lngLat[1])] : [Number(lngLat.lng), Number(lngLat.lat)]) : (t.sim ? [t.sim.curLon, t.sim.curLat] : [30.52, 50.45]);
 
-      const distStr = t.distance_km ? `${t.distance_km.toFixed(1)} км` : (t.distance ? `${Number(t.distance).toFixed(1)} км` : '-- км');
+      const activeSlot = currentSlots[selectedSlotId] || Object.values(currentSlots)[0];
+      let distStr = t.distance_km ? `${t.distance_km.toFixed(1)} км` : (t.distance ? `${Number(t.distance).toFixed(1)} км` : '-- км');
+      let approachDesc = t.approach_desc || 'Поза радіусом безпеки';
+
+      if (activeSlot && Number.isFinite(Number(activeSlot.lat)) && Number.isFinite(Number(activeSlot.lon)) && coords && coords.length >= 2) {
+        const dKm = computeDistanceKm(Number(activeSlot.lat), Number(activeSlot.lon), coords[1], coords[0]);
+        distStr = `${dKm.toFixed(1)} км`;
+        const bDeg = computeBearingDeg(coords[1], coords[0], Number(activeSlot.lat), Number(activeSlot.lon));
+        let appAngle = Math.abs(heading - bDeg);
+        if (appAngle > 180) appAngle = 360 - appAngle;
+        const rKm = Number(activeSlot.danger_zone) || 35;
+        const ptName = activeSlot.name || 'Точка';
+
+        approachDesc = computePointApproachStatusJs(dKm, rKm, appAngle, speed, ptName);
+      }
+
       const etaStr = t.eta_formatted || (t.eta_min ? `${Math.round(t.eta_min)} хв` : '--');
-      const approachDesc = t.approach_desc || 'Повітряний простір';
+      const approachDescLower = approachDesc.toLowerCase();
+      let statusColor = '#94A3B8';
+      if (approachDescLower.includes('курс на') || approachDescLower.includes('наближ') || approachDescLower.includes('прямий')) {
+        statusColor = '#F59E0B';
+      } else if (approachDescLower.includes('віддал')) {
+        statusColor = '#10B981';
+      } else if (approachDescLower.includes('поза радіусом')) {
+        statusColor = '#94A3B8';
+      }
 
       const html = `
         <div class="target-popup-header">
-          <span style="color:${catMeta.color};">▲ ${escapeHtml(catMeta.name)}</span>
-          <span class="badge-count danger">#${escapeHtml(tid)}</span>
+          <div class="target-popup-title-row">
+            <span class="target-popup-title" style="color:${catMeta.color};" title="${escapeHtml(catMeta.name)}">
+              <span class="target-popup-glyph">▲</span>${escapeHtml(catMeta.name)}
+            </span>
+            <span class="badge-count danger" title="ID цілі: #${escapeHtml(tid)}">#${escapeHtml(tid)}</span>
+          </div>
         </div>
         <div class="target-popup-grid">
           <span class="lbl">Швидкість:</span><span class="val">${speed} км/г</span>
@@ -5309,7 +5521,7 @@
           <span class="lbl">У групі:</span><span class="val">${t.groupCount || 1} од.</span>
           <span class="lbl">До точки:</span><span class="val" style="color:#F59E0B;">${distStr}</span>
           <span class="lbl">Прогноз (ETA):</span><span class="val" style="color:#38BDF8;">${etaStr}</span>
-          <span class="lbl">Статус:</span><span class="val" style="font-size:10px;">${escapeHtml(approachDesc)}</span>
+          <span class="lbl">Статус:</span><span class="val" style="color:${statusColor};">${escapeHtml(approachDesc)}</span>
         </div>
         <button type="button" class="btn-3d-chase" onclick="focusTarget3D('${escapeHtml(tid)}')">
           🎯 Перейти в режим 3Д
@@ -5320,7 +5532,7 @@
         closeButton: true,
         closeOnClick: true,
         className: 'target-context-popup',
-        maxWidth: '260px',
+        maxWidth: '300px',
         offset: 14
       })
         .setLngLat(coords)
@@ -8391,6 +8603,10 @@
                 downed: t.downed,
                 status: t.downed ? 'eliminated' : 'lost',
                 outcome: t.downed ? 'eliminated' : 'lost',
+                heading: t.timedPts && t.timedPts.length > 0 ? (t.timedPts[t.timedPts.length - 1].heading || 0) : 0,
+                lost_ts: t.lost_time || 0,
+                lon: t.lost_point[1],
+                lat: t.lost_point[0],
                 is_lost: true
               },
               geometry: { type: 'Point', coordinates: [t.lost_point[1], t.lost_point[0]] }
@@ -8506,32 +8722,36 @@
         }
       }
 
+      const padLeft = 8;
+      const padRight = 14;
+      const usableW = Math.max(10, w - padLeft - padRight);
+
       function traceCurve(isArea) {
         ctx.beginPath();
-        if (isArea) ctx.moveTo(0, h);
+        if (isArea) ctx.moveTo(padLeft, h);
         for (let i = 0; i <= points; i++) {
-          const x = (i / points) * w;
+          const x = padLeft + (i / points) * usableW;
           const y = h - (data[i] * (h - 4));
           if (i === 0) {
             if (isArea) ctx.lineTo(x, y);
             else ctx.moveTo(x, y);
           } else {
-            const prevX = ((i - 1) / points) * w;
+            const prevX = padLeft + ((i - 1) / points) * usableW;
             const prevY = h - (data[i - 1] * (h - 4));
             const cx = (prevX + x) / 2;
             ctx.quadraticCurveTo(prevX, prevY, cx, (prevY + y) / 2);
           }
         }
         if (isArea) {
-          ctx.lineTo(w, h);
+          ctx.lineTo(padLeft + usableW, h);
           ctx.closePath();
         }
       }
 
-      const xNeedle = Math.max(0, Math.min(w, w * progressFrac));
+      const xNeedle = Math.max(padLeft, Math.min(padLeft + usableW, padLeft + usableW * progressFrac));
 
-      // 1. Played time (0 <= x <= xNeedle) -> 100% full vibrant color
-      if (xNeedle > 0) {
+      // 1. Played time (padLeft <= x <= xNeedle) -> 100% full vibrant color
+      if (xNeedle > padLeft) {
         ctx.save();
         ctx.beginPath();
         ctx.rect(0, 0, xNeedle, h);
@@ -8556,8 +8776,8 @@
         ctx.restore();
       }
 
-      // 2. Future / Remaining time (xNeedle < x <= w) -> Semi-transparent / dimmed
-      if (xNeedle < w) {
+      // 2. Future / Remaining time (xNeedle < x <= padLeft + usableW) -> Semi-transparent / dimmed
+      if (xNeedle < padLeft + usableW) {
         ctx.save();
         ctx.beginPath();
         ctx.rect(xNeedle, 0, w - xNeedle, h);
@@ -8730,6 +8950,7 @@
           }
         } else {
           targetTimeMs = Date.now() - (1.0 - pct) * 86400000;
+          simTime = num;
           if (pct >= 0.99) {
             activateLiveMode();
             return;
@@ -8795,31 +9016,84 @@
     
     let isReplayPlaying = false;
     let replaySpeed = 10;
-    let simMinTime = 0;
-    let simMaxTime = 1000;
-    let simTime = 1000;
+    const _nowSec = Math.floor(Date.now() / 1000);
+    const _midnightSec = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+    let simMinTime = _midnightSec;
+    let simMaxTime = _nowSec;
+    let simTime = _nowSec;
     let lastReplayTick = 0;
 
     function toggleReplayPlay() {
       if (!isReplayPlaying) {
-        if (simTime >= simMaxTime || simTime >= 995) {
+        if (isLiveMode) {
+          // If starting from LIVE: start from the beginning of timeline!
+          isLiveMode = false;
+          const liveBtn = document.getElementById('btnLivePill');
+          if (liveBtn) liveBtn.classList.remove('active');
+
+          if (historicalDataset.length === 0 && !hasPreloadedTodayHistory && !isPreloadingTodayHistory) {
+            preloadTodayHistory(true);
+          }
+
           simTime = simMinTime || 0;
           const slider = document.getElementById('timeSlider');
           if (slider) slider.value = simTime;
           window._currentTimelineProgress = 0.0;
           drawTimelineDensity(0.0);
+
+          const startTimeMs = (simTime > 1000000) ? simTime * 1000 : (Date.now() - 86400000);
+          const startDate = new Date(startTimeMs);
+          const timeStr = startDate.toTimeString().split(' ')[0];
+          const dateStr = startDate.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
+          const tEl = document.getElementById('barClockTime');
+          const dEl = document.getElementById('barClockDate');
+          if (tEl) tEl.innerText = timeStr;
+          if (dEl) dEl.innerText = dateStr;
+
+          if (typeof applyHistoricalFilterToMap === 'function') {
+            applyHistoricalFilterToMap(true);
+          }
+        } else {
+          // If NOT in LIVE: start from last selected position on the scale!
+          const atEnd = (simMaxTime > simMinTime)
+            ? (simTime >= simMaxTime - 5 || (simTime - simMinTime) / (simMaxTime - simMinTime) >= 0.995)
+            : (simTime >= 995);
+
+          if (atEnd) {
+            // Already at the end, wrap to start
+            simTime = simMinTime || 0;
+            const slider = document.getElementById('timeSlider');
+            if (slider) slider.value = simTime;
+            window._currentTimelineProgress = 0.0;
+            drawTimelineDensity(0.0);
+            if (typeof applyHistoricalFilterToMap === 'function') {
+              applyHistoricalFilterToMap(true);
+            }
+          } else {
+            // Keep simTime at current position!
+            const slider = document.getElementById('timeSlider');
+            if (slider) slider.value = simTime;
+            const progress = (simMaxTime > simMinTime)
+              ? Math.max(0, Math.min(1, (simTime - simMinTime) / (simMaxTime - simMinTime)))
+              : Math.max(0, Math.min(1, simTime / 1000));
+            window._currentTimelineProgress = progress;
+            drawTimelineDensity(progress);
+            if (typeof applyHistoricalFilterToMap === 'function') {
+              applyHistoricalFilterToMap(true);
+            }
+          }
         }
+        isReplayPlaying = true;
+        lastReplayTick = performance.now();
+        requestAnimationFrame(historyPlaybackLoop);
+      } else {
+        isReplayPlaying = false;
       }
-      isReplayPlaying = !isReplayPlaying;
+
       const playBtn = document.getElementById('btnPlayPause');
       const replayBtn = document.getElementById('btnReplayPlay');
       if (playBtn) playBtn.innerText = isReplayPlaying ? '⏸' : '▶';
       if (replayBtn) replayBtn.innerText = isReplayPlaying ? '⏸' : '▶';
-
-      if (isReplayPlaying) {
-        lastReplayTick = performance.now();
-        requestAnimationFrame(historyPlaybackLoop);
-      }
     }
 
     function setReplaySpeed(val) {
@@ -8937,7 +9211,10 @@
         const touch = e.touches[0];
         const rect = (wrap || slider).getBoundingClientRect();
         if (rect.width <= 0) return;
-        const ratio = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+        const padLeft = 8;
+        const padRight = 14;
+        const usableW = Math.max(10, rect.width - padLeft - padRight);
+        const ratio = Math.max(0, Math.min(1, (touch.clientX - rect.left - padLeft) / usableW));
         const minVal = Number(slider.min || 0);
         const maxVal = Number(slider.max || 1000);
         const val = minVal + ratio * (maxVal - minVal);

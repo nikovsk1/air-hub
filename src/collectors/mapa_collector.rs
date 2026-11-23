@@ -174,7 +174,7 @@ pub async fn run_mapa_targets_collector(
         let neptun_enabled = neptun_cfg.as_ref().map(|s| s.enabled).unwrap_or(true);
         let neptun_priority = neptun_cfg.as_ref().map(|s| s.priority).unwrap_or(2);
 
-        let is_mapa_primary = (!ua_enabled || mapa_priority < ua_priority)
+        let _is_mapa_primary = (!ua_enabled || mapa_priority < ua_priority)
             && (!neptun_enabled || mapa_priority < neptun_priority);
 
         let is_active = {
@@ -224,11 +224,7 @@ pub async fn run_mapa_targets_collector(
                     let extracted_count = extracted.len();
 
                     let mut state = threat_state.write().await;
-                    let provider_name = if is_mapa_primary {
-                        "MAPA.UA (Основний)"
-                    } else {
-                        "MAPA.UA (Резервний)"
-                    };
+                    let provider_name = "MAPA.UA API";
                     let status_str = "active";
 
                     state.targets_provider = provider_name.to_string();
