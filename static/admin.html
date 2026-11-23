@@ -3127,6 +3127,7 @@ ${resp.api_key}
       const statusMsg = document.getElementById("diiaStatusMsg");
       const countdownElem = document.getElementById("diiaCountdown");
       const deepLinkBtn = document.getElementById("diiaDeepLinkBtn");
+      const timerElem = document.getElementById("diiaTimer");
 
       if (!modal || !qrContainer) return;
 
@@ -3135,6 +3136,7 @@ ${resp.api_key}
       qrContainer.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-gray-500 text-xs font-mono"><span class="animate-pulse">⏳ Запит сесії Дії...</span></div>';
       if (statusMsg) statusMsg.innerHTML = 'Ініціалізація захищеної сесії...';
       if (countdownElem) countdownElem.innerText = '02:00';
+      if (timerElem) timerElem.classList.remove("hidden");
       if (deepLinkBtn) deepLinkBtn.classList.add("hidden");
 
       modal.classList.remove("hidden");
@@ -3177,18 +3179,92 @@ ${resp.api_key}
             if (diiaCountdownSec <= 0) {
               clearInterval(diiaCountdownTimer);
               clearInterval(diiaPollTimer);
-              if (statusMsg) statusMsg.innerHTML = '<span class="text-red-400 font-bold">⏱️ Час очікування вичерпано. Закрийте та спробуйте знову.</span>';
+              if (statusMsg) {
+                statusMsg.innerHTML = `
+                  <div class="space-y-2">
+                    <span class="text-red-400 font-bold block">⏱️ Час очікування вичерпано.</span>
+                    <button type="button" onclick="openDiiaModal()" class="px-3 py-1.5 bg-sky-700 hover:bg-sky-600 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1 transition shadow cursor-pointer">
+                      <span>🔄</span><span>Спробувати знову</span>
+                    </button>
+                  </div>
+                `;
+              }
             }
           }, 1000);
 
           diiaPollTimer = setInterval(pollDiiaStatus, 3000);
         } else {
-          qrContainer.innerHTML = `<div class="p-3 text-red-500 text-xs font-mono text-center">❌ Помилка: ${escapeHtml(data.error || data.status || "Невідомо")}</div>`;
-          if (statusMsg) statusMsg.innerHTML = '<span class="text-red-400">Не вдалося зв\'язатися з сервером UkraineAlarm.</span>';
+          clearInterval(diiaCountdownTimer);
+          clearInterval(diiaPollTimer);
+          if (timerElem) timerElem.classList.add("hidden");
+          qrContainer.innerHTML = `<div class="p-3 text-red-500 text-xs font-mono text-center">❌ ${escapeHtml(data.error || data.status || "Невідомо")}</div>`;
+          if (statusMsg) {
+            statusMsg.innerHTML = `
+              <div class="space-y-2 mt-1">
+                <span class="text-red-400 text-xs block">Не вдалося зв'язатися з сервером UkraineAlarm.</span>
+                <button type="button" onclick="openDiiaModal()" class="px-3 py-1.5 bg-sky-700 hover:bg-sky-600 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1 transition shadow cursor-pointer">
+                  <span>🔄</span><span>Спробувати знову</span>
+                </button>
+              </div>
+            `;
+          }
         }
       } catch (e) {
+        clearInterval(diiaCountdownTimer);
+        clearInterval(diiaPollTimer);
+        if (timerElem) timerElem.classList.add("hidden");
         qrContainer.innerHTML = `<div class="p-3 text-red-500 text-xs font-mono text-center">❌ Мережева помилка: ${escapeHtml(String(e))}</div>`;
-        if (statusMsg) statusMsg.innerHTML = '<span class="text-red-400">Помилка мережі.</span>';
+        if (statusMsg) {
+          statusMsg.innerHTML = `
+            <div class="space-y-2 mt-1">
+              <span class="text-red-400 text-xs block">Помилка з'єднання з хабом.</span>
+              <button type="button" onclick="openDiiaModal()" class="px-3 py-1.5 bg-sky-700 hover:bg-sky-600 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1 transition shadow cursor-pointer">
+                <span>🔄</span><span>Спробувати знову</span>
+              </button>
+            </div>
+          `;
+        }
+      }
+    }
+
+    async function saveManualDiiaCookie() {
+      const input = document.getElementById("manualDiiaCookieInput");
+      const st = document.getElementById("manualDiiaStatus");
+      if (!input || !st) return;
+      const val = input.value.trim();
+      if (!val) {
+        st.innerText = "Введіть куку DiiaMapAccess";
+        st.className = "text-[10px] text-red-400 block";
+        return;
+      }
+      try {
+        st.innerText = "Збереження...";
+        st.className = "text-[10px] text-gray-400 block";
+        const res = await adminFetch("/api/v1/admin/service_keys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            service: "diia",
+            relation: "Загальна мапа",
+            key: val
+          })
+        });
+        if (res.ok) {
+          st.innerText = "✅ Куку успішно збережено!";
+          st.className = "text-[10px] text-emerald-400 font-bold block";
+          await loadServiceKeys();
+          updateTelemetry();
+          setTimeout(() => {
+            closeDiiaModal();
+          }, 1200);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          st.innerText = "❌ Помилка збереження: " + (err.error || res.statusText);
+          st.className = "text-[10px] text-red-400 block";
+        }
+      } catch (e) {
+        st.innerText = "❌ Помилка: " + e;
+        st.className = "text-[10px] text-red-400 block";
       }
     }
 
@@ -3656,6 +3732,22 @@ ${resp.api_key}
             <span>📲</span><span>Відкрити в додатку Дія</span>
           </a>
         </div>
+
+        <!-- Ручний ввід куки DiiaMapAccess у разі обмежень мережі -->
+        <details class="w-full mt-4 text-left text-xs bg-gray-950/70 border border-gray-800 rounded-xl p-3 group">
+          <summary class="font-medium text-gray-400 hover:text-sky-300 cursor-pointer flex items-center justify-between select-none">
+            <span class="flex items-center gap-1.5">🔑 <span>Вставити куку вручну</span></span>
+            <span class="text-[10px] text-gray-500 group-open:rotate-180 transition-transform">▼</span>
+          </summary>
+          <div class="mt-2 space-y-2 pt-2 border-t border-gray-800/60">
+            <p class="text-[10px] text-gray-400">Якщо QR-код недоступний через Cloudflare чи IP-ліміти, скопіюйте <code>DiiaMapAccess</code> з DevTools браузера:</p>
+            <div class="flex gap-2">
+              <input type="text" id="manualDiiaCookieInput" placeholder="DiiaMapAccess=CfDJ8..." class="flex-1 bg-gray-900 border border-gray-700 px-2 py-1.5 rounded-lg text-white font-mono text-xs focus:border-sky-500 outline-none">
+              <button type="button" onclick="saveManualDiiaCookie()" class="px-3 py-1.5 bg-sky-700 hover:bg-sky-600 text-white rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer">Зберегти</button>
+            </div>
+            <p id="manualDiiaStatus" class="text-[10px] text-gray-400 hidden"></p>
+          </div>
+        </details>
       </div>
 
       <div class="border-t border-gray-800 pt-3 flex items-center justify-between text-xs text-gray-400">

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use parking_lot::RwLock;
-use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE, COOKIE, ORIGIN, REFERER, SET_COOKIE, USER_AGENT};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, COOKIE, ORIGIN, REFERER, SET_COOKIE, USER_AGENT};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::{info, warn};
@@ -80,6 +80,32 @@ pub fn apply_browser_headers(builder: reqwest::RequestBuilder) -> reqwest::Reque
         .header(ACCEPT, "application/json")
 }
 
+pub fn extract_flow_cookie_from_headers(headers: &HeaderMap) -> Option<String> {
+    for cookie_header in headers.get_all(SET_COOKIE) {
+        if let Ok(s) = cookie_header.to_str() {
+            for part in s.split(';') {
+                let trimmed = part.trim();
+                let lower = trimmed.to_ascii_lowercase();
+                if lower.starts_with("diiaauthflow=") {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+pub fn extract_deep_link_from_json(body_json: &Value) -> Option<String> {
+    body_json.get("deepLink")
+        .or_else(|| body_json.get("deep_link"))
+        .or_else(|| body_json.get("url"))
+        .or_else(|| body_json.get("link"))
+        .or_else(|| body_json.get("qrCode"))
+        .or_else(|| body_json.get("data").and_then(|d| d.get("deepLink").or_else(|| d.get("url"))))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
 pub async fn start_diia_session(
     client: &reqwest::Client,
     state: &Arc<RwLock<DiiaBridgeState>>,
@@ -88,10 +114,12 @@ pub async fn start_diia_session(
 
     let req = apply_browser_headers(client.post(DIIA_START_URL))
         .header(CONTENT_TYPE, "application/json")
-        .json(&json!({ "returnPath": "/onlyMap" }));
+        .json(&json!({ "returnPath": "/" }));
 
     let resp = req.send().await.map_err(|e| format!("Failed to connect to Diia start endpoint: {}", e))?;
     let status = resp.status();
+    let resp_headers = resp.headers().clone();
+
     if !status.is_success() {
         let err_text = resp.text().await.unwrap_or_default();
         let msg = format!("Diia start rejected: HTTP {} - {}", status, err_text);
@@ -102,26 +130,54 @@ pub async fn start_diia_session(
         return Err(msg);
     }
 
-    let mut flow_cookie_opt = None;
-    for cookie_header in resp.headers().get_all(SET_COOKIE) {
-        if let Ok(s) = cookie_header.to_str() {
-            if let Some(c) = s.split(';').next() {
-                let trimmed = c.trim();
-                if trimmed.starts_with("DiiaAuthFlow=") {
-                    flow_cookie_opt = Some(trimmed.to_string());
-                }
-            }
+    let mut flow_cookie_opt = extract_flow_cookie_from_headers(&resp_headers);
+
+    // Fallback: If not found in Set-Cookie headers, reuse active flow_cookie from state
+    if flow_cookie_opt.is_none() {
+        let guard = state.read();
+        if let Some(ref prev_cookie) = guard.flow_cookie {
+            flow_cookie_opt = Some(prev_cookie.clone());
         }
     }
 
     let body_json: Value = resp.json().await.map_err(|e| format!("Invalid JSON from Diia start: {}", e))?;
-    let deep_link = body_json.get("deepLink").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let request_id = body_json.get("requestId").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let expires_at = body_json.get("expiresAt").and_then(|v| v.as_i64()).map(normalize_timestamp_secs);
+    let deep_link = extract_deep_link_from_json(&body_json);
+
+    let request_id = body_json.get("requestId")
+        .or_else(|| body_json.get("request_id"))
+        .or_else(|| body_json.get("id"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let expires_at = body_json.get("expiresAt")
+        .or_else(|| body_json.get("expires_at"))
+        .and_then(|v| v.as_i64())
+        .map(normalize_timestamp_secs);
 
     if deep_link.is_none() || flow_cookie_opt.is_none() {
-        let msg = "Diia start response missing deepLink or DiiaAuthFlow cookie".to_string();
-        warn!("{}", msg);
+        let upstream_error = body_json.get("error")
+            .or_else(|| body_json.get("message"))
+            .or_else(|| body_json.get("code"))
+            .and_then(|v| v.as_str());
+
+        let msg = if let Some(err) = upstream_error {
+            format!("UkraineAlarm відхилив сесію Дії: {}", err)
+        } else if deep_link.is_none() && flow_cookie_opt.is_none() {
+            "UkraineAlarm повернув відповідь без посилання deepLink та без куки DiiaAuthFlow".to_string()
+        } else if deep_link.is_none() {
+            "UkraineAlarm не надав посилання для відкриття в Дії (deepLink)".to_string()
+        } else {
+            "UkraineAlarm не надав сесійну куку DiiaAuthFlow".to_string()
+        };
+
+        warn!(
+            "Diia start response incomplete: msg={}, deep_link={}, has_cookie={}, body={:?}, headers={:?}",
+            msg,
+            deep_link.is_some(),
+            flow_cookie_opt.is_some(),
+            body_json,
+            resp_headers
+        );
         let mut guard = state.write();
         guard.status = "failed".to_string();
         guard.last_error = Some(msg.clone());
@@ -202,9 +258,21 @@ pub async fn poll_diia_status(
         let mut issued_cookies = Vec::new();
         for cookie_header in headers.get_all(SET_COOKIE) {
             if let Ok(s) = cookie_header.to_str() {
-                if let Some(c) = s.split(';').next() {
-                    let trimmed = c.trim();
-                    if !trimmed.is_empty() {
+                for part in s.split(';') {
+                    let trimmed = part.trim();
+                    let lower = trimmed.to_ascii_lowercase();
+                    if lower.starts_with("diiamapaccess=") || lower.starts_with("maptargetsession=") {
+                        issued_cookies.push(trimmed.to_string());
+                    } else if !trimmed.is_empty()
+                        && trimmed.contains('=')
+                        && !lower.starts_with("path=")
+                        && !lower.starts_with("expires=")
+                        && !lower.starts_with("max-age=")
+                        && !lower.starts_with("domain=")
+                        && !lower.starts_with("samesite=")
+                        && !lower.eq("secure")
+                        && !lower.eq("httponly")
+                    {
                         issued_cookies.push(trimmed.to_string());
                     }
                 }
@@ -214,9 +282,13 @@ pub async fn poll_diia_status(
         let cookie_full = issued_cookies.join("; ");
         let session_expires = body_json.get("expiresAt").and_then(|v| v.as_i64()).map(normalize_timestamp_secs);
 
-        if !cookie_full.is_empty() && cookie_full.contains("DiiaMapAccess") {
+        if !cookie_full.is_empty() && cookie_full.to_ascii_lowercase().contains("diiamapaccess") {
             let _ = storage.set_service_key("diia", "Загальна мапа", Some(cookie_full.clone()));
             info!("DiiaBridge: successfully saved fresh DiiaMapAccess to hub configuration!");
+        } else if !cookie_full.is_empty() {
+            // Even if named differently, save to ensure UkraineAlarm WS has access
+            let _ = storage.set_service_key("diia", "Загальна мапа", Some(cookie_full.clone()));
+            info!("DiiaBridge: saved session cookie to hub configuration: {}", cookie_full);
         }
 
         {
@@ -273,3 +345,49 @@ pub fn get_diia_session_info(
         "deep_link": if bridge_state.status == "pending" { bridge_state.deep_link } else { None },
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_flow_cookie_from_headers() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            SET_COOKIE,
+            HeaderValue::from_static("DiiaAuthFlow=token_xyz_123; path=/api; secure; httponly"),
+        );
+        let cookie = extract_flow_cookie_from_headers(&headers);
+        assert_eq!(cookie, Some("DiiaAuthFlow=token_xyz_123".to_string()));
+
+        // Case-insensitivity check
+        let mut headers_lower = HeaderMap::new();
+        headers_lower.insert(
+            SET_COOKIE,
+            HeaderValue::from_static("diiaauthflow=token_abc_456; Max-Age=900"),
+        );
+        let cookie_lower = extract_flow_cookie_from_headers(&headers_lower);
+        assert_eq!(cookie_lower, Some("diiaauthflow=token_abc_456".to_string()));
+    }
+
+    #[test]
+    fn test_extract_deep_link_from_json() {
+        // Standard format
+        let v1 = json!({ "deepLink": "https://diia.app/offer/123" });
+        assert_eq!(extract_deep_link_from_json(&v1), Some("https://diia.app/offer/123".to_string()));
+
+        // Alternative snake_case
+        let v2 = json!({ "deep_link": "https://diia.app/offer/456" });
+        assert_eq!(extract_deep_link_from_json(&v2), Some("https://diia.app/offer/456".to_string()));
+
+        // Nested data object
+        let v3 = json!({ "data": { "url": "https://diia.app/offer/789" } });
+        assert_eq!(extract_deep_link_from_json(&v3), Some("https://diia.app/offer/789".to_string()));
+
+        // Missing
+        let v4 = json!({ "status": "failed", "error": "rate_limited" });
+        assert_eq!(extract_deep_link_from_json(&v4), None);
+    }
+}
+
+

@@ -88,18 +88,15 @@ pub fn is_admin(
         }
     });
 
-    let provided = header_key
-        .or(bearer_key)
-        .or_else(|| {
-            if let Some(qk) = query_key {
-                if !qk.trim().is_empty() {
-                    tracing::warn!("⚠️ Admin request authenticated via deprecated query parameter ?admin_key=...; please transition to X-Admin-Key header");
-                    return Some(qk);
-                }
-            }
-            None
-        })
-        .unwrap_or("");
+    let (provided, is_from_query) = if let Some(hk) = header_key {
+        (hk, false)
+    } else if let Some(bk) = bearer_key {
+        (bk, false)
+    } else if let Some(qk) = query_key {
+        (qk.trim(), true)
+    } else {
+        ("", false)
+    };
 
     if provided.is_empty() {
         return false;
@@ -112,7 +109,16 @@ pub fn is_admin(
         return false;
     }
 
-    prov_bytes.ct_eq(sec_bytes).into()
+    let is_valid: bool = prov_bytes.ct_eq(sec_bytes).into();
+    if is_valid && is_from_query {
+        let ip_str = peer_ip.map(|ip| ip.to_string()).unwrap_or_else(|| "unknown".to_string());
+        tracing::warn!(
+            "⚠️ Admin request authenticated via deprecated query parameter (?admin_key=...) from IP: {}. Please transition to X-Admin-Key header.",
+            ip_str
+        );
+    }
+
+    is_valid
 }
 
 /// Отримання API-ключа клієнта з Query (?token= або ?api_key=), заголовка X-API-Key або Authorization: Bearer
