@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::UNIX_EPOCH;
 use parking_lot::RwLock;
 use chrono::{Datelike, Timelike, Utc};
@@ -113,6 +114,7 @@ pub struct HistoryManager {
     today_stats: RwLock<TodayStats>,                               // O(1) instant stats for gauge
     pub daily_summaries: RwLock<HashMap<String, HashMap<String, DailySummary>>>, // month -> (date -> DailySummary)
     gdrive_synced_months: RwLock<HashSet<String>>,
+    last_flush_ts: AtomicI64,
 }
 
 impl HistoryManager {
@@ -207,7 +209,12 @@ impl HistoryManager {
             month_meta_cache: RwLock::new(HashMap::new()),
             daily_summaries: RwLock::new(initial_daily_summaries),
             gdrive_synced_months: RwLock::new(HashSet::new()),
+            last_flush_ts: AtomicI64::new(now_ts()),
         }
+    }
+
+    pub fn last_flush_ts(&self) -> i64 {
+        self.last_flush_ts.load(Ordering::Relaxed)
     }
 
     pub fn current_month() -> String {
@@ -455,6 +462,7 @@ impl HistoryManager {
 
     /// Періодичний скид накопичених "брудних" даних на диск (кожні 300 секунд)
     pub fn flush_dirty(&self) {
+        self.last_flush_ts.store(now_ts(), Ordering::Relaxed);
         let (dirty_batch, extra_dirty) = {
             let mut guard = self.pending_dirty.write();
             let mut dm = self.dirty_months.write();

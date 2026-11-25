@@ -837,10 +837,10 @@
     }
     .timeline-density-canvas {
       position: absolute;
-      top: 0;
+      top: -6px;
       left: 0;
       width: 100%;
-      height: 26px;
+      height: 38px;
       pointer-events: none;
       z-index: 1;
     }
@@ -2088,6 +2088,12 @@
       for (const [id, l] of Object.entries(allReceivedLostThreats)) {
         if (!l || !l.id) {
           delete allReceivedLostThreats[id];
+          continue;
+        }
+        // Active target must NEVER be considered lost or suppressed
+        if (activeThreats && activeThreats[id]) {
+          delete allReceivedLostThreats[id];
+          if (recentLostThreats) delete recentLostThreats[id];
           continue;
         }
         const lostTs = Number(l.lost_ts || 0);
@@ -6775,9 +6781,115 @@
       };
     }
 
+    function updateLiveHudElements(data, incoming, catCounts, incomingSlots) {
+      // 1. Update Top HUD Mini Views
+      const miniThreatsCount = document.getElementById('hudThreatsCountMini');
+      if (miniThreatsCount) miniThreatsCount.innerText = incoming.length;
+      const miniDot = document.getElementById('hudThreatsDotMini');
+      if (miniDot) {
+        if (incoming.length > 0) miniDot.classList.add('danger');
+        else miniDot.classList.remove('danger');
+      }
+
+      // 2. Update Top HUD Threat Pill
+      const countEl = document.getElementById('hudThreatsCount');
+      if (countEl) countEl.innerText = incoming.length;
+      const dotEl = document.getElementById('hudThreatsDot');
+      if (dotEl) {
+        if (incoming.length > 0) dotEl.classList.add('danger');
+        else dotEl.classList.remove('danger');
+      }
+
+      // 3. Populate Top HUD Threat Dropdown list
+      const threatListEl = document.getElementById('hudThreatsDropdownList');
+      if (threatListEl) {
+        if (incoming.length === 0) {
+          threatListEl.innerHTML = '<div style="color:var(--text-muted); padding:4px;">Загроз на карті немає</div>';
+        } else {
+          let tHtml = '';
+          incoming.forEach((t, i) => {
+            const cat = normalizeCat(t.category || t.type || t.type_ua);
+            const meta = THREAT_CATEGORIES[cat] || THREAT_CATEGORIES.unknown;
+            const speed = Math.round(t.speed_kmh || t.speed || 0);
+            const alt = t.altitude ? ` • ${t.altitude}м` : '';
+            tHtml += `
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer;" onclick="focusTarget3D('${t.id}')" title="Фокус камери 3D">
+                <span style="color:${meta.color}; font-weight:600;">▲ ${meta.name}</span>
+                <span style="color:var(--text-dim); font-size:10px;">${speed} км/г${alt}</span>
+              </div>
+            `;
+          });
+          threatListEl.innerHTML = tHtml;
+        }
+      }
+
+      // 4. MiG-31K status: handle both data.mig31k_alert and data.general_alerts.mig31k_active
+      const isMigActive = !!(data.mig31k_alert || (data.general_alerts && data.general_alerts.mig31k_active));
+      const migEl = document.getElementById('hudMigStatus');
+      if (migEl) {
+        migEl.innerText = isMigActive ? 'МІГ-31К: ТРИВОГА' : 'МІГ-31К: ЧИСТО';
+        migEl.className = isMigActive ? 'badge-count danger' : 'badge-count calm';
+      }
+
+      // 5. Update Category List Counts & ensure DOM rows are mounted
+      const catListEl = document.getElementById('activeCategoryList');
+      if (!catListEl || catListEl.children.length === 0) {
+        renderActiveThreatCategories(catCounts);
+      } else {
+        for (const cat in THREAT_CATEGORIES) {
+          const badge = document.getElementById(`badge-cat-${cat}`);
+          if (badge) {
+            const count = catCounts[cat] || 0;
+            badge.innerText = count > 0 ? `${count} цілей` : 'цілі відсутні';
+            badge.className = count > 0 ? 'badge-count danger' : 'badge-count calm';
+          }
+        }
+      }
+      const totalLiveEl = document.getElementById('lblTotalActiveLive');
+      if (totalLiveEl) totalLiveEl.innerText = incoming.length;
+
+      // 6. Update Today Radial Gauge dynamically from WebSocket data.today_stats
+      if (data.today_stats) {
+        const countsMap = data.today_stats.categories || data.today_stats.by_category || {};
+        const total = (typeof data.today_stats.total === 'number' && data.today_stats.total > 0)
+          ? data.today_stats.total
+          : Object.values(countsMap).reduce((a, b) => a + Number(b || 0), 0);
+        renderRadialTodayGauge(countsMap, total);
+
+        // Sync timeline history with server RAM offload
+        if (data.today_stats.last_flush_ts && typeof data.today_stats.last_flush_ts === 'number') {
+          if (!window._lastKnownHistoryFlushTs) {
+            window._lastKnownHistoryFlushTs = data.today_stats.last_flush_ts;
+          } else if (data.today_stats.last_flush_ts > window._lastKnownHistoryFlushTs) {
+            window._lastKnownHistoryFlushTs = data.today_stats.last_flush_ts;
+            if (isLiveMode) {
+              preloadTodayHistory(false, true);
+            }
+          }
+        }
+      }
+
+      // 7. Slots stats & Closest Threat breakdown calculation (Zero-DOM churn with global state hashing)
+      const slots = incomingSlots || currentSlots;
+      if (slots && typeof slots === 'object') {
+        const curUiHash = JSON.stringify(Object.values(slots).map(s => [s.name, s.active, s.danger_radius_km, s.threat_count]));
+        if (curUiHash !== lastSlotsUiHash) {
+          lastSlotsUiHash = curUiHash;
+          renderUserSlots(slots);
+        }
+
+        const curGeoHash = JSON.stringify(Object.values(slots).map(s => [s.lat, s.lon, s.danger_radius_km, s.active]));
+        if (curGeoHash !== lastSlotsGeoHash) {
+          lastSlotsGeoHash = curGeoHash;
+          updateUserSlotsGeoJson(slots);
+          syncUserSlots3DMeshes(slots);
+        }
+      }
+      updateClosestThreatHud(data.closest_threat, slots);
+    }
+
     function processSnapshot(data) {
       window._cachedLatestSnapshot = data;
-      updateActiveAlertsFromSnapshot(data);
       updateStreamStatuses(data);
       const incoming = data.threats || data.active_threats || [];
       const fresh = {};
@@ -6785,6 +6897,11 @@
 
       incoming.forEach((t, i) => {
         const tid = t.id || `trk-${i}`;
+        // If target is actively reporting in telemetry, purge any stale lost state immediately!
+        delete allReceivedLostThreats[tid];
+        if (typeof recentLostThreats !== 'undefined' && recentLostThreats[tid]) {
+          delete recentLostThreats[tid];
+        }
         const cat = normalizeCat(t.category || t.type || t.type_ua);
         catCounts[cat] = (catCounts[cat] || 0) + 1;
 
@@ -6812,8 +6929,6 @@
           }
           if (p1 && p2) {
             const dStepKm = computeDistanceKm(p1.lat, p1.lon, p2.lat, p2.lon);
-            // If physical trajectory movement is significant (>= 0.5 km) or sensor heading is missing/zero,
-            // calculate authoritative vector to guarantee alignment between aircraft icon and trajectory
             if (dStepKm >= 0.5 || !sHeading || isNaN(sHeading) || sHeading === 0) {
               const y = Math.sin((p2.lon - p1.lon) * Math.PI / 180.0) * Math.cos(p2.lat * Math.PI / 180.0);
               const x = Math.cos(p1.lat * Math.PI / 180.0) * Math.sin(p2.lat * Math.PI / 180.0) -
@@ -6840,7 +6955,6 @@
           const distKm = Math.hypot(dxKm, dyKm);
 
           if (document.hidden) {
-            // Window is minimized / hidden: keep visual marker strictly synchronized with server
             curLat = sLat;
             curLon = sLon;
             curHeading = sHeading;
@@ -6848,7 +6962,6 @@
             lastServerMoveTs = performance.now();
             hasNewServerTarget = false;
           } else if (distKm > 25.0) {
-            // Teleport or radical reroute: snap immediately
             curLat = sLat;
             curLon = sLon;
             curHeading = sHeading;
@@ -6856,21 +6969,17 @@
             lastServerMoveTs = performance.now();
             hasNewServerTarget = false;
           } else {
-            // Smooth catch-up retention: maintain current smooth visual position
             curLat = oldSim.curLat;
             curLon = oldSim.curLon;
             curHeading = oldSim.curHeading;
 
-            // Check if server coordinate actually updated (> 20 meters / 0.02 km)
             const srvDxKm = (sLon - (oldSim.srvLon ?? sLon)) * kmPerLon;
             const srvDyKm = (sLat - (oldSim.srvLat ?? sLat)) * kmPerLat;
             const srvDistKm = Math.hypot(srvDxKm, srvDyKm);
             const srvMoved = srvDistKm > 0.02;
 
-            // ONLY reset glideKm and update move timestamp when server provides a fresh radar point!
             glideKm = srvMoved ? 0 : (oldSim.glideKm || 0);
             lastServerMoveTs = srvMoved ? performance.now() : (oldSim.lastServerMoveTs || performance.now());
-            // Preserve catch-up state if visual marker hasn't caught up to server point yet!
             hasNewServerTarget = srvMoved || (oldSim.hasNewServerTarget && distKm > 0.05);
           }
         }
@@ -6930,120 +7039,18 @@
       }
 
       activeThreats = fresh;
-
-      // Update Top HUD Mini Views
-      const miniThreatsCount = document.getElementById('hudThreatsCountMini');
-      if (miniThreatsCount) miniThreatsCount.innerText = incoming.length;
-      const miniDot = document.getElementById('hudThreatsDotMini');
-      if (miniDot) {
-        if (incoming.length > 0) miniDot.classList.add('danger');
-        else miniDot.classList.remove('danger');
-      }
-
-      // Update User Profile Owner Display
-      const userOwnerEl = document.getElementById('userOwnerValue');
-      if (userOwnerEl) {
-        const ownerName = clientToken 
-          ? (data.owner || (data.user && data.user.owner) || localStorage.getItem('hub_user_owner') || 'Користувач Hub')
-          : 'Загальний доступ / Гість';
-        userOwnerEl.innerText = ownerName;
-      }
-
-
-      // Update Top HUD Threat Pill
-      const countEl = document.getElementById('hudThreatsCount');
-      if (countEl) countEl.innerText = incoming.length;
-      const dotEl = document.getElementById('hudThreatsDot');
-      if (dotEl) {
-        if (incoming.length > 0) dotEl.classList.add('danger');
-        else dotEl.classList.remove('danger');
-      }
-
-      // Populate Top HUD Threat Dropdown list
-      const threatListEl = document.getElementById('hudThreatsDropdownList');
-      if (threatListEl) {
-        if (incoming.length === 0) {
-          threatListEl.innerHTML = '<div style="color:var(--text-muted); padding:4px;">Загроз на карті немає</div>';
-        } else {
-          let tHtml = '';
-          incoming.forEach((t, i) => {
-            const cat = normalizeCat(t.category || t.type || t.type_ua);
-            const meta = THREAT_CATEGORIES[cat] || THREAT_CATEGORIES.unknown;
-            const speed = Math.round(t.speed_kmh || t.speed || 0);
-            const alt = t.altitude ? ` • ${t.altitude}м` : '';
-            tHtml += `
-              <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer;" onclick="focusTarget3D('${t.id}')" title="Фокус камери 3D">
-                <span style="color:${meta.color}; font-weight:600;">▲ ${meta.name}</span>
-                <span style="color:var(--text-dim); font-size:10px;">${speed} км/г${alt}</span>
-              </div>
-            `;
-          });
-          threatListEl.innerHTML = tHtml;
-        }
-      }
-
-      // MiG-31K status: handle both data.mig31k_alert and data.general_alerts.mig31k_active
-      const isMigActive = !!(data.mig31k_alert || (data.general_alerts && data.general_alerts.mig31k_active));
-      const migEl = document.getElementById('hudMigStatus');
-      if (migEl) {
-        migEl.innerText = isMigActive ? 'МІГ-31К: ТРИВОГА' : 'МІГ-31К: ЧИСТО';
-        migEl.className = isMigActive ? 'badge-count danger' : 'badge-count calm';
-      }
-
-      // Update Category List Counts & ensure DOM rows are mounted
+      window._cachedLatestIncomingThreats = incoming;
       window._cachedLatestCatCounts = catCounts;
-      const catListEl = document.getElementById('activeCategoryList');
-      if (!catListEl || catListEl.children.length === 0) {
-        renderActiveThreatCategories(catCounts);
-      } else {
-        for (const cat in THREAT_CATEGORIES) {
-          const badge = document.getElementById(`badge-cat-${cat}`);
-          if (badge) {
-            const count = catCounts[cat] || 0;
-            badge.innerText = count > 0 ? `${count} цілей` : 'цілі відсутні';
-            badge.className = count > 0 ? 'badge-count danger' : 'badge-count calm';
-          }
-        }
-      }
-      const totalLiveEl = document.getElementById('lblTotalActiveLive');
-      if (totalLiveEl) totalLiveEl.innerText = incoming.length;
 
-      // Update Today Radial Gauge dynamically from WebSocket data.today_stats
-      if (data.today_stats) {
-        const countsMap = data.today_stats.categories || data.today_stats.by_category || {};
-        const total = (typeof data.today_stats.total === 'number' && data.today_stats.total > 0)
-          ? data.today_stats.total
-          : Object.values(countsMap).reduce((a, b) => a + Number(b || 0), 0);
-        renderRadialTodayGauge(countsMap, total);
-      }
-
-      // Slots stats & Closest Threat breakdown calculation (Zero-DOM churn with global state hashing)
-      const incomingSlots = data.slots || data.slots_stats;
-      if (incomingSlots && typeof incomingSlots === 'object') {
-        currentSlots = Object.assign({}, currentSlots, incomingSlots);
-        userSlots = currentSlots;
-
-        // Gate DOM rendering with UI state hash
-        const curUiHash = JSON.stringify(Object.values(currentSlots).map(s => [s.name, s.active, s.danger_radius_km, s.threat_count]));
-        if (curUiHash !== lastSlotsUiHash) {
-          lastSlotsUiHash = curUiHash;
-          renderUserSlots(currentSlots);
-        }
-
-        // Gate GeoJSON and 3D meshes with Geo coordinates hash
-        const curGeoHash = JSON.stringify(Object.values(currentSlots).map(s => [s.lat, s.lon, s.danger_radius_km, s.active]));
-        if (curGeoHash !== lastSlotsGeoHash) {
-          lastSlotsGeoHash = curGeoHash;
-          updateUserSlotsGeoJson(currentSlots);
-          syncUserSlots3DMeshes(currentSlots);
-        }
-      }
-      updateClosestThreatHud(data.closest_threat, incomingSlots);
-
-      // Handle lost targets if provided
+      // Handle lost targets in RAM cache
       const lostList = data.recent_lost || data.lost_threats || [];
       lostList.forEach(l => {
         if (l && l.id) {
+          if (fresh[l.id]) {
+            delete allReceivedLostThreats[l.id];
+            if (typeof recentLostThreats !== 'undefined') delete recentLostThreats[l.id];
+            return;
+          }
           allReceivedLostThreats[l.id] = l;
           if (activeThreats[l.id]) {
             delete activeThreats[l.id].lastTrailPt;
@@ -7056,10 +7063,37 @@
           }
         }
       });
-      syncLostThreatsToSource();
 
-      // Split-Rate Native MapLibre: Trajectory trails and forecast corridors updated ONLY on telemetry event!
-      window._cachedLatestIncomingThreats = incoming;
+      // Update User Profile Owner Display
+      const userOwnerEl = document.getElementById('userOwnerValue');
+      if (userOwnerEl) {
+        const ownerName = clientToken 
+          ? (data.owner || (data.user && data.user.owner) || localStorage.getItem('hub_user_owner') || 'Користувач Hub')
+          : 'Загальний доступ / Гість';
+        userOwnerEl.innerText = ownerName;
+      }
+
+      // Slots stats calculation (cache updates in memory)
+      const incomingSlots = data.slots || data.slots_stats;
+      if (incomingSlots && typeof incomingSlots === 'object') {
+        currentSlots = Object.assign({}, currentSlots, incomingSlots);
+        userSlots = currentSlots;
+      }
+
+      // =========================================================================
+      // DUAL-STREAM ISOLATION GUARD:
+      // When history replay or timeline scrubbing is active (isLiveMode === false),
+      // LIVE data is strictly retained in RAM and MUST NOT touch MapLibre layers or HUD!
+      // =========================================================================
+      if (!isLiveMode) {
+        return;
+      }
+
+      // --- LIVE MODE RENDERING BELOW ---
+      updateActiveAlertsFromSnapshot(data);
+      updateLiveHudElements(data, incoming, catCounts, incomingSlots);
+
+      syncLostThreatsToSource();
       syncThreatTrailsToSource(incoming);
 
       // Trigger immediate aircraft GeoJSON sync
@@ -8417,8 +8451,8 @@
     let hasPreloadedTodayHistory = false;
     let isPreloadingTodayHistory = false;
 
-    async function preloadTodayHistory(switchToReplayOnFinish = false) {
-      if (hasPreloadedTodayHistory || isPreloadingTodayHistory) return;
+    async function preloadTodayHistory(switchToReplayOnFinish = false, force = false) {
+      if ((hasPreloadedTodayHistory && !force) || isPreloadingTodayHistory) return;
       isPreloadingTodayHistory = true;
       try {
         const todayStr = new Date().toISOString().slice(0, 10);
@@ -8630,6 +8664,24 @@
       if (map.getSource('threats-head-connectors-source')) {
         map.getSource('threats-head-connectors-source').setData({ type: 'FeatureCollection', features: [] });
       }
+
+      // Synchronize top HUD counts with historical frame when in History / Replay mode
+      if (!isLiveMode) {
+        const miniThreatsCount = document.getElementById('hudThreatsCountMini');
+        if (miniThreatsCount) miniThreatsCount.innerText = aircraftFeatures.length;
+        const countEl = document.getElementById('hudThreatsCount');
+        if (countEl) countEl.innerText = aircraftFeatures.length;
+        const miniDot = document.getElementById('hudThreatsDotMini');
+        if (miniDot) {
+          if (aircraftFeatures.length > 0) miniDot.classList.add('danger');
+          else miniDot.classList.remove('danger');
+        }
+        const dotEl = document.getElementById('hudThreatsDot');
+        if (dotEl) {
+          if (aircraftFeatures.length > 0) dotEl.classList.add('danger');
+          else dotEl.classList.remove('danger');
+        }
+      }
     }
 
     function updateAnalyticsStats() {
@@ -8670,13 +8722,16 @@
       if (w <= 0) return;
 
       const dpr = window.devicePixelRatio || 1;
-      if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+      const topPadding = 6;
+      const totalH = h + topPadding * 2;
+      if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(totalH * dpr)) {
         canvas.width = Math.floor(w * dpr);
-        canvas.height = Math.floor(h * dpr);
+        canvas.height = Math.floor(totalH * dpr);
       }
       const ctx = canvas.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, w, h);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, topPadding * dpr);
 
       if (typeof progressFrac !== 'number' || isNaN(progressFrac)) {
         if (typeof window._currentTimelineProgress === 'number') {
@@ -8951,7 +9006,7 @@
         } else {
           targetTimeMs = Date.now() - (1.0 - pct) * 86400000;
           simTime = num;
-          if (pct >= 0.99) {
+          if (pct >= 0.985) {
             activateLiveMode();
             return;
           }
@@ -9000,15 +9055,23 @@
       window._currentTimelineProgress = 1.0;
       drawTimelineDensity(1.0);
 
-      // Resync live state and layers cleanly
-      lastAircraftSyncTs = 0;
-      lastForecastSyncTs = 0;
-      if (window._cachedLatestIncomingThreats) {
-        syncThreatTrailsToSource(window._cachedLatestIncomingThreats);
-      }
-      syncLostThreatsToSource();
-      if (typeof updateLiveKinematics === 'function') {
-        updateLiveKinematics(0, performance.now());
+      // SEAMLESS 1-FRAME REHYDRATION FROM RAM (< 2ms):
+      const snap = window._cachedLatestSnapshot;
+      if (snap) {
+        const incoming = snap.threats || snap.active_threats || [];
+        const catCounts = window._cachedLatestCatCounts || {};
+        const incomingSlots = snap.slots || snap.slots_stats || currentSlots;
+        updateLiveHudAndMap(snap, incoming, catCounts, incomingSlots);
+      } else {
+        lastAircraftSyncTs = 0;
+        lastForecastSyncTs = 0;
+        if (window._cachedLatestIncomingThreats) {
+          syncThreatTrailsToSource(window._cachedLatestIncomingThreats);
+        }
+        syncLostThreatsToSource();
+        if (typeof updateLiveKinematics === 'function') {
+          updateLiveKinematics(0, performance.now());
+        }
       }
       updateLiveClock();
     }
@@ -9273,6 +9336,15 @@
         }, 15000);
       }
       updateStreamStatuses(window._cachedLatestSnapshot);
+
+      // 5. Periodic sync timer: 300 секунд (5 хв) синхронно з інтервалом скиду RAM на диск
+      if (typeof setInterval !== 'undefined') {
+        setInterval(() => {
+          if (isLiveMode) {
+            preloadTodayHistory(false, true);
+          }
+        }, 300000);
+      }
     });
 
     // Close HUD panels on outer click

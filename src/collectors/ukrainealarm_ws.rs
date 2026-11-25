@@ -1,6 +1,7 @@
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
+use rand::Rng;
 use regex::Regex;
 use reqwest::header::{HeaderValue, ORIGIN, REFERER, USER_AGENT};
 use serde_json::{json, Value};
@@ -375,7 +376,7 @@ pub async fn run_ukrainealarm_collector(
                 }
             }
         }
-        let cookie_header_val = if !session_cookies.is_empty() {
+        let mut cookie_header_val = if !session_cookies.is_empty() {
             HeaderValue::from_str(&session_cookies.join("; ")).ok()
         } else {
             None
@@ -459,6 +460,9 @@ pub async fn run_ukrainealarm_collector(
         info!("Connected to Centrifugo WebSocket. Awaiting client ID...");
         // Do NOT refresh last_primary_targets_ts on raw TCP connection before Diia authentication succeeds.
 
+        // Рандомізований таймер фонового HTTP Keep-Alive пінгу (від 10 до 20 хв = 600..=1200 сек)
+        let mut next_http_ping = tokio::time::Instant::now() + Duration::from_secs(rand::thread_rng().gen_range(600..=1200));
+
         loop {
             let ua_stream = storage.get_stream("ukrainealarm_ws");
             if !ua_stream.as_ref().map(|s| s.enabled).unwrap_or(true) {
@@ -473,6 +477,64 @@ pub async fn run_ukrainealarm_collector(
             if current_diia_cookie != initial_diia_cookie {
                 info!("UkraineAlarm WS: detected updated Diia session cookie in configuration. Reconnecting to Centrifugo...");
                 break;
+            }
+
+            // Рандомізований HTTP Keep-Alive пінг (10–20 хв) для продовження та оновлення сесії на сервері
+            if tokio::time::Instant::now() >= next_http_ping {
+                let jitter_secs = rand::thread_rng().gen_range(600..=1200);
+                next_http_ping = tokio::time::Instant::now() + Duration::from_secs(jitter_secs);
+
+                let browser_ua = crate::diia_relay::get_browser_ua();
+                let mut ping_builder = http_client
+                    .get(PAGE_URL)
+                    .header(USER_AGENT, &browser_ua)
+                    .header(ORIGIN, "https://map.ukrainealarm.com")
+                    .header(REFERER, "https://map.ukrainealarm.com/")
+                    .header("sec-ch-ua", crate::diia_relay::SEC_CH_UA)
+                    .header("sec-ch-ua-mobile", crate::diia_relay::SEC_CH_UA_MOBILE)
+                    .header("sec-ch-ua-platform", crate::diia_relay::SEC_CH_UA_PLATFORM)
+                    .header("sec-fetch-dest", "document")
+                    .header("sec-fetch-mode", "navigate")
+                    .header("sec-fetch-site", "same-origin")
+                    .timeout(Duration::from_secs(10));
+
+                if let Some(ref c_val) = cookie_header_val {
+                    ping_builder = ping_builder.header(reqwest::header::COOKIE, c_val.clone());
+                }
+
+                match ping_builder.send().await {
+                    Ok(resp) => {
+                        let status = resp.status();
+                        let mut new_cookies = false;
+                        for cookie_header in resp.headers().get_all(reqwest::header::SET_COOKIE) {
+                            if let Ok(s) = cookie_header.to_str() {
+                                if let Some(c) = s.split(';').next() {
+                                    let trimmed = c.trim();
+                                    let prefix = trimmed.split('=').next().unwrap_or("");
+                                    if !trimmed.is_empty() {
+                                        if let Some(pos) = session_cookies.iter().position(|e| e.starts_with(prefix)) {
+                                            session_cookies[pos] = trimmed.to_string();
+                                        } else {
+                                            session_cookies.push(trimmed.to_string());
+                                        }
+                                        new_cookies = true;
+                                    }
+                                }
+                            }
+                        }
+                        if new_cookies {
+                            cookie_header_val = HeaderValue::from_str(&session_cookies.join("; ")).ok();
+                        }
+                        info!(
+                            "UkraineAlarm WS: HTTP Keep-Alive ping succeeded (status {}). Next ping in {} min",
+                            status,
+                            jitter_secs / 60
+                        );
+                    }
+                    Err(e) => {
+                        debug!("UkraineAlarm WS: HTTP Keep-Alive ping failed: {}. Will retry next cycle", e);
+                    }
+                }
             }
 
             let msg_res = match tokio::time::timeout(Duration::from_secs(45), read.next()).await {

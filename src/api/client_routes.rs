@@ -724,14 +724,16 @@ pub fn build_user_snapshot(
             "total": tot,
             "categories": cats,
             "status": status,
-            "last_reconciled_at": last_reconciled_at
+            "last_reconciled_at": last_reconciled_at,
+            "last_flush_ts": h.last_flush_ts()
         })
     } else {
         serde_json::json!({
             "total": 0,
             "categories": {},
             "status": "accumulated",
-            "last_reconciled_at": serde_json::Value::Null
+            "last_reconciled_at": serde_json::Value::Null,
+            "last_flush_ts": 0
         })
     };
     // Підтримка вибору декількох точок ("1", "1,2", "all")

@@ -521,6 +521,7 @@ impl TargetTracker {
                 if !stitched_track.sources_seen.contains(&source.to_string()) {
                     stitched_track.sources_seen.push(source.to_string());
                 }
+                self.recent_lost.remove(&inc_target.id);
                 self.tracks.insert(inc_target.id.clone(), stitched_track);
             }
 
@@ -612,9 +613,10 @@ impl TargetTracker {
                         trk.status = "cooldown".to_string();
                         trk.cooldown_start_ts = Some(now);
                     }
-                } else if t.upstream_status == "active" {
+                } else {
                     trk.status = "active".to_string();
                     trk.cooldown_start_ts = None;
+                    self.recent_lost.remove(&t.id);
                 }
                 // Timestamp Guard: захист від перескоків назад у часі між стрімами
                 let obs_ts = if let Some(offset) = t.time_offset_ms {
@@ -662,6 +664,8 @@ impl TargetTracker {
                 if is_incoming_cooldown {
                     trk.status = "cooldown".to_string();
                     trk.cooldown_start_ts = Some(now);
+                } else {
+                    self.recent_lost.remove(&t.id);
                 }
                 if !t.trail_points.is_empty() {
                     trk = trk.with_trail(&t.trail_points, now as i64);
@@ -1518,6 +1522,14 @@ mod tests {
         assert!(tracker.recent_lost.contains_key("trk_beta"));
         assert_eq!(tracker.recent_lost["trk_beta"].outcome, "eliminated");
         assert_eq!(tracker.recent_lost["trk_beta"].status, "lost"); // Варіант А на мапі
+
+        // 6. Воскресіння цілі: якщо ціль була в recent_lost, але джерело знову надсилає її як active
+        let mut t2_resurrected = t2.clone();
+        t2_resurrected.upstream_status = "active".to_string();
+        let _ = tracker.update_batch(&[t2_resurrected], &detector, None, "TestFeed");
+        assert!(tracker.tracks.contains_key("trk_beta"), "Resurrected target must be in active tracks");
+        assert_eq!(tracker.tracks["trk_beta"].status, "active");
+        assert!(!tracker.recent_lost.contains_key("trk_beta"), "Resurrected target must be purged from recent_lost!");
     }
 
     #[test]
